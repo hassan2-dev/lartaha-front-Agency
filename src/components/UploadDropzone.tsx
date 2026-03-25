@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState, type ChangeEvent } from 'react'
 import {
   Alert,
   Box,
@@ -8,6 +8,7 @@ import {
   ListItem,
   LinearProgress,
   Paper,
+  TextField,
   Typography,
 } from '@mui/material'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
@@ -57,7 +58,8 @@ export default function UploadDropzone({
   error: string | null
 }) {
   const [dragOver, setDragOver] = useState(false)
-  const [lastPickSource, setLastPickSource] = useState<'files' | 'folder' | 'drop' | null>(null)
+  const [pendingFolderFiles, setPendingFolderFiles] = useState<SelectedUploadFile[] | null>(null)
+  const [pendingFolderName, setPendingFolderName] = useState('')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const folderInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -139,11 +141,40 @@ export default function UploadDropzone({
 
   function onPickFiles(next: FileList | File[], source: 'files' | 'folder' | 'drop') {
     const selected = toSelectedFiles(next)
+
     // Dedupe by relativePath + size (good enough for upload UIs)
-    const deduped = Array.from(
-      new Map(selected.map((sf) => [`${sf.relativePath}_${sf.file.size}`, sf])).values()
-    )
-    setLastPickSource(source)
+    const deduped = Array.from(new Map(selected.map((sf) => [`${sf.relativePath}_${sf.file.size}`, sf])).values())
+
+    // Special handling: if user picks a folder but browser didn't provide folder paths,
+    // we ask for a root folder name so we can still create "folders" in R2.
+    if (source === 'folder') {
+      const hasAnyPath = deduped.some((sf) => sf.relativePath.includes('/'))
+      if (!hasAnyPath) {
+        setPendingFolderFiles(deduped)
+        setPendingFolderName('')
+        onFilesChange([]) // keep parent state clean until user applies helper
+        return
+      }
+    }
+
+    setPendingFolderFiles(null)
+    setPendingFolderName('')
+    onFilesChange(deduped)
+  }
+
+  function applyPendingFolderName() {
+    if (!pendingFolderFiles) return
+    const root = pendingFolderName.trim().replace(/^\/+|\/+$/g, '')
+    if (!root) return
+
+    const transformed = pendingFolderFiles.map((sf) => ({
+      ...sf,
+      relativePath: `${root}/${sf.relativePath}`,
+    }))
+
+    const deduped = Array.from(new Map(transformed.map((sf) => [`${sf.relativePath}_${sf.file.size}`, sf])).values())
+    setPendingFolderFiles(null)
+    setPendingFolderName('')
     onFilesChange(deduped)
   }
 
@@ -177,7 +208,6 @@ export default function UploadDropzone({
         void (async () => {
           const droppedWithPaths = await toSelectedFilesFromDropWithPaths(e.dataTransfer)
           if (droppedWithPaths.length > 0) {
-            setLastPickSource('drop')
             onFilesChange(droppedWithPaths)
             return
           }
@@ -269,15 +299,30 @@ export default function UploadDropzone({
           <Typography variant="subtitle2" sx={{ mb: 1, opacity: 0.8 }}>
             العناصر المحددة
           </Typography>
-          {lastPickSource !== null &&
-            files.length > 0 &&
-            files.every((f) => !f.relativePath.includes('/')) && (
-              <Alert severity="info" sx={{ mb: 1 }}>
-                ملاحظة: الـbrowser ما عم يرسل مسار المجلد ضمن `relativePath` (كلها أسماء ملفات فقط).
-                لذلك R2 ما يسوي مجلدات تلقائياً. جرّب:
-                `اختر مجلد` (زر) من Chrome/Edge، مو السحب والإفلات.
-              </Alert>
-            )}
+          {pendingFolderFiles && (
+            <Alert severity="info" sx={{ mb: 1 }}>
+              المتصفح ما وفّر مسار المجلد. حتى نسوي مجلد داخل `uploads/`، اكتب اسم المجلد:
+              <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+                <Box sx={{ flex: '1 1 220px' }}>
+                  <TextField
+                    size="small"
+                    label="اسم المجلد داخل uploads"
+                    value={pendingFolderName}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => setPendingFolderName(e.target.value)}
+                    fullWidth
+                  />
+                </Box>
+                <Button
+                  variant="contained"
+                  onClick={applyPendingFolderName}
+                  disabled={pendingFolderName.trim().length === 0}
+                  sx={{ borderRadius: 999 }}
+                >
+                  تطبيق
+                </Button>
+              </Box>
+            </Alert>
+          )}
           <List
             dense
             sx={{
