@@ -269,12 +269,13 @@ export default function UploadDropzone({
           <Typography variant="subtitle2" sx={{ mb: 1, opacity: 0.8 }}>
             العناصر المحددة
           </Typography>
-          {lastPickSource === 'folder' &&
+          {lastPickSource !== null &&
             files.length > 0 &&
             files.every((f) => !f.relativePath.includes('/')) && (
               <Alert severity="info" sx={{ mb: 1 }}>
-                ملاحظة: متصفحك غالباً ما وفر مسار المجلد (relativePath) بدون أسماء الفروع. جرّب
-                `اختر مجلد` من Chrome/Edge (مو السحب والإفلات).
+                ملاحظة: الـbrowser ما عم يرسل مسار المجلد ضمن `relativePath` (كلها أسماء ملفات فقط).
+                لذلك R2 ما يسوي مجلدات تلقائياً. جرّب:
+                `اختر مجلد` (زر) من Chrome/Edge، مو السحب والإفلات.
               </Alert>
             )}
           <List
