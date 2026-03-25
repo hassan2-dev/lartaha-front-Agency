@@ -60,10 +60,10 @@ export default function LoginPage() {
             <LockOutlinedIcon />
           </Avatar>
           <Typography variant="h5" sx={{ fontWeight: 800 }}>
-            بوابة رفع الوكالات
+            شركه لارثا
           </Typography>
           <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.8 }}>
-            سجّل الدخول لرفع الفيديوهات والصور إلى Cloudflare R2.
+            ارفع الي يعجبك ومعليك
           </Typography>
         </Box>
 
