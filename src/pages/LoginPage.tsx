@@ -20,7 +20,9 @@ export default function LoginPage() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
-    setLocalError(null)
+    setLocalError(null)  
+
+
 
     if (!username.trim() || !password) {
       setLocalError('يرجى إدخال اسم المستخدم وكلمة المرور.')
