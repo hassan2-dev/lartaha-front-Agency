@@ -26,14 +26,11 @@ function toSelectedFiles(files: FileList | File[] | null | undefined): SelectedU
     .filter(Boolean)
     .map((f) => {
       const rel = (f as File & { webkitRelativePath?: string }).webkitRelativePath
-      // When picking a folder (webkitdirectory), the browser includes the root folder name
-      // in `webkitRelativePath` (e.g. "MyFolder/sub/a.png").
-      // We strip the first segment so we upload "sub/a.png" (folder contents only).
-      const normalizedRel =
-        rel && rel.includes('/') ? rel.split('/').slice(1).join('/') : rel
       return {
         file: f,
-        relativePath: normalizedRel && normalizedRel.length > 0 ? normalizedRel : f.name,
+        // Keep the full relative path so the root folder name is preserved in storage keys.
+        // Example from browser: "MyFolder/sub/a.png"
+        relativePath: rel && rel.length > 0 ? rel : f.name,
       }
     })
 }
