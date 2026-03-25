@@ -57,6 +57,7 @@ export default function UploadDropzone({
   error: string | null
 }) {
   const [dragOver, setDragOver] = useState(false)
+  const [lastPickSource, setLastPickSource] = useState<'files' | 'folder' | 'drop' | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const folderInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -65,12 +66,13 @@ export default function UploadDropzone({
     return { totalBytes }
   }, [files])
 
-  function onPickFiles(next: FileList | File[]) {
+  function onPickFiles(next: FileList | File[], source: 'files' | 'folder' | 'drop') {
     const selected = toSelectedFiles(next)
     // Dedupe by relativePath + size (good enough for upload UIs)
     const deduped = Array.from(
       new Map(selected.map((sf) => [`${sf.relativePath}_${sf.file.size}`, sf])).values()
     )
+    setLastPickSource(source)
     onFilesChange(deduped)
   }
 
@@ -101,7 +103,7 @@ export default function UploadDropzone({
         e.preventDefault()
         setDragOver(false)
         if (e.dataTransfer.files?.length) {
-          onPickFiles(e.dataTransfer.files)
+          onPickFiles(e.dataTransfer.files, 'drop')
         }
       }}
     >
@@ -122,7 +124,7 @@ export default function UploadDropzone({
         type="file"
         multiple
         style={{ display: 'none' }}
-        onChange={(e) => onPickFiles(e.target.files ? Array.from(e.target.files) : [])}
+        onChange={(e) => onPickFiles(e.target.files ? Array.from(e.target.files) : [], 'files')}
       />
 
       <input
@@ -133,7 +135,7 @@ export default function UploadDropzone({
         webkitdirectory="true"
         style={{ display: 'none' }}
         onChange={(e) =>
-          onPickFiles(e.target.files ? Array.from(e.target.files) : [])
+          onPickFiles(e.target.files ? Array.from(e.target.files) : [], 'folder')
         }
       />
 
@@ -187,6 +189,14 @@ export default function UploadDropzone({
           <Typography variant="subtitle2" sx={{ mb: 1, opacity: 0.8 }}>
             العناصر المحددة
           </Typography>
+          {lastPickSource === 'folder' &&
+            files.length > 0 &&
+            files.every((f) => !f.relativePath.includes('/')) && (
+              <Alert severity="info" sx={{ mb: 1 }}>
+                ملاحظة: متصفحك غالباً ما وفر مسار المجلد (relativePath) بدون أسماء الفروع. جرّب
+                `اختر مجلد` من Chrome/Edge (مو السحب والإفلات).
+              </Alert>
+            )}
           <List
             dense
             sx={{
