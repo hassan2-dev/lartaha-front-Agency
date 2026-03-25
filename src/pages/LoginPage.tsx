@@ -1,0 +1,97 @@
+import { useEffect, useState, type FormEvent } from 'react'
+import { Alert, Box, Button, Card, CardContent, Container, TextField, Typography } from '@mui/material'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
+
+export default function LoginPage() {
+  const navigate = useNavigate()
+  const { token, login, loading, error } = useAuth()
+
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [localError, setLocalError] = useState<string | null>(null)
+  const displayedError =
+    localError ?? (error ? 'فشل تسجيل الدخول. تأكد من اسم المستخدم وكلمة المرور.' : null)
+
+  useEffect(() => {
+    if (token) navigate('/', { replace: true })
+  }, [navigate, token])
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault()
+    setLocalError(null)
+
+    if (!username.trim() || !password) {
+      setLocalError('يرجى إدخال اسم المستخدم وكلمة المرور.')
+      return
+    }
+
+    try {
+      await login({ username, password })
+      navigate('/', { replace: true })
+    } catch {
+      // AuthContext already sets `error`, but we keep a local fallback message.
+      setLocalError('فشل تسجيل الدخول. تأكد من اسم المستخدم وكلمة المرور.')
+    }
+  }
+
+  return (
+    <Container maxWidth="sm" sx={{ height: '100%', display: 'flex', alignItems: 'center', py: 6 }}>
+      <Card sx={{ width: '100%', p: 0, overflow: 'hidden', background: 'transparent' }}>
+        <Box
+          sx={{
+            p: 3,
+            background: (t) => `linear-gradient(135deg, ${t.palette.primary.main}33, transparent 65%)`,
+          }}
+        >
+          <Typography variant="h4" sx={{ fontWeight: 700 }}>
+            بوابة رفع الوكالات
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.8 }}>
+            سجّل الدخول لرفع الفيديوهات والصور إلى Cloudflare R2.
+          </Typography>
+        </Box>
+
+        <CardContent sx={{ pt: 2 }}>
+          {displayedError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {displayedError}
+            </Alert>
+          )}
+
+          <Box component="form" onSubmit={onSubmit}>
+            <TextField
+              label="اسم المستخدم"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              fullWidth
+              autoComplete="username"
+              margin="normal"
+            />
+            <TextField
+              label="كلمة المرور"
+              value={password}
+              type="password"
+              onChange={(e) => setPassword(e.target.value)}
+              fullWidth
+              autoComplete="current-password"
+              margin="normal"
+            />
+
+            <Button
+              type="submit"
+              variant="contained"
+              size="large"
+              disabled={loading}
+              sx={{ mt: 2, borderRadius: 999, px: 3 }}
+              fullWidth
+            >
+              {loading ? 'جارٍ تسجيل الدخول...' : 'تسجيل الدخول'}
+            </Button>
+          </Box>
+        </CardContent>
+      </Card>
+    </Container>
+  )
+}
+
