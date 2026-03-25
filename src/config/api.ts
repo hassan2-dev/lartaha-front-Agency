@@ -1,5 +1,20 @@
+function normalizeApiBaseUrl(input: string | undefined) {
+  const safeInput = (input ?? '').trim()
+  // Users sometimes set VITE_API_BASE_URL to include `/api` (e.g. `https://host/api`).
+  // Our endpoints already start with `/api/...`, so we strip a trailing `/api`.
+  if (!safeInput) return ''
+
+  const withoutTrailingSlash = safeInput.endsWith('/') ? safeInput.slice(0, -1) : safeInput
+  return withoutTrailingSlash.replace(/\/api\/?$/i, '')
+}
+
+const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL
+const normalizedApiBaseUrl = rawApiBaseUrl === undefined ? undefined : normalizeApiBaseUrl(rawApiBaseUrl)
+
 export const API_ENV = {
-  apiBaseUrl: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000',
+  // If Vercel env var is empty string, we keep `apiBaseUrl=''` so axios calls same-origin `/api/...`
+  // and Vercel rewrites can forward to the backend.
+  apiBaseUrl: normalizedApiBaseUrl === undefined ? 'http://localhost:8000' : normalizedApiBaseUrl,
   authLoginPath: import.meta.env.VITE_AUTH_LOGIN_PATH ?? '/api/auth/login',
   authMePath: import.meta.env.VITE_AUTH_ME_PATH ?? '/api/auth/me',
   uploadPath: import.meta.env.VITE_UPLOAD_PATH ?? '/api/upload',
