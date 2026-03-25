@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Alert, Box, Button, Card, CardContent, Container, TextField, Typography } from '@mui/material'
+import { Alert, Avatar, Box, Button, Card, CardContent, Container, TextField, Typography } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -37,14 +38,26 @@ export default function LoginPage() {
 
   return (
     <Container maxWidth="sm" sx={{ height: '100%', display: 'flex', alignItems: 'center', py: 6 }}>
-      <Card sx={{ width: '100%', p: 0, overflow: 'hidden', background: 'transparent' }}>
+      <Card sx={{ width: '100%', p: 0, overflow: 'hidden' }}>
         <Box
           sx={{
             p: 3,
-            background: (t) => `linear-gradient(135deg, ${t.palette.primary.main}33, transparent 65%)`,
+            background: (t) => `linear-gradient(135deg, ${t.palette.primary.main}55, transparent 65%)`,
+            textAlign: 'center',
           }}
         >
-          <Typography variant="h4" sx={{ fontWeight: 700 }}>
+          <Avatar
+            sx={{
+              width: 56,
+              height: 56,
+              mx: 'auto',
+              mb: 1.5,
+              background: (t) => `linear-gradient(135deg, ${t.palette.primary.main}99, ${t.palette.primary.main}33)`,
+            }}
+          >
+            <LockOutlinedIcon />
+          </Avatar>
+          <Typography variant="h5" sx={{ fontWeight: 800 }}>
             بوابة رفع الوكالات
           </Typography>
           <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.8 }}>
@@ -52,7 +65,7 @@ export default function LoginPage() {
           </Typography>
         </Box>
 
-        <CardContent sx={{ pt: 2 }}>
+        <CardContent sx={{ pt: 2, px: 3, pb: 3 }}>
           {displayedError && (
             <Alert severity="error" sx={{ mb: 2 }}>
               {displayedError}
@@ -83,7 +96,7 @@ export default function LoginPage() {
               variant="contained"
               size="large"
               disabled={loading}
-              sx={{ mt: 2, borderRadius: 999, px: 3 }}
+              sx={{ mt: 2, borderRadius: 999, px: 3, textTransform: 'none' }}
               fullWidth
             >
               {loading ? 'جارٍ تسجيل الدخول...' : 'تسجيل الدخول'}
