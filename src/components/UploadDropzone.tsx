@@ -61,6 +61,77 @@ export default function UploadDropzone({
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const folderInputRef = useRef<HTMLInputElement | null>(null)
 
+  async function toSelectedFilesFromDropWithPaths(dt: DataTransfer): Promise<SelectedUploadFile[]> {
+    // Directory drag&drop (preserve folder paths) is not supported everywhere.
+    // Chromium supports it via webkitGetAsEntry.
+    const items = dt.items
+    if (!items || items.length === 0) return []
+
+    const anyItem = items[0] as unknown as { webkitGetAsEntry?: () => unknown }
+    if (typeof anyItem.webkitGetAsEntry !== 'function') return []
+
+    type AnyEntry = {
+      isFile: boolean
+      isDirectory: boolean
+      fullPath?: string
+      file?: (cb: (file: File) => void, err?: (e: unknown) => void) => void
+      createReader?: () => {
+        readEntries: (cb: (entries: AnyEntry[]) => void, err?: (e: unknown) => void) => void
+      }
+    }
+
+    const readAllEntries = async (
+      reader: {
+        readEntries: (cb: (entries: AnyEntry[]) => void, err?: (e: unknown) => void) => void
+      },
+    ): Promise<AnyEntry[]> => {
+      const all: AnyEntry[] = []
+      while (true) {
+        const chunk = await new Promise<AnyEntry[]>((resolve, reject) => {
+          reader.readEntries(
+            (entries: AnyEntry[]) => resolve(entries),
+            (err: unknown) => reject(err)
+          )
+        })
+        if (chunk.length === 0) break
+        all.push(...chunk)
+      }
+      return all
+    }
+
+    const selected: SelectedUploadFile[] = []
+
+    const traverse = async (entry: AnyEntry) => {
+      if (entry.isFile && entry.file) {
+        const file = await new Promise<File>((resolve, reject) => {
+          entry.file!(
+            (f) => resolve(f),
+            (err) => reject(err)
+          )
+        })
+        const relativePath = (entry.fullPath ?? '').replace(/^\/+/, '') || file.name
+        selected.push({ file, relativePath })
+        return
+      }
+
+      if (entry.isDirectory && entry.createReader) {
+        const reader = entry.createReader()
+        const entries = await readAllEntries(reader)
+        await Promise.all(entries.map(traverse))
+      }
+    }
+
+    const roots = Array.from(items)
+      .map((it) => {
+        const e = (it as unknown as { webkitGetAsEntry?: () => AnyEntry | null }).webkitGetAsEntry?.()
+        return e
+      })
+      .filter(Boolean) as AnyEntry[]
+
+    await Promise.all(roots.map(traverse))
+    return selected
+  }
+
   const totals = useMemo(() => {
     const totalBytes = files.reduce((sum, f) => sum + f.file.size, 0)
     return { totalBytes }
@@ -102,9 +173,18 @@ export default function UploadDropzone({
       onDrop={(e) => {
         e.preventDefault()
         setDragOver(false)
-        if (e.dataTransfer.files?.length) {
-          onPickFiles(e.dataTransfer.files, 'drop')
-        }
+        // Try preserve folder structure on directory drop (Chrome/Edge).
+        void (async () => {
+          const droppedWithPaths = await toSelectedFilesFromDropWithPaths(e.dataTransfer)
+          if (droppedWithPaths.length > 0) {
+            setLastPickSource('drop')
+            onFilesChange(droppedWithPaths)
+            return
+          }
+          if (e.dataTransfer.files?.length) {
+            onPickFiles(e.dataTransfer.files, 'drop')
+          }
+        })()
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
