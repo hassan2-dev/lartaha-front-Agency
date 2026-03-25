@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "http://dc8w8s08ckkw0sk0gs8ogwc8.72.62.36.87.sslip.io:8000/api/:path*"
+      "destination": "https://api.larthaa.com/api/:path*"
     }
   ]
 }
