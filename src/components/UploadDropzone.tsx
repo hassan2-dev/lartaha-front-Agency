@@ -14,6 +14,7 @@ import {
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import FolderOpenIcon from '@mui/icons-material/FolderOpen'
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile'
+import UploadIcon from '@mui/icons-material/Upload'
 
 export type SelectedUploadFile = {
   file: File
@@ -27,11 +28,13 @@ function toSelectedFiles(files: FileList | File[] | null | undefined): SelectedU
     .filter(Boolean)
     .map((f) => {
       const rel = (f as File & { webkitRelativePath?: string }).webkitRelativePath
+      // For folder uploads, webkitRelativePath should contain the full path including folder name
+      // Example: "MyFolder/subfolder/file.jpg"
+      // If webkitRelativePath exists, use it; otherwise fall back to just filename
+      const relativePath = rel && rel.length > 0 ? rel : f.name
       return {
         file: f,
-        // Keep the full relative path so the root folder name is preserved in storage keys.
-        // Example from browser: "MyFolder/sub/a.png"
-        relativePath: rel && rel.length > 0 ? rel : f.name,
+        relativePath,
       }
     })
 }
@@ -44,17 +47,23 @@ function fmtBytes(bytes: number) {
   return `${value.toFixed(value >= 10 || idx === 0 ? 0 : 1)} ${units[idx]}`
 }
 
+function fmtSpeed(bytesPerSecond: number) {
+  if (!Number.isFinite(bytesPerSecond) || bytesPerSecond <= 0) return '0 B/s'
+  const units = ['B/s', 'KB/s', 'MB/s', 'GB/s']
+  const idx = Math.min(units.length - 1, Math.floor(Math.log(bytesPerSecond) / Math.log(1024)))
+  const value = bytesPerSecond / Math.pow(1024, idx)
+  return `${value.toFixed(value >= 10 || idx === 0 ? 0 : 1)} ${units[idx]}`
+}
+
 export default function UploadDropzone({
   files,
   onFilesChange,
   uploading,
-  uploadProgress,
   error,
 }: {
   files: SelectedUploadFile[]
   onFilesChange: (next: SelectedUploadFile[]) => void
   uploading: boolean
-  uploadProgress: number
   error: string | null
 }) {
   const [dragOver, setDragOver] = useState(false)
@@ -145,11 +154,13 @@ export default function UploadDropzone({
     // Dedupe by relativePath + size (good enough for upload UIs)
     const deduped = Array.from(new Map(selected.map((sf) => [`${sf.relativePath}_${sf.file.size}`, sf])).values())
 
-    // Special handling: if user picks a folder but browser didn't provide folder paths,
-    // we ask for a root folder name so we can still create "folders" in R2.
+    // For folder uploads, we should preserve the structure automatically if webkitRelativePath is available
+    // Only show the folder name prompt if the browser doesn't support folder structure
     if (source === 'folder') {
       const hasAnyPath = deduped.some((sf) => sf.relativePath.includes('/'))
+
       if (!hasAnyPath) {
+        // Browser didn't provide folder paths, ask user for folder name
         setPendingFolderFiles(deduped)
         setPendingFolderName('')
         onFilesChange([]) // keep parent state clean until user applies helper
@@ -242,7 +253,7 @@ export default function UploadDropzone({
         type="file"
         multiple
         // @ts-expect-error: webkitdirectory is non-standard but supported in Chromium/WebKit browsers.
-        webkitdirectory="true"
+        webkitdirectory=""
         style={{ display: 'none' }}
         onChange={(e) =>
           onPickFiles(e.target.files ? Array.from(e.target.files) : [], 'folder')
@@ -278,19 +289,6 @@ export default function UploadDropzone({
         <Alert severity="error" sx={{ mt: 2 }}>
           {error}
         </Alert>
-      )}
-
-      {uploading && (
-        <Box sx={{ mt: 2 }}>
-          <LinearProgress
-            variant="determinate"
-            value={uploadProgress}
-            sx={{ height: 10, borderRadius: 999 }}
-          />
-          <Typography variant="body2" sx={{ mt: 1, opacity: 0.75 }}>
-            جارٍ الرفع... {uploadProgress}%
-          </Typography>
-        </Box>
       )}
 
       {files.length > 0 && (

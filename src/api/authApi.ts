@@ -9,11 +9,25 @@ export type LoginPayload = {
 export type LoginResult = {
   token?: string
   accessToken?: string
-  user?: unknown
+  user?: {
+    id: string
+    email: string
+    username: string
+    name: string
+    isAdmin: boolean
+    workspaceId?: string
+  }
   data?: {
     token?: string
     accessToken?: string
-    user?: unknown
+    user?: {
+      id: string
+      email: string
+      username: string
+      name: string
+      isAdmin: boolean
+      workspaceId?: string
+    }
   }
 }
 
@@ -22,7 +36,14 @@ export async function loginUser(payload: LoginPayload): Promise<LoginResult> {
   return res.data as LoginResult
 }
 
-export async function fetchMe(): Promise<unknown> {
+export async function fetchMe(): Promise<{
+  id: string
+  email: string
+  username: string
+  name: string
+  isAdmin: boolean
+  workspaceId?: string
+}> {
   const res = await api.get(API_ENV.authMePath)
   return res.data
 }

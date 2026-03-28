@@ -8,11 +8,11 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const { token, login, loading, error } = useAuth()
 
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [localError, setLocalError] = useState<string | null>(null)
   const displayedError =
-    localError ?? (error ? 'فشل تسجيل الدخول. تأكد من اسم المستخدم وكلمة المرور.' : null)
+    localError ?? (error ? 'فشل تسجيل الدخول. تأكد من البريد الإلكتروني وكلمة المرور.' : null)
 
   useEffect(() => {
     if (token) navigate('/', { replace: true })
@@ -20,21 +20,21 @@ export default function LoginPage() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
-    setLocalError(null)  
+    setLocalError(null)
 
 
 
-    if (!username.trim() || !password) {
-      setLocalError('يرجى إدخال اسم المستخدم وكلمة المرور.')
+    if (!email.trim() || !password) {
+      setLocalError('يرجى إدخال البريد الإلكتروني وكلمة المرور.')
       return
     }
 
     try {
-      await login({ username, password })
+      await login({ username: email.trim(), password })
       navigate('/', { replace: true })
     } catch {
       // AuthContext already sets `error`, but we keep a local fallback message.
-      setLocalError('فشل تسجيل الدخول. تأكد من اسم المستخدم وكلمة المرور.')
+      setLocalError('فشل تسجيل الدخول. تأكد من البريد الإلكتروني وكلمة المرور.')
     }
   }
 
@@ -76,12 +76,13 @@ export default function LoginPage() {
 
           <Box component="form" onSubmit={onSubmit}>
             <TextField
-              label="اسم المستخدم"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              label="البريد الإلكتروني"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               fullWidth
-              autoComplete="username"
+              autoComplete="email"
               margin="normal"
+              type="email"
             />
             <TextField
               label="كلمة المرور"
@@ -103,6 +104,27 @@ export default function LoginPage() {
             >
               {loading ? 'جارٍ تسجيل الدخول...' : 'تسجيل الدخول'}
             </Button>
+
+            <Box sx={{ mt: 2, textAlign: 'center' }}>
+              <Typography variant="body2" color="text.secondary">
+                جديد على منصتنا؟{' '}
+                <Button
+                  variant="text"
+                  size="small"
+                  onClick={() => navigate('/signup')}
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 'bold',
+                    '&:hover': {
+                      backgroundColor: 'primary.main',
+                      color: 'white',
+                    }
+                  }}
+                >
+                  أنشئ مساحة العمل الخاصة بك
+                </Button>
+              </Typography>
+            </Box>
           </Box>
         </CardContent>
       </Card>

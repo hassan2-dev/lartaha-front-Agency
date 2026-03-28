@@ -16,7 +16,7 @@ export const API_ENV = {
   // If Vercel env var is empty string, we keep `apiBaseUrl=''` so axios calls same-origin `/api/...`
   // and Vercel rewrites can forward to the backend.
   // In production, always call same-origin (`/api/...`) to guarantee rewrites apply.
-  apiBaseUrl: isProd ? '' : normalizedApiBaseUrl === undefined ? 'http://localhost:8000' : normalizedApiBaseUrl,
+  apiBaseUrl: isProd ? '' : normalizedApiBaseUrl === undefined ? 'http://localhost:3000' : normalizedApiBaseUrl,
   authLoginPath: import.meta.env.VITE_AUTH_LOGIN_PATH ?? '/api/auth/login',
   authMePath: import.meta.env.VITE_AUTH_ME_PATH ?? '/api/auth/me',
   uploadPath: import.meta.env.VITE_UPLOAD_PATH ?? '/api/upload',

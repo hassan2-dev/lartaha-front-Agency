@@ -5,7 +5,14 @@ import { fetchMe, loginUser, type LoginPayload, type LoginResult } from '../api/
 
 type AuthContextValue = {
   token: string | null
-  user: unknown
+  user: {
+    id: string
+    email: string
+    username: string
+    name: string
+    isAdmin: boolean
+    workspaceId?: string
+  } | null
   loading: boolean
   error: string | null
   login: (payload: LoginPayload) => Promise<void>
@@ -27,7 +34,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return null
     }
   })
-  const [user, setUser] = useState<unknown>(null)
+  const [user, setUser] = useState<{
+    id: string
+    email: string
+    username: string
+    name: string
+    isAdmin: boolean
+    workspaceId?: string
+  } | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
