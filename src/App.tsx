@@ -11,18 +11,20 @@ import ActivityPage from './pages/ActivityPage'
 import SettingsPage from './pages/SettingsPage'
 import ProfilePage from './pages/ProfilePage'
 import NotFoundPage from './pages/NotFoundPage'
+import LandingPage from './pages/LandingPage'
 import SideNav from './components/SideNav'
 import { ProtectedRoute } from './components/ProtectedRoute'
 
 export default function App() {
   return (
     <Routes>
+      <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignUpPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/invite" element={<RegisterPage />} />
       <Route
-        path="/*"
+        path="/app/*"
         element={
           <ProtectedRoute>
             <SideNav>

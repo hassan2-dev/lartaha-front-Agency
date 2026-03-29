@@ -1,5 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  DndContext,
+  pointerWithin,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+  type DragOverEvent,
+  DragOverlay,
+  useDroppable,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import {
   Alert,
   AppBar,
   Box,
@@ -19,7 +38,6 @@ import {
 import LogoutIcon from '@mui/icons-material/Logout'
 import ArrowBackIcon from '@mui/icons-material/ArrowBackIosNew'
 import AddIcon from '@mui/icons-material/Add'
-import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useThemeMode } from '../contexts/ThemeContext'
@@ -37,6 +55,7 @@ import {
 import { subscribeRealtime } from '../api/realtimeApi'
 import EnhancedTaskForm from '../components/EnhancedTaskForm'
 import EnhancedTaskCard from '../components/EnhancedTaskCard'
+import SortableTaskCard from '../components/SortableTaskCard'
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
   todo: 'قيد الانتظار',
@@ -74,12 +93,19 @@ export default function TasksPage() {
   const [links, setLinks] = useState<{ url: string; title?: string }[]>([])
   const [newChecklistItem, setNewChecklistItem] = useState('')
   const [newLink, setNewLink] = useState({ url: '', title: '' })
-  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
-  const [dropTargetStatus, setDropTargetStatus] = useState<TaskStatus | null>(null)
-  const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null)
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const [overColumn, setOverColumn] = useState<TaskStatus | null>(null)
 
-  // UI state
-  // const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set())
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
 
   const refresh = useCallback(async (options?: { silent?: boolean }) => {
     const silent = options?.silent === true
@@ -262,7 +288,7 @@ export default function TasksPage() {
   }
 
   const reorderTasks = useCallback(
-    (current: Task[], movingTaskId: string, toStatus: TaskStatus, beforeTaskId?: string | null) => {
+    (current: Task[], movingTaskId: string, toStatus: TaskStatus, targetIndex?: number) => {
       const movingTask = current.find((item) => item.id === movingTaskId)
       if (!movingTask) return current
 
@@ -279,130 +305,125 @@ export default function TasksPage() {
 
       const movedTask: Task = { ...movingTask, status: toStatus }
       const targetList = groupedByStatus[toStatus]
-      const insertIndex = beforeTaskId ? targetList.findIndex((item) => item.id === beforeTaskId) : -1
+      const insertIndex = targetIndex !== undefined ? targetIndex : targetList.length
 
-      if (insertIndex >= 0) {
-        targetList.splice(insertIndex, 0, movedTask)
-      } else {
-        targetList.push(movedTask)
-      }
+      targetList.splice(insertIndex, 0, movedTask)
 
       return STATUS_ORDER.flatMap((statusKey) => groupedByStatus[statusKey])
     },
     []
   )
 
-  const handleTaskDragStart = (taskId: string, event: React.DragEvent) => {
-    setDraggedTaskId(taskId)
-    setDropTargetStatus(null)
-    setDragOverTaskId(null)
-    event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.setData('text/plain', taskId)
-  }
-
-  const handleTaskDragEnd = () => {
-    setDraggedTaskId(null)
-    setDropTargetStatus(null)
-    setDragOverTaskId(null)
-  }
-
-  const resolveDraggedTaskId = (event: React.DragEvent) => {
-    const transferId = event.dataTransfer.getData('text/plain')
-    return draggedTaskId || transferId || null
-  }
-
-  const handleColumnDragOver = (status: TaskStatus, event: React.DragEvent) => {
-    event.preventDefault()
-    if (dropTargetStatus !== status) {
-      setDropTargetStatus(status)
+  const handleDragOver = useCallback((event: DragOverEvent) => {
+    const { over } = event
+    if (!over) {
+      setOverColumn(null)
+      return
     }
-  }
+    // Check if we're over a column (droppable ID that matches a status)
+    const overId = over.id as string
+    if (STATUS_ORDER.includes(overId as TaskStatus)) {
+      setOverColumn(overId as TaskStatus)
+    } else {
+      // We're over a task, find its status
+      const task = tasks.find(t => t.id === overId)
+      if (task) {
+        setOverColumn(task.status)
+      }
+    }
+  }, [tasks])
 
-  const handleColumnDrop = async (status: TaskStatus, event: React.DragEvent) => {
-    event.preventDefault()
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setActiveId(event.active.id as string)
+    setOverColumn(null)
+  }, [])
 
-    const taskId = resolveDraggedTaskId(event)
-    setDropTargetStatus(null)
-    setDragOverTaskId(null)
-    setDraggedTaskId(null)
+  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
+    const { active, over } = event
+    setActiveId(null)
+    setOverColumn(null)
 
-    if (!taskId) return
+    if (!over) return
 
-    const sourceTask = tasks.find((item) => item.id === taskId)
-    if (!sourceTask || sourceTask.status === status) return
+    const activeId = active.id as string
+    const overId = over.id as string
+
+    const activeTask = tasks.find((t) => t.id === activeId)
+    if (!activeTask) return
+
+    // Determine target status
+    let targetStatus: TaskStatus
+    const overTask = tasks.find((t) => t.id === overId)
+
+    if (overTask) {
+      targetStatus = overTask.status
+    } else if (STATUS_ORDER.includes(overId as TaskStatus)) {
+      // Dropped on a column (not a task)
+      targetStatus = overId as TaskStatus
+    } else {
+      return
+    }
+
+    if (activeId === overId) return
+
+    const currentStatusTasks = tasks.filter(t => t.status === targetStatus)
+    const newIndex = currentStatusTasks.findIndex(t => t.id === overId)
+
+    let nextTasks: Task[]
+    if (overTask && activeTask.status === targetStatus) {
+      // Reordering within same column
+      nextTasks = arrayMove(
+        tasks,
+        tasks.findIndex(t => t.id === activeId),
+        tasks.findIndex(t => t.id === overId)
+      )
+    } else {
+      // Moving to different column or new position
+      const targetIndex = overTask ? newIndex : currentStatusTasks.length
+      nextTasks = reorderTasks(tasks, activeId, targetStatus, targetIndex)
+    }
 
     const previousTasks = tasks
-    const optimisticTasks = reorderTasks(tasks, taskId, status, null)
-
-    setTasks(optimisticTasks)
-    setError(null)
-
-    try {
-      const updated = await updateTask(taskId, { status })
-      setTasks((current) => current.map((item) => (item.id === taskId ? updated : item)))
-    } catch (e: unknown) {
-      setTasks(previousTasks)
-      const err = e as { message?: string; response?: { data?: { message?: string } } }
-      setError(err.response?.data?.message ?? err.message ?? 'فشل تحديث حالة المهمة')
-    }
-  }
-
-  const handleTaskDragOver = (status: TaskStatus, taskId: string, event: React.DragEvent) => {
-    event.preventDefault()
-    setDropTargetStatus(status)
-    if (dragOverTaskId !== taskId) {
-      setDragOverTaskId(taskId)
-    }
-  }
-
-  const handleTaskDropOnTask = async (status: TaskStatus, targetTaskId: string, event: React.DragEvent) => {
-    event.preventDefault()
-    event.stopPropagation()
-
-    const movingTaskId = resolveDraggedTaskId(event)
-    setDropTargetStatus(null)
-    setDragOverTaskId(null)
-    setDraggedTaskId(null)
-
-    if (!movingTaskId || movingTaskId === targetTaskId) return
-
-    const sourceTask = tasks.find((item) => item.id === movingTaskId)
-    if (!sourceTask) return
-
-    const previousTasks = tasks
-    const nextTasks = reorderTasks(tasks, movingTaskId, status, targetTaskId)
     setTasks(nextTasks)
 
-    if (sourceTask.status !== status) {
+    // Only update if status changed
+    if (activeTask.status !== targetStatus) {
+      setError(null)
       try {
-        const updated = await updateTask(movingTaskId, { status })
-        setTasks((current) => current.map((item) => (item.id === movingTaskId ? updated : item)))
+        const updated = await updateTask(activeId, { status: targetStatus })
+        setTasks((current) => current.map((item) => (item.id === activeId ? updated : item)))
       } catch (e: unknown) {
         setTasks(previousTasks)
         const err = e as { message?: string; response?: { data?: { message?: string } } }
         setError(err.response?.data?.message ?? err.message ?? 'فشل تحديث حالة المهمة')
       }
     }
-  }
+  }, [tasks, reorderTasks])
 
-  function Column({ s }: { s: TaskStatus }) {
+  const activeTask = useMemo(() => tasks.find(t => t.id === activeId), [tasks, activeId])
+
+  function DroppableColumn({ s }: { s: TaskStatus }) {
     const list = grouped[s]
+    const { setNodeRef, isOver } = useDroppable({
+      id: s,
+    })
+
+    const isHighlighted = isOver || overColumn === s
+
     return (
       <Paper
-        onDragOver={(event) => handleColumnDragOver(s, event)}
-        onDrop={(event) => void handleColumnDrop(s, event)}
-        onDragLeave={() => {
-          if (dropTargetStatus === s) {
-            setDropTargetStatus(null)
-          }
-        }}
+        ref={setNodeRef}
         sx={{
           p: 2,
           borderRadius: 3,
           flex: '1 1 280px',
           minHeight: 220,
-          border: dropTargetStatus === s ? '2px dashed #42a5f5' : '1px solid rgba(255,255,255,0.08)',
-          bgcolor: dropTargetStatus === s ? 'rgba(66,165,245,0.08)' : 'background.paper',
+          border: isHighlighted
+            ? '2px solid #42a5f5'
+            : '1px solid rgba(255,255,255,0.08)',
+          bgcolor: isHighlighted
+            ? 'rgba(66,165,245,0.08)'
+            : 'background.paper',
           transition: 'all 0.15s ease-in-out',
         }}
       >
@@ -412,36 +433,19 @@ export default function TasksPage() {
             لا توجد مهام
           </Typography>
         ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {list.map((t) => (
-              <Box
-                key={t.id}
-                draggable
-                onDragStart={(event) => handleTaskDragStart(t.id, event)}
-                onDragEnd={handleTaskDragEnd}
-                onDragOver={(event) => handleTaskDragOver(s, t.id, event)}
-                onDrop={(event) => void handleTaskDropOnTask(s, t.id, event)}
-                sx={{
-                  opacity: draggedTaskId === t.id ? 0.45 : 1,
-                  cursor: 'grab',
-                  borderTop: dragOverTaskId === t.id ? '2px solid #42a5f5' : '2px solid transparent',
-                  borderRadius: 1,
-                  '&:active': { cursor: 'grabbing' },
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 0.5, pb: 0.5, opacity: 0.65 }}>
-                  <DragIndicatorIcon sx={{ fontSize: 16 }} />
-                  <Typography variant="caption">اسحب لإعادة الترتيب</Typography>
-                </Box>
-                <EnhancedTaskCard
+          <SortableContext items={list.map(t => t.id)} strategy={verticalListSortingStrategy}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {list.map((t) => (
+                <SortableTaskCard
+                  key={t.id}
                   task={t}
                   onChecklistUpdate={handleChecklistUpdate}
                   onSubtaskCreate={handleSubtaskCreate}
                   onTaskClick={openEditModal}
                 />
-              </Box>
-            ))}
-          </Box>
+              ))}
+            </Box>
+          </SortableContext>
         )}
       </Paper>
     )
@@ -500,11 +504,31 @@ export default function TasksPage() {
           </Alert>
         )}
 
-        <Box sx={{ display: 'flex', gap: 2, mt: 2, flexWrap: 'wrap' }}>
-          <Column s="todo" />
-          <Column s="in_progress" />
-          <Column s="done" />
-        </Box>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={pointerWithin}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+        >
+          <Box sx={{ display: 'flex', gap: 2, mt: 2, flexWrap: 'wrap' }}>
+            <DroppableColumn s="todo" />
+            <DroppableColumn s="in_progress" />
+            <DroppableColumn s="done" />
+          </Box>
+          <DragOverlay>
+            {activeTask ? (
+              <Box sx={{ transform: 'rotate(2deg)', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
+                <EnhancedTaskCard
+                  task={activeTask}
+                  onChecklistUpdate={handleChecklistUpdate}
+                  onSubtaskCreate={handleSubtaskCreate}
+                  onTaskClick={openEditModal}
+                />
+              </Box>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       </Container>
 
       {/* Floating Action Button */}

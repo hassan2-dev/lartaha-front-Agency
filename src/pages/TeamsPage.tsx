@@ -56,7 +56,7 @@ export default function TeamsPage() {
       const response = await api.get('/api/workspace/members')
       setTeams(response.data.members || [])
     } catch (err) {
-      setError('Failed to fetch workspace members')
+      setError('فشل في جلب أعضاء مساحة العمل')
     }
   }
 
@@ -72,7 +72,7 @@ export default function TeamsPage() {
       setInviteEmail('')
       fetchTeams()
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to send invitation')
+      setError(err.response?.data?.message || 'فشل في إرسال الدعوة')
     } finally {
       setLoading(false)
     }
@@ -81,13 +81,13 @@ export default function TeamsPage() {
   return (
     <Box p={3}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4">Workspace Members</Typography>
+        <Typography variant="h4">أعضاء مساحة العمل</Typography>
         <Button
           variant="contained"
           startIcon={<Mail />}
           onClick={() => setShowInviteModal(true)}
         >
-          Invite Member
+          دعوة عضو
         </Button>
       </Box>
 
@@ -98,7 +98,7 @@ export default function TeamsPage() {
       )}
 
       <Box>
-        <Typography variant="h6" mb={2}>All Members</Typography>
+        <Typography variant="h6" mb={2}>جميع الأعضاء</Typography>
         {teams.length === 0 ? (
           <Box
             display="flex"
@@ -109,7 +109,7 @@ export default function TeamsPage() {
             color="text.secondary"
           >
             <Group sx={{ fontSize: 48, mb: 2, opacity: 0.5 }} />
-            <Typography>No members yet. Invite your first team member!</Typography>
+            <Typography>لا يوجد أعضاء بعد. قم بدعوة أول عضو في فريقك!</Typography>
           </Box>
         ) : (
           teams.map(member => (
@@ -133,7 +133,7 @@ export default function TeamsPage() {
                         {member.user?.name || member.email}
                       </Typography>
                       <Typography color="text.secondary" variant="body2">
-                        {member.user?.email || 'Invited'}
+                        {member.user?.email || 'مدعو'}
                       </Typography>
                       {member.user?.position && (
                         <Typography color="text.secondary" variant="body2">
@@ -149,7 +149,7 @@ export default function TeamsPage() {
                       color={member.role === 'admin' ? 'primary' : 'default'}
                     />
                     <Typography color="text.secondary" variant="body2">
-                      Joined {new Date(member.joinedAt).toLocaleDateString()}
+                      انضم {new Date(member.joinedAt).toLocaleDateString()}
                     </Typography>
                   </Box>
                 </Box>
@@ -161,12 +161,12 @@ export default function TeamsPage() {
 
       {/* Invite Dialog */}
       <Dialog open={showInviteModal} onClose={() => setShowInviteModal(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Invite Team Member</DialogTitle>
+        <DialogTitle>دعوة عضو الفريق</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
             margin="dense"
-            label="Email address"
+            label="البريد الإلكتروني"
             type="email"
             fullWidth
             variant="outlined"
@@ -175,14 +175,14 @@ export default function TeamsPage() {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setShowInviteModal(false)}>Cancel</Button>
+          <Button onClick={() => setShowInviteModal(false)}>إلغاء</Button>
           <Button
             onClick={inviteMember}
             variant="contained"
             color="success"
             disabled={loading || !inviteEmail.trim()}
           >
-            {loading ? 'Sending...' : 'Send Invitation'}
+            {loading ? 'جاري الإرسال...' : 'إرسال الدعوة'}
           </Button>
         </DialogActions>
       </Dialog>
