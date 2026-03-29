@@ -36,13 +36,13 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { text: 'الرئيسية', icon: <HomeIcon />, path: '/' },
-  { text: 'رفع الملفات', icon: <UploadIcon />, path: '/upload' },
-  { text: 'المهام', icon: <TaskIcon />, path: '/tasks' },
-  { text: 'الدردشة', icon: <ChatIcon />, path: '/chat' },
-  { text: 'الفرق', icon: <TeamsIcon />, path: '/teams' },
-  { text: 'الأنشطة', icon: <ActivityIcon />, path: '/activity' },
-  { text: 'الإعدادات', icon: <SettingsIcon />, path: '/settings' },
+  { text: 'الرئيسية', icon: <HomeIcon />, path: '/app/dashboard' },
+  { text: 'رفع الملفات', icon: <UploadIcon />, path: '/app/upload' },
+  { text: 'المهام', icon: <TaskIcon />, path: '/app/tasks' },
+  { text: 'الدردشة', icon: <ChatIcon />, path: '/app/chat' },
+  { text: 'الفرق', icon: <TeamsIcon />, path: '/app/teams' },
+  { text: 'الأنشطة', icon: <ActivityIcon />, path: '/app/activity' },
+  { text: 'الإعدادات', icon: <SettingsIcon />, path: '/app/settings' },
 ]
 
 interface SideNavProps {

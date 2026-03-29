@@ -1,5 +1,5 @@
 import { Button } from "../ui/button"
-import { ArrowLeft, Play, Sparkles } from "lucide-react"
+import { ArrowUpLeft, Play, Sparkles } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 
 export function Hero() {
@@ -26,9 +26,9 @@ export function Hero() {
 
           {/* Headline */}
           <h1 className="text-5xl font-bold tracking-tight text-foreground sm:text-7xl lg:text-8xl text-balance leading-tight">
-            وحّد فريقك.
+            وحّد فريقك
             <br />
-            <span className="bg-gradient-to-l from-indigo-600 via-indigo-500 to-indigo-700 bg-clip-text text-transparent">ضاعف إنتاجيتك.</span>
+            <span className="bg-gradient-to-l from-indigo-600 via-indigo-500 to-indigo-700 bg-clip-text text-transparent">ضاعف إنتاجيتك</span>
           </h1>
 
           {/* Subheadline */}
@@ -45,16 +45,16 @@ export function Hero() {
               onClick={() => navigate('/signup')}
             >
               ابدأ تجربتك المجانية
-              <ArrowLeft className="h-5 w-5" />
+              <ArrowUpLeft />
             </Button>
             <Button
               variant="outline"
               size="lg"
-              className="w-full sm:w-auto gap-2 text-lg px-8 py-6 border-2 border-indigo-200 hover:border-indigo-300 hover:bg-indigo-50"
+              className="w-full sm:w-auto gap-2 text-lg px-8 py-6 !bg-white !text-indigo-700 hover:text-indigo-700 shadow-lg"
               onClick={() => navigate('/login')}
             >
-              <Play className="h-5 w-5 text-indigo-600" />
               تسجيل الدخول
+              <Play className="h-5 w-5 text-indigo-600" />
             </Button>
           </div>
 

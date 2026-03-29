@@ -17,7 +17,7 @@ export default function LoginPage() {
     localError ?? (error ? 'فشل تسجيل الدخول. تأكد من البريد الإلكتروني وكلمة المرور.' : null)
 
   useEffect(() => {
-    if (token) navigate('/', { replace: true })
+    if (token) navigate('/app/', { replace: true })
   }, [navigate, token])
 
   async function onSubmit(e: FormEvent) {
@@ -34,7 +34,7 @@ export default function LoginPage() {
       localStorage.removeItem('token')
 
       await login({ username: email.trim(), password })
-      navigate('/', { replace: true })
+      navigate('/app/', { replace: true })
     } catch {
       // AuthContext already sets `error`, but we keep a local fallback message.
       setLocalError('فشل تسجيل الدخول. تأكد من البريد الإلكتروني وكلمة المرور.')

@@ -59,7 +59,7 @@ export function AppThemeProvider({ children }: { children: React.ReactNode }) {
           },
         },
         typography: {
-          fontFamily: `"Inter", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif`,
+          fontFamily: `'PingAR', 'IBM Plex Sans Arabic', 'Tajawal', 'Arial', sans-serif`,
           fontWeightMedium: 600,
         },
         shape: { borderRadius: 16 },
