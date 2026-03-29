@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Alert,
   AppBar,
@@ -6,7 +6,6 @@ import {
   Button,
   Container,
   IconButton,
-  List,
   ListItem,
   CircularProgress,
   Toolbar,
@@ -26,7 +25,6 @@ import UploadIcon from '@mui/icons-material/Upload'
 import DarkModeIcon from '@mui/icons-material/DarkMode'
 import LightModeIcon from '@mui/icons-material/LightMode'
 import FolderIcon from '@mui/icons-material/Folder'
-import FolderOpenIcon from '@mui/icons-material/FolderOpen'
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile'
 import ImageIcon from '@mui/icons-material/Image'
 import VideoFileIcon from '@mui/icons-material/VideoFile'
@@ -47,6 +45,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useThemeMode } from '../contexts/ThemeContext'
 import { API_ENV } from '../config/api'
 import { listUploadedObjects, uploadFiles, moveFileToTrash, restoreFileFromTrash, listTrashFiles } from '../api/uploadApi'
+import { subscribeRealtime } from '../api/realtimeApi'
 
 function fmtBytes(bytes: number | undefined) {
   if (!bytes || !Number.isFinite(bytes) || bytes <= 0) return ''
@@ -78,19 +77,6 @@ function getFileIcon(fileType: string) {
     case 'document': return <DescriptionIcon />
     default: return <InsertDriveFileIcon />
   }
-}
-
-function isInRootFolder(key: string): boolean {
-  const parts = key.split('/')
-  return parts.length === 2 && parts[0] === 'uploads'
-}
-
-function getNestedPath(key: string): string | null {
-  const parts = key.split('/')
-  if (parts.length > 2 && parts[0] === 'uploads') {
-    return parts.slice(1, -1).join('/')
-  }
-  return null
 }
 
 function filenameFromKey(key: string) {
@@ -142,7 +128,7 @@ function ImageThumbnail({ url, filename, key, size = 60 }: { url: string; filena
 }
 
 // Video thumbnail component with play icon overlay
-function VideoThumbnail({ url, filename, size = 60 }: { url: string; filename: string; size?: number }) {
+function VideoThumbnail({ url, size = 60 }: { url: string; size?: number }) {
   const [thumbnailLoaded, setThumbnailLoaded] = useState(false)
   const [thumbnailError, setThumbnailError] = useState(false)
 
@@ -262,7 +248,7 @@ function FileItem({
       {isImage && url ? (
         <ImageThumbnail url={url} filename={filename} key={obj.key} />
       ) : isVideo && url ? (
-        <VideoThumbnail url={url} filename={filename} />
+        <VideoThumbnail url={url} />
       ) : (
         <Avatar
           sx={{
@@ -358,7 +344,7 @@ function FileItemGrid({
         {isImage && url ? (
           <ImageThumbnail url={url} filename={filename} key={obj.key} size={80} />
         ) : isVideo && url ? (
-          <VideoThumbnail url={url} filename={filename} size={80} />
+          <VideoThumbnail url={url} size={80} />
         ) : (
           <Avatar
             sx={{
@@ -609,7 +595,7 @@ function FilePreviewModal({
       }}
     >
       <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="h6">معاينة: {file.filename}</Typography>
+        <Typography variant="body1" sx={{ fontSize: '1.25rem', fontWeight: 500 }}>معاينة: {file.filename}</Typography>
         <IconButton onClick={onClose} size="small">
           <CloseIcon />
         </IconButton>
@@ -1072,7 +1058,7 @@ export default function UploadPage() {
     }
   }
 
-  async function fetchTrashFiles() {
+  const fetchTrashFiles = useCallback(async () => {
     setLoadingTrash(true)
     try {
       const res = await listTrashFiles()
@@ -1083,13 +1069,13 @@ export default function UploadPage() {
     } finally {
       setLoadingTrash(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     if (showTrash) {
       void fetchTrashFiles()
     }
-  }, [showTrash])
+  }, [showTrash, fetchTrashFiles])
 
   function handlePreview(key: string, url: string) {
     const filename = filenameFromKey(key)
@@ -1103,7 +1089,7 @@ export default function UploadPage() {
     setPreviewFile(null)
   }
 
-  async function fetchExplorer() {
+  const fetchExplorer = useCallback(async () => {
     setLoadingExplorer(true)
     try {
       const res = await listUploadedObjects(explorerPrefix, 1000, true)
@@ -1115,12 +1101,28 @@ export default function UploadPage() {
     } finally {
       setLoadingExplorer(false)
     }
-  }
+  }, [explorerPrefix])
 
   useEffect(() => {
     void fetchExplorer()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPath])
+  }, [fetchExplorer])
+
+  useEffect(() => {
+    const unsubscribe = subscribeRealtime(
+      (event) => {
+        if (event.scope !== 'files') return
+        void fetchExplorer()
+        if (showTrash) {
+          void fetchTrashFiles()
+        }
+      },
+      () => {
+        // page stays usable even if realtime stream reconnects
+      }
+    )
+
+    return unsubscribe
+  }, [fetchExplorer, fetchTrashFiles, showTrash])
 
   const publicBase = API_ENV.r2PublicBaseUrl?.trim() ?? ''
   function keyToPublicUrl(key: string) {

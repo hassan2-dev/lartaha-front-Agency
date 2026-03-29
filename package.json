@@ -12,8 +12,11 @@
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
+    "@livekit/components-react": "^2.9.20",
+    "@livekit/components-styles": "^1.1.6",
     "@mui/icons-material": "^7.3.9",
     "@mui/material": "^7.3.9",
+    "@tailwindcss/postcss": "^4.2.2",
     "axios": "^1.13.6",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",

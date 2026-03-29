@@ -5,7 +5,6 @@ import {
   Typography,
   Paper,
   Switch,
-  FormControlLabel,
   Divider,
   List,
   ListItem,
@@ -18,11 +17,23 @@ import {
   InputLabel,
   TextField,
   Alert,
+  Avatar,
+  IconButton,
 } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
+import { Person as PersonIcon, ArrowForward as ArrowForwardIcon } from '@mui/icons-material'
 
 export default function SettingsPage() {
   const theme = useTheme()
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  console.log('👤 SettingsPage user data:', user)
+  console.log('👤 User name:', user?.name)
+  console.log('👤 User email:', user?.email)
+  console.log('👤 User avatar:', user?.avatar)
+
   const [notifications, setNotifications] = useState(true)
   const [autoUpload, setAutoUpload] = useState(true)
   const [darkMode, setDarkMode] = useState(theme.palette.mode === 'dark')
@@ -53,7 +64,7 @@ export default function SettingsPage() {
         <Typography variant="h6" sx={{ fontWeight: 600, mb: 3 }}>
           الإعدادات العامة
         </Typography>
-        
+
         <List sx={{ py: 0 }}>
           <ListItem sx={{ px: 0 }}>
             <ListItemText
@@ -68,9 +79,9 @@ export default function SettingsPage() {
               />
             </ListItemSecondaryAction>
           </ListItem>
-          
+
           <Divider sx={{ my: 1, borderColor: 'rgba(255,255,255,0.12)' }} />
-          
+
           <ListItem sx={{ px: 0 }}>
             <ListItemText
               primary="الإشعارات"
@@ -84,9 +95,9 @@ export default function SettingsPage() {
               />
             </ListItemSecondaryAction>
           </ListItem>
-          
+
           <Divider sx={{ my: 1, borderColor: 'rgba(255,255,255,0.12)' }} />
-          
+
           <ListItem sx={{ px: 0 }}>
             <ListItemText
               primary="الرفع التلقائي"
@@ -108,7 +119,7 @@ export default function SettingsPage() {
         <Typography variant="h6" sx={{ fontWeight: 600, mb: 3 }}>
           إعدادات الرفع
         </Typography>
-        
+
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           <FormControl fullWidth>
             <InputLabel>اللغة</InputLabel>
@@ -121,7 +132,7 @@ export default function SettingsPage() {
               <MenuItem value="en">English</MenuItem>
             </Select>
           </FormControl>
-          
+
           <TextField
             label="حجم الملف الأقصى (ميجابايت)"
             type="number"
@@ -137,7 +148,42 @@ export default function SettingsPage() {
         <Typography variant="h6" sx={{ fontWeight: 600, mb: 3 }}>
           إعدادات الحساب
         </Typography>
-        
+
+        {/* Profile Section */}
+        <Box sx={{ mb: 3, p: 2, bgcolor: 'rgba(0,0,0,0.02)', borderRadius: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+            <Avatar
+              src={user?.avatar}
+              sx={{ width: 60, height: 60, bgcolor: 'primary.main' }}
+            >
+              {user?.name?.charAt(0).toUpperCase() || <PersonIcon />}
+            </Avatar>
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                {user?.name || 'غير محدد'}
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                {user?.email || 'غير محدد'}
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                {user?.isAdmin ? 'مدير' : 'عضو'}
+              </Typography>
+            </Box>
+            <IconButton
+              onClick={() => {
+                console.log('🔗 Profile navigation button clicked')
+                navigate('/profile')
+              }}
+              sx={{ bgcolor: 'primary.main', color: 'white', '&:hover': { bgcolor: 'primary.dark' } }}
+            >
+              <ArrowForwardIcon />
+            </IconButton>
+          </Box>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
+            انقر على السهم لتحديث ملفك الشخصي وتغيير الصورة الرمزية
+          </Typography>
+        </Box>
+
         <List sx={{ py: 0 }}>
           <ListItem sx={{ px: 0 }}>
             <ListItemText
@@ -150,9 +196,9 @@ export default function SettingsPage() {
               </Button>
             </ListItemSecondaryAction>
           </ListItem>
-          
+
           <Divider sx={{ my: 1, borderColor: 'rgba(255,255,255,0.12)' }} />
-          
+
           <ListItem sx={{ px: 0 }}>
             <ListItemText
               primary="حذف الحساب"
@@ -173,7 +219,7 @@ export default function SettingsPage() {
         <Typography variant="h6" sx={{ fontWeight: 600, mb: 3 }}>
           معلومات التخزين
         </Typography>
-        
+
         <Box sx={{ mb: 2 }}>
           <Typography variant="body2" sx={{ mb: 1 }}>
             المساحة المستخدمة: 2.5 GB من 10 GB
@@ -196,7 +242,7 @@ export default function SettingsPage() {
             />
           </Box>
         </Box>
-        
+
         <Button variant="outlined" size="small">
           ترقية التخزين
         </Button>

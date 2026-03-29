@@ -9,7 +9,10 @@ import {
   CardContent,
   Alert,
   Container,
+  Avatar,
+  IconButton,
 } from '@mui/material'
+import { PhotoCamera } from '@mui/icons-material'
 import { api } from '../api/http'
 
 export default function RegisterPage() {
@@ -18,42 +21,64 @@ export default function RegisterPage() {
   const token = searchParams.get('token')
 
   const [formData, setFormData] = useState({
-    username: '',
     password: '',
     confirmPassword: '',
     name: '',
     position: '',
     phone: '',
   })
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [avatarPreview, setAvatarPreview] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [invitation, setInvitation] = useState<any>(null)
+  const [validatingToken, setValidatingToken] = useState(true)
+  const [tokenValid, setTokenValid] = useState(false)
+  const [invitationInfo, setInvitationInfo] = useState<any>(null)
 
   useEffect(() => {
-    if (!token) {
-      setError('Invalid invitation link')
-      return
+    const validateToken = async () => {
+      if (!token) {
+        setError('رابط الدعوة غير صالح')
+        setValidatingToken(false)
+        return
+      }
+
+      try {
+        // Validate token with server
+        const response = await api.post('/api/auth/validate-invitation', { token })
+
+        if (response.data.valid) {
+          setTokenValid(true)
+          setInvitationInfo(response.data.invitation)
+          setError('')
+        } else {
+          setError('رابط الدعوة غير صالح أو منتهي الصلاحية')
+        }
+      } catch (err: any) {
+        setError(err.response?.data?.message || 'فشل التحقق من رابط الدعوة')
+      } finally {
+        setValidatingToken(false)
+      }
     }
 
-    // We could validate the token here, but for simplicity we'll just show the form
-    // The server will validate the token during registration
+    validateToken()
   }, [token])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!token) {
-      setError('Invalid invitation link')
+      setError('رابط دعوة غير صالح')
       return
     }
 
     if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match')
+      setError('كلمات المرور غير متطابقة')
       return
     }
 
     if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters long')
+      setError('يجب أن تكون كلمة المرور 6 أحرف على الأقل')
       return
     }
 
@@ -61,22 +86,32 @@ export default function RegisterPage() {
     setError('')
 
     try {
-      const response = await api.post('/auth/register', {
-        token,
-        username: formData.username.trim(),
-        password: formData.password,
-        name: formData.name.trim(),
-        position: formData.position.trim() || undefined,
-        phone: formData.phone.trim() || undefined,
+      // Create form data for file upload
+      const submitData = new FormData()
+      submitData.append('token', token)
+      submitData.append('password', formData.password)
+      submitData.append('name', formData.name.trim())
+      submitData.append('position', formData.position.trim() || '')
+      submitData.append('phone', formData.phone.trim() || '')
+
+      if (avatarFile) {
+        submitData.append('avatar', avatarFile)
+      }
+
+      const response = await api.post('/api/auth/register', submitData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
       })
 
-      // Store the token
+      // Store the token and clear any existing admin token
+      localStorage.removeItem('token') // Clear any existing token first
       localStorage.setItem('token', response.data.token)
-      
+
       // Redirect to dashboard
       navigate('/')
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Registration failed')
+      setError(err.response?.data?.message || 'فشل التسجيل')
     } finally {
       setLoading(false)
     }
@@ -89,15 +124,53 @@ export default function RegisterPage() {
     }))
   }
 
-  if (!token) {
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      // Check if file is an image
+      if (!file.type.startsWith('image/')) {
+        setError('يرجى اختيار ملف صورة صالح')
+        return
+      }
+
+      // Check file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setError('حجم الصورة يجب ألا يتجاوز 5 ميجابايت')
+        return
+      }
+
+      setAvatarFile(file)
+
+      // Create preview
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setAvatarPreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  if (validatingToken) {
+    return (
+      <Container maxWidth="sm">
+        <Box sx={{ mt: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            جاري التحقق من رابط الدعوة...
+          </Typography>
+        </Box>
+      </Container>
+    )
+  }
+
+  if (!tokenValid || error) {
     return (
       <Container maxWidth="sm">
         <Box sx={{ mt: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <Alert severity="error" sx={{ mb: 2 }}>
-            Invalid invitation link. Please check your email and try again.
+            {error || 'رابط الدعوة غير صالح. يرجى التحقق من بريدك الإلكتروني والمحاولة مرة أخرى.'}
           </Alert>
           <Button variant="contained" onClick={() => navigate('/login')}>
-            Go to Login
+            الذهاب إلى تسجيل الدخول
           </Button>
         </Box>
       </Container>
@@ -110,11 +183,29 @@ export default function RegisterPage() {
         <Card sx={{ width: '100%', maxWidth: 400 }}>
           <CardContent sx={{ p: 4 }}>
             <Typography component="h1" variant="h4" align="center" gutterBottom>
-              Join Team
+              انضمام للفريق
             </Typography>
-            <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 3 }}>
-              You've been invited to join a team! Create your account to get started.
-            </Typography>
+            {invitationInfo && (
+              <Box sx={{ mb: 3, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 1 }}>
+                  لقد تمت دعوتك للانضمام إلى:
+                </Typography>
+                <Typography variant="h6" align="center" sx={{ fontWeight: 'bold', mb: 1 }}>
+                  {invitationInfo.workspaceName}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" align="center">
+                  بواسطة: {invitationInfo.invitedByName}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" align="center">
+                  البريد الإلكتروني: {invitationInfo.email}
+                </Typography>
+              </Box>
+            )}
+            {!invitationInfo && (
+              <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 3 }}>
+                لقد تمت دعوتك لانضمام إلى فريق! قم بإنشاء حسابك للبدء.
+              </Typography>
+            )}
 
             {error && (
               <Alert severity="error" sx={{ mb: 3 }}>
@@ -123,12 +214,46 @@ export default function RegisterPage() {
             )}
 
             <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
+              {/* Avatar Upload */}
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
+                <Avatar
+                  src={avatarPreview}
+                  sx={{ width: 80, height: 80, mb: 1 }}
+                />
+                <input
+                  accept="image/*"
+                  id="avatar-upload"
+                  type="file"
+                  hidden
+                  onChange={handleAvatarChange}
+                />
+                <label htmlFor="avatar-upload">
+                  <IconButton
+                    component="span"
+                    color="primary"
+                    sx={{
+                      position: 'absolute',
+                      mt: -6,
+                      ml: 6,
+                      bgcolor: 'background.paper',
+                      border: '2px solid',
+                      borderColor: 'primary.main'
+                    }}
+                  >
+                    <PhotoCamera />
+                  </IconButton>
+                </label>
+                <Typography variant="caption" color="text.secondary">
+                  انقر لتحميل صورة الملف الشخصي
+                </Typography>
+              </Box>
+
               <TextField
                 margin="normal"
                 required
                 fullWidth
                 id="name"
-                label="Full Name"
+                label="الاسم الكامل"
                 name="name"
                 autoComplete="name"
                 autoFocus
@@ -137,20 +262,9 @@ export default function RegisterPage() {
               />
               <TextField
                 margin="normal"
-                required
-                fullWidth
-                id="username"
-                label="Username"
-                name="username"
-                autoComplete="username"
-                value={formData.username}
-                onChange={handleChange('username')}
-              />
-              <TextField
-                margin="normal"
                 fullWidth
                 id="position"
-                label="Position (optional)"
+                label="المنصب (اختياري)"
                 name="position"
                 autoComplete="organization-title"
                 value={formData.position}
@@ -158,9 +272,10 @@ export default function RegisterPage() {
               />
               <TextField
                 margin="normal"
+                required
                 fullWidth
                 id="phone"
-                label="Phone Number (optional)"
+                label="رقم الهاتف"
                 name="phone"
                 autoComplete="tel"
                 value={formData.phone}
@@ -171,7 +286,7 @@ export default function RegisterPage() {
                 required
                 fullWidth
                 name="password"
-                label="Password"
+                label="كلمة المرور"
                 type="password"
                 id="password"
                 autoComplete="new-password"
@@ -183,7 +298,7 @@ export default function RegisterPage() {
                 required
                 fullWidth
                 name="confirmPassword"
-                label="Confirm Password"
+                label="تأكيد كلمة المرور"
                 type="password"
                 id="confirmPassword"
                 value={formData.confirmPassword}
@@ -196,7 +311,7 @@ export default function RegisterPage() {
                 sx={{ mt: 3, mb: 2 }}
                 disabled={loading}
               >
-                {loading ? 'Creating Account...' : 'Create Account'}
+                {loading ? 'جاري إنشاء الحساب...' : 'إنشاء حساب'}
               </Button>
             </Box>
           </CardContent>

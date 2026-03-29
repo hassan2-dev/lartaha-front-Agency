@@ -1,20 +1,18 @@
 import { useMemo, useRef, useState, type ChangeEvent } from 'react'
 import {
-  Alert,
   Box,
   Button,
+  TextField,
+  Typography,
+  Paper,
+  Alert,
   Divider,
   List,
   ListItem,
-  LinearProgress,
-  Paper,
-  TextField,
-  Typography,
 } from '@mui/material'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import FolderOpenIcon from '@mui/icons-material/FolderOpen'
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile'
-import UploadIcon from '@mui/icons-material/Upload'
 
 export type SelectedUploadFile = {
   file: File
@@ -44,14 +42,6 @@ function fmtBytes(bytes: number) {
   const units = ['B', 'KB', 'MB', 'GB']
   const idx = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)))
   const value = bytes / Math.pow(1024, idx)
-  return `${value.toFixed(value >= 10 || idx === 0 ? 0 : 1)} ${units[idx]}`
-}
-
-function fmtSpeed(bytesPerSecond: number) {
-  if (!Number.isFinite(bytesPerSecond) || bytesPerSecond <= 0) return '0 B/s'
-  const units = ['B/s', 'KB/s', 'MB/s', 'GB/s']
-  const idx = Math.min(units.length - 1, Math.floor(Math.log(bytesPerSecond) / Math.log(1024)))
-  const value = bytesPerSecond / Math.pow(1024, idx)
   return `${value.toFixed(value >= 10 || idx === 0 ? 0 : 1)} ${units[idx]}`
 }
 

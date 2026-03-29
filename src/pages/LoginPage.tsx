@@ -1,12 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Alert, Avatar, Box, Button, Card, CardContent, Container, TextField, Typography } from '@mui/material'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined'
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { token, login, loading, error } = useAuth()
+  const loginType = searchParams.get('type') || 'admin'
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -22,14 +24,15 @@ export default function LoginPage() {
     e.preventDefault()
     setLocalError(null)
 
-
-
     if (!email.trim() || !password) {
       setLocalError('يرجى إدخال البريد الإلكتروني وكلمة المرور.')
       return
     }
 
     try {
+      // Clear existing token before logging in
+      localStorage.removeItem('token')
+
       await login({ username: email.trim(), password })
       navigate('/', { replace: true })
     } catch {
@@ -60,10 +63,10 @@ export default function LoginPage() {
             <LockOutlinedIcon />
           </Avatar>
           <Typography variant="h5" sx={{ fontWeight: 800 }}>
-            شركه لارثا
+            {loginType === 'member' ? 'تسجيل دخول العضو' : 'تسجيل دخول المدير'}
           </Typography>
           <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.8 }}>
-            ارفع الي يعجبك ومعليك
+            {loginType === 'member' ? 'سجل الدخول للوصول إلى فريقك' : 'ارفع الي يعجبك ومعليك'}
           </Typography>
         </Box>
 
@@ -124,6 +127,41 @@ export default function LoginPage() {
                   أنشئ مساحة العمل الخاصة بك
                 </Button>
               </Typography>
+            </Box>
+
+            <Box sx={{ mt: 3, textAlign: 'center' }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                أو سجل الدخول كـ:
+              </Typography>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => navigate('/login?type=member')}
+                sx={{
+                  textTransform: 'none',
+                  mr: 1,
+                  '&:hover': {
+                    backgroundColor: 'primary.main',
+                    color: 'white',
+                  }
+                }}
+              >
+                عضو في فريق
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => navigate('/login?type=admin')}
+                sx={{
+                  textTransform: 'none',
+                  '&:hover': {
+                    backgroundColor: 'primary.main',
+                    color: 'white',
+                  }
+                }}
+              >
+                مدير مساحة العمل
+              </Button>
             </Box>
           </Box>
         </CardContent>

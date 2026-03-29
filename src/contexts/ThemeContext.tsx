@@ -71,6 +71,71 @@ export function AppThemeProvider({ children }: { children: React.ReactNode }) {
               },
             },
           },
+          MuiTextField: {
+            styleOverrides: {
+              root: {
+                '& .MuiInputLabel-root': {
+                  right: 14,
+                  left: 'auto',
+                  transformOrigin: 'right top',
+                  transform: 'translate(14px, 16px) scale(1)',
+                  '&.MuiInputLabel-shrink': {
+                    right: 14,
+                    transform: 'translate(14px, -6px) scale(0.75)',
+                  },
+                },
+                '& .MuiInputBase-input': {
+                  textAlign: 'right',
+                  padding: '16.5px 14px',
+                },
+                '& .MuiOutlinedInput-root': {
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    textAlign: 'right',
+                  },
+                },
+                '& .MuiFormLabel-filled': {
+                  right: 14,
+                },
+                '& .Mui-focused .MuiInputLabel-root': {
+                  right: 14,
+                },
+              },
+            },
+          },
+          MuiFormControl: {
+            styleOverrides: {
+              root: {
+                '& .MuiInputLabel-root': {
+                  right: 14,
+                  left: 'auto',
+                  transformOrigin: 'right top',
+                  transform: 'translate(14px, 16px) scale(1)',
+                  '&.MuiInputLabel-shrink': {
+                    right: 14,
+                    transform: 'translate(14px, -6px) scale(0.75)',
+                  },
+                },
+                '& .MuiSelect-select': {
+                  textAlign: 'right',
+                  paddingRight: '14px',
+                  paddingLeft: '32px',
+                },
+                '& .MuiOutlinedInput-notchedOutline': {
+                  textAlign: 'right',
+                },
+              },
+            },
+          },
+          MuiSelect: {
+            styleOverrides: {
+              select: {
+                textAlign: 'right',
+                '&:focus': {
+                  backgroundColor: 'transparent',
+                },
+              },
+            },
+          },
         },
       }),
     [mode]

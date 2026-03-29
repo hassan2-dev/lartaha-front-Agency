@@ -18,11 +18,14 @@ import {
   Home as HomeIcon,
   UploadFile as UploadIcon,
   Task as TaskIcon,
+  Chat as ChatIcon,
   Groups as TeamsIcon,
   Settings as SettingsIcon,
   ChevronRight as ChevronRightIcon,
+  Timeline as ActivityIcon,
 } from '@mui/icons-material'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
 
 const drawerWidth = 280
 
@@ -36,7 +39,9 @@ const navItems: NavItem[] = [
   { text: 'الرئيسية', icon: <HomeIcon />, path: '/' },
   { text: 'رفع الملفات', icon: <UploadIcon />, path: '/upload' },
   { text: 'المهام', icon: <TaskIcon />, path: '/tasks' },
+  { text: 'الدردشة', icon: <ChatIcon />, path: '/chat' },
   { text: 'الفرق', icon: <TeamsIcon />, path: '/teams' },
+  { text: 'الأنشطة', icon: <ActivityIcon />, path: '/activity' },
   { text: 'الإعدادات', icon: <SettingsIcon />, path: '/settings' },
 ]
 
@@ -51,6 +56,16 @@ export default function SideNav({ children, title = 'larthaa Agency' }: SideNavP
   const [mobileOpen, setMobileOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
+  const { user } = useAuth()
+
+  // Filter navigation items based on user role
+  const filteredNavItems = navItems.filter(item => {
+    // Only show teams page for admins
+    if (item.path === '/teams') {
+      return user?.isAdmin === true
+    }
+    return true
+  })
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen)
@@ -81,7 +96,7 @@ export default function SideNav({ children, title = 'larthaa Agency' }: SideNavP
 
       {/* Navigation Items */}
       <List sx={{ flex: 1, py: 2 }}>
-        {navItems.map((item) => (
+        {filteredNavItems.map((item) => (
           <ListItem key={item.path} disablePadding>
             <ListItemButton
               onClick={() => handleNavItemClick(item.path)}

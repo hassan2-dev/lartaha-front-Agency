@@ -10,14 +10,19 @@ type AuthContextValue = {
     email: string
     username: string
     name: string
+    avatar?: string
+    position?: string
+    phone?: string
     isAdmin: boolean
     workspaceId?: string
+    workspaceName?: string
   } | null
   loading: boolean
   error: string | null
   login: (payload: LoginPayload) => Promise<void>
   logout: () => void
   refreshMe: () => Promise<void>
+  updateUser: (userData: Partial<{ name: string; avatar?: string }>) => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -39,8 +44,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string
     username: string
     name: string
+    avatar?: string
+    position?: string
+    phone?: string
     isAdmin: boolean
     workspaceId?: string
+    workspaceName?: string
   } | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -48,9 +57,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function refreshMe() {
     if (!token) return
     try {
+      console.log('🔄 Calling fetchMe with token:', token?.substring(0, 20) + '...')
       const me = await fetchMe()
+      console.log('📥 fetchMe response:', me)
       setUser(me)
-    } catch {
+      console.log('✅ User state set:', me)
+    } catch (error) {
+      console.error('❌ fetchMe error:', error)
       // If /me fails (expired token, etc) we'll just keep user as null.
       setUser(null)
     }
@@ -105,6 +118,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       },
       refreshMe,
+      updateUser: (userData) => {
+        if (user) {
+          setUser({ ...user, ...userData })
+        }
+      },
     }),
     [error, loading, refreshMe, token, user]
   )

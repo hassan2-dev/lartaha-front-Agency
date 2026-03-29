@@ -41,10 +41,19 @@ export async function fetchMe(): Promise<{
   email: string
   username: string
   name: string
+  avatar?: string
+  position?: string
+  phone?: string
   isAdmin: boolean
   workspaceId?: string
+  workspaceName?: string
 }> {
+  console.log('🌐 Making GET request to:', API_ENV.authMePath)
   const res = await api.get(API_ENV.authMePath)
-  return res.data
+  console.log('📡 API response status:', res.status)
+  console.log('📋 API response data:', res.data)
+  console.log('📋 Extracted user data:', res.data.user)
+  console.log('📋 API response headers:', res.headers)
+  return res.data.user // Extract the actual user object from the nested structure
 }
 

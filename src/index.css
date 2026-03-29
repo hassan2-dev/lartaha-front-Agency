@@ -7,19 +7,20 @@
   html,
   body,
   #root {
-    @apply h-full;
+    height: 100%;
   }
 
   body {
-    @apply m-0;
+    margin: 0;
     background: #0b0b12;
   }
 
   * {
-    @apply box-border;
+    box-sizing: border-box;
   }
 
   a {
-    @apply text-inherit no-underline;
+    color: inherit;
+    text-decoration: none;
   }
 }
