@@ -581,7 +581,19 @@ function FileItemGrid({
 
       {url && (
         <Box sx={{ p: 2, pt: 0, display: 'flex', justifyContent: 'center' }}>
-
+          <Tooltip title="إعدادات الخصوصية">
+            <Button
+              size="small"
+              variant="text"
+              onClick={(e) => {
+                e.stopPropagation()
+                onPrivacyToggle(obj.key, filename)
+              }}
+              sx={{ borderRadius: 999, minWidth: 'auto', p: 1 }}
+            >
+              <LockIcon sx={{ fontSize: 16, color: isRestricted ? 'error.main' : 'text.secondary' }} />
+            </Button>
+          </Tooltip>
           <Tooltip title="تنزيل">
             <Button
               size="small"
