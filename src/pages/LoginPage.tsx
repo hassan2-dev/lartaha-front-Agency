@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Alert, Avatar, Box, Button, Card, CardContent, Container, TextField, Typography, IconButton, InputAdornment, Fade, CircularProgress } from '@mui/material'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined'
 import Visibility from '@mui/icons-material/Visibility'
@@ -8,9 +8,7 @@ import VisibilityOff from '@mui/icons-material/VisibilityOff'
 
 export default function LoginPage() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
   const { token, login, error } = useAuth()
-  const loginType = searchParams.get('type') || 'admin'
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -100,14 +98,14 @@ export default function LoginPage() {
               mb: 1,
               textShadow: '0 2px 4px rgba(0,0,0,0.1)'
             }}>
-              {loginType === 'member' ? 'تسجيل دخول العضو' : 'تسجيل دخول المدير'}
+              {'تسجيل دخول'}
             </Typography>
             <Typography variant="body1" sx={{
               color: 'rgba(255, 255, 255, 0.9)',
               fontWeight: 300,
               fontSize: '0.95rem'
             }}>
-              {loginType === 'member' ? 'سجل الدخول للوصول إلى فريقك' : 'ارفع الي يعجبك ومعليك'}
+              {'ارفع الي يعجبك ومعليك'}
             </Typography>
           </Box>
 
@@ -130,119 +128,8 @@ export default function LoginPage() {
                   </Alert>
                 )}
 
-                <Box sx={{ mb: 4 }}>
-                  <Typography variant="h6" sx={{ mb: 2, textAlign: 'center', fontWeight: 600, color: 'text.primary' }}>
-                    تسجيل دخول سريع
-                  </Typography>
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
-                    <Button
-                      variant="contained"
-                      onClick={async () => {
-                        setLocalError(null)
-                        setIsLoading(true)
-                        try {
-                          localStorage.removeItem('token')
-                          await login({ username: 'employee@example.com', password: 'employee123' })
-                          navigate('/dashboard', { replace: true })
-                        } catch {
-                          setLocalError('فشل تسجيل الدخول كموظف.')
-                        } finally {
-                          setIsLoading(false)
-                        }
-                      }}
-                      disabled={isLoading}
-                      sx={{
-                        textTransform: 'none',
-                        borderRadius: 3,
-                        px: 4,
-                        py: 2,
-                        fontSize: '1.1rem',
-                        fontWeight: 600,
-                        width: '100%',
-                        maxWidth: '320px',
-                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                        color: 'white',
-                        boxShadow: '0 6px 20px rgba(102, 126, 234, 0.35)',
-                        border: 'none',
-                        transition: 'all 0.3s ease',
-                        '&:hover': {
-                          transform: 'translateY(-2px)',
-                          boxShadow: '0 8px 28px rgba(102, 126, 234, 0.45)',
-                        },
-                        '&:active': {
-                          transform: 'translateY(0)',
-                        },
-                        '&:disabled': {
-                          background: 'rgba(0, 0, 0, 0.12)',
-                          color: 'rgba(0, 0, 0, 0.26)',
-                        }
-                      }}
-                    >
-                      🧑‍💼 الدخول كموظف
-                    </Button>
-                    <Button
-                      variant="contained"
-                      onClick={async () => {
-                        setLocalError(null)
-                        setIsLoading(true)
-                        try {
-                          localStorage.removeItem('token')
-                          await login({ username: 'admin@example.com', password: 'admin123' })
-                          navigate('/dashboard', { replace: true })
-                        } catch {
-                          setLocalError('فشل تسجيل الدخول كمدير.')
-                        } finally {
-                          setIsLoading(false)
-                        }
-                      }}
-                      disabled={isLoading}
-                      sx={{
-                        textTransform: 'none',
-                        borderRadius: 3,
-                        px: 4,
-                        py: 2,
-                        fontSize: '1.1rem',
-                        fontWeight: 600,
-                        width: '100%',
-                        maxWidth: '320px',
-                        background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-                        color: 'white',
-                        boxShadow: '0 6px 20px rgba(240, 147, 251, 0.35)',
-                        border: 'none',
-                        transition: 'all 0.3s ease',
-                        '&:hover': {
-                          transform: 'translateY(-2px)',
-                          boxShadow: '0 8px 28px rgba(240, 147, 251, 0.45)',
-                        },
-                        '&:active': {
-                          transform: 'translateY(0)',
-                        },
-                        '&:disabled': {
-                          background: 'rgba(0, 0, 0, 0.12)',
-                          color: 'rgba(0, 0, 0, 0.26)',
-                        }
-                      }}
-                    >
-                      👔 الدخول كمدير
-                    </Button>
-                  </Box>
-                </Box>
 
-                <Box sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  my: 4,
-                  '&::before, &::after': {
-                    content: '""',
-                    flex: 1,
-                    borderBottom: '1px solid',
-                    borderColor: 'divider',
-                  }
-                }}>
-                  <Typography variant="body2" sx={{ px: 2, color: 'text.secondary', fontWeight: 500 }}>
-                    أو سجل الدخول بحسابك
-                  </Typography>
-                </Box>
+
 
                 <Box component="form" onSubmit={onSubmit} sx={{ '& .MuiTextField-root': { mb: 2 } }}>
                   <TextField
