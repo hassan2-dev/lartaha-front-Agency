@@ -56,6 +56,7 @@ import { subscribeRealtime } from '../api/realtimeApi'
 import EnhancedTaskForm from '../components/EnhancedTaskForm'
 import EnhancedTaskCard from '../components/EnhancedTaskCard'
 import SortableTaskCard from '../components/SortableTaskCard'
+import { ColumnSkeleton } from '../components/SkeletonLoaders'
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
   todo: 'قيد الانتظار',
@@ -512,9 +513,19 @@ export default function TasksPage() {
           onDragEnd={handleDragEnd}
         >
           <Box sx={{ display: 'flex', gap: 2, mt: 2, flexWrap: 'wrap' }}>
-            <DroppableColumn s="todo" />
-            <DroppableColumn s="in_progress" />
-            <DroppableColumn s="done" />
+            {loading && tasks.length === 0 ? (
+              <>
+                <ColumnSkeleton />
+                <ColumnSkeleton />
+                <ColumnSkeleton />
+              </>
+            ) : (
+              <>
+                <DroppableColumn s="todo" />
+                <DroppableColumn s="in_progress" />
+                <DroppableColumn s="done" />
+              </>
+            )}
           </Box>
           <DragOverlay>
             {activeTask ? (

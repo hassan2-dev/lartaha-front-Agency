@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   Box,
   Typography,
@@ -17,8 +17,9 @@ import { api } from '../api/http'
 
 export default function RegisterPage() {
   const [searchParams] = useSearchParams()
+  const { token: tokenFromPath } = useParams<{ token?: string }>()
   const navigate = useNavigate()
-  const token = searchParams.get('token')
+  const token = searchParams.get('token') ?? tokenFromPath ?? null
 
   const [formData, setFormData] = useState({
     password: '',
@@ -109,7 +110,7 @@ export default function RegisterPage() {
       localStorage.setItem('token', response.data.token)
 
       // Redirect to dashboard
-      navigate('/')
+      navigate('/dashboard')
     } catch (err: any) {
       setError(err.response?.data?.message || 'فشل التسجيل')
     } finally {

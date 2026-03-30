@@ -250,13 +250,13 @@ export default function UploadDropzone({
         }
       />
 
-      <Box sx={{ display: 'flex', gap: 1.5, mt: 2, flexWrap: 'wrap' }}>
+      <Box sx={{ display: 'flex', gap: 1, mt: 2, flexWrap: 'wrap' }}>
         <Button
           variant="contained"
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
           startIcon={<InsertDriveFileIcon />}
-          sx={{ borderRadius: 999 }}
+          sx={{ borderRadius: 999, gap: 1 }}
         >
           اختر ملفات
         </Button>
@@ -265,7 +265,7 @@ export default function UploadDropzone({
           onClick={() => folderInputRef.current?.click()}
           disabled={uploading}
           startIcon={<FolderOpenIcon />}
-          sx={{ borderRadius: 999, borderColor: 'rgba(255,255,255,0.18)' }}
+          sx={{ borderRadius: 999, borderColor: 'rgba(255,255,255,0.18)', gap: 1 }}
         >
           اختر مجلد
         </Button>

@@ -17,10 +17,19 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogActions,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
   LinearProgress,
+  Checkbox,
+  List,
+  ListItemText,
+  ListItemIcon,
+  TextField,
 } from '@mui/material'
 import LogoutIcon from '@mui/icons-material/Logout'
-import RefreshIcon from '@mui/icons-material/Refresh'
 import UploadIcon from '@mui/icons-material/Upload'
 import DarkModeIcon from '@mui/icons-material/DarkMode'
 import LightModeIcon from '@mui/icons-material/LightMode'
@@ -39,13 +48,17 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import DownloadIcon from '@mui/icons-material/Download'
 import LinkIcon from '@mui/icons-material/Link'
 import CheckIcon from '@mui/icons-material/Check'
+import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder'
+import LockIcon from '@mui/icons-material/Lock'
 import { useNavigate } from 'react-router-dom'
 import UploadDropzone, { type SelectedUploadFile } from '../components/UploadDropzone'
 import { useAuth } from '../contexts/AuthContext'
 import { useThemeMode } from '../contexts/ThemeContext'
 import { API_ENV } from '../config/api'
-import { listUploadedObjects, uploadFiles, moveFileToTrash, restoreFileFromTrash, listTrashFiles } from '../api/uploadApi'
+import { listUploadedObjects, uploadFilesStreamed, moveFileToTrash, restoreFileFromTrash, listTrashFiles } from '../api/uploadApi'
 import { subscribeRealtime } from '../api/realtimeApi'
+import { api } from '../api/http'
+import { FileItemSkeleton, FileItemGridSkeleton, FolderItemSkeleton, FolderItemGridSkeleton } from '../components/SkeletonLoaders'
 
 function fmtBytes(bytes: number | undefined) {
   if (!bytes || !Number.isFinite(bytes) || bytes <= 0) return ''
@@ -53,6 +66,18 @@ function fmtBytes(bytes: number | undefined) {
   const idx = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)))
   const value = bytes / Math.pow(1024, idx)
   return `${value.toFixed(value >= 10 || idx === 0 ? 0 : 1)} ${units[idx]}`
+}
+
+function buildVideoThumbnailKeyFromFileKey(fileKey: string) {
+  const safeKey = String(fileKey || '').replace(/^\/+/, '')
+  if (!safeKey) return ''
+
+  const parts = safeKey.split('/').filter(Boolean)
+  const filename = parts.pop() || 'video'
+  const basename = filename.replace(/\.[^.]+$/, '') || filename
+  const directory = parts.join('/')
+  const thumbnailFilename = `${basename}__thumb.jpg`
+  return directory ? `${directory}/.thumbnails/${thumbnailFilename}` : `.thumbnails/${thumbnailFilename}`
 }
 
 function getFileType(filename: string): 'image' | 'video' | 'audio' | 'document' | 'other' {
@@ -77,6 +102,31 @@ function getFileIcon(fileType: string) {
     case 'document': return <DescriptionIcon />
     default: return <InsertDriveFileIcon />
   }
+}
+
+function ThumbnailTypeBadge({ fileType, size = 16 }: { fileType: string; size?: number }) {
+  return (
+    <Box
+      sx={{
+        position: 'absolute',
+        left: 4,
+        bottom: 4,
+        width: size + 8,
+        height: size + 8,
+        borderRadius: 999,
+        backgroundColor: 'rgba(0,0,0,0.65)',
+        border: '1px solid rgba(255,255,255,0.25)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 2,
+      }}
+    >
+      <Box sx={{ display: 'inline-flex', color: 'white', '& svg': { fontSize: size } }}>
+        {getFileIcon(fileType)}
+      </Box>
+    </Box>
+  )
 }
 
 function filenameFromKey(key: string) {
@@ -128,9 +178,35 @@ function ImageThumbnail({ url, filename, key, size = 60 }: { url: string; filena
 }
 
 // Video thumbnail component with play icon overlay
-function VideoThumbnail({ url, size = 60 }: { url: string; size?: number }) {
-  const [thumbnailLoaded, setThumbnailLoaded] = useState(false)
-  const [thumbnailError, setThumbnailError] = useState(false)
+function VideoThumbnail({ url, thumbnailKey, size = 60 }: { url: string; thumbnailKey?: string | null; size?: number }) {
+  const [thumbnailError, setThumbnailError] = useState(!url)
+  const [imgUrl, setImgUrl] = useState(url)
+
+  useEffect(() => {
+    const baseUrl = API_ENV.apiBaseUrl?.trim() || ''
+    const fallbackUrl = thumbnailKey && baseUrl
+      ? `${baseUrl}/api/image/${encodeURIComponent(thumbnailKey)}`
+      : ''
+    const nextUrl = url || fallbackUrl
+
+    setImgUrl(nextUrl)
+    setThumbnailError(!nextUrl)
+  }, [url, thumbnailKey])
+
+  const handleThumbnailError = () => {
+    const baseUrl = API_ENV.apiBaseUrl?.trim() || ''
+    const fallbackUrl = thumbnailKey && baseUrl
+      ? `${baseUrl}/api/image/${encodeURIComponent(thumbnailKey)}`
+      : ''
+
+    if (fallbackUrl && imgUrl !== fallbackUrl) {
+      setImgUrl(fallbackUrl)
+      setThumbnailError(false)
+      return
+    }
+
+    setThumbnailError(true)
+  }
 
   return (
     <Box
@@ -146,27 +222,28 @@ function VideoThumbnail({ url, size = 60 }: { url: string; size?: number }) {
         position: 'relative',
       }}
     >
-      {!thumbnailError && (
-        <video
-          src={url}
+      {!thumbnailError && imgUrl ? (
+        <img
+          src={imgUrl}
+          alt="Video thumbnail"
           style={{
             width: '100%',
             height: '100%',
             objectFit: 'cover',
           }}
-          onLoadedData={(e) => {
-            const video = e.target as HTMLVideoElement
-            video.currentTime = 0.1 // Capture frame at 0.1 seconds
-            video.onseeked = () => {
-              setThumbnailLoaded(true)
-            }
-          }}
-          onError={() => {
-            setThumbnailError(true)
-          }}
-          muted
-          preload="metadata"
+          onError={handleThumbnailError}
         />
+      ) : (
+        <Avatar
+          sx={{
+            width: size * 0.8,
+            height: size * 0.8,
+            backgroundColor: 'rgba(255,255,255,0.1)',
+            color: 'inherit',
+          }}
+        >
+          <VideoFileIcon />
+        </Avatar>
       )}
 
       {/* Play icon overlay */}
@@ -180,7 +257,7 @@ function VideoThumbnail({ url, size = 60 }: { url: string; size?: number }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: thumbnailLoaded ? 'rgba(0,0,0,0.3)' : 'transparent',
+          backgroundColor: 'rgba(0,0,0,0.3)',
           transition: 'background-color 0.2s',
         }}
       >
@@ -193,18 +270,6 @@ function VideoThumbnail({ url, size = 60 }: { url: string; size?: number }) {
         />
       </Box>
 
-      {thumbnailError && (
-        <Avatar
-          sx={{
-            width: size * 0.8,
-            height: size * 0.8,
-            backgroundColor: 'rgba(255,255,255,0.1)',
-            color: 'inherit',
-          }}
-        >
-          <VideoFileIcon />
-        </Avatar>
-      )}
     </Box>
   )
 }
@@ -213,23 +278,37 @@ function VideoThumbnail({ url, size = 60 }: { url: string; size?: number }) {
 function FileItem({
   obj,
   url,
+  thumbnailUrl,
   onDelete,
-  onPreview
+  onPreview,
+  onPrivacyToggle,
+  filePrivacySettings,
+  canAccessFile,
+  isDeleting
 }: {
-  obj: { key: string; size?: number }
+  obj: { key: string; size?: number; thumbnailKey?: string | null }
   url: string
+  thumbnailUrl?: string
   onDelete: (key: string) => void
   onPreview: (key: string, url: string) => void
+  onPrivacyToggle: (key: string, filename: string) => void
+  filePrivacySettings: Record<string, { restricted: boolean; allowedMembers: string[] }>
+  canAccessFile: (key: string) => boolean
+  isDeleting?: boolean
 }) {
   const filename = filenameFromKey(obj.key)
   const fileType = getFileType(filename)
   const isImage = fileType === 'image'
   const isVideo = fileType === 'video'
+  const resolvedThumbnailKey = obj.thumbnailKey || (isVideo ? buildVideoThumbnailKeyFromFileKey(obj.key) : null)
+  const hasAccess = canAccessFile(obj.key)
+  const privacySettings = filePrivacySettings[obj.key]
+  const isRestricted = privacySettings?.restricted
 
   return (
     <ListItem
       key={obj.key}
-      onClick={() => url && onPreview(obj.key, url)}
+      onClick={() => hasAccess && url && onPreview(obj.key, url)}
       sx={{
         py: 1.5,
         px: 2,
@@ -238,27 +317,66 @@ function FileItem({
         borderRadius: 2,
         mb: 1,
         border: '1px solid rgba(255,255,255,0.08)',
-        backgroundColor: 'rgba(255,255,255,0.02)',
-        cursor: url ? 'pointer' : 'default',
+        backgroundColor: isRestricted ? 'rgba(255,0,0,0.02)' : 'rgba(255,255,255,0.02)',
+        cursor: hasAccess && url ? 'pointer' : 'default',
+        opacity: isRestricted && !hasAccess ? 0.6 : 1,
         '&:hover': {
-          backgroundColor: 'rgba(255,255,255,0.05)',
+          backgroundColor: hasAccess ? 'rgba(255,255,255,0.05)' : 'rgba(255,0,0,0.05)',
         },
       }}
     >
-      {isImage && url ? (
-        <ImageThumbnail url={url} filename={filename} key={obj.key} />
-      ) : isVideo && url ? (
-        <VideoThumbnail url={url} />
+      {isImage && url && hasAccess ? (
+        <Box sx={{ position: 'relative' }}>
+          <ImageThumbnail url={url} filename={filename} key={obj.key} />
+          <ThumbnailTypeBadge fileType={fileType} size={14} />
+          {isRestricted && !hasAccess && (
+            <Box sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0,0,0,0.7)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 1,
+            }}>
+              <LockIcon sx={{ fontSize: 24, color: 'white' }} />
+            </Box>
+          )}
+        </Box>
+      ) : isVideo && hasAccess ? (
+        <Box sx={{ position: 'relative' }}>
+          <VideoThumbnail url={thumbnailUrl || ''} thumbnailKey={resolvedThumbnailKey} />
+          <ThumbnailTypeBadge fileType={fileType} size={14} />
+          {isRestricted && !hasAccess && (
+            <Box sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0,0,0,0.7)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 1,
+            }}>
+              <LockIcon sx={{ fontSize: 24, color: 'white' }} />
+            </Box>
+          )}
+        </Box>
       ) : (
         <Avatar
           sx={{
             width: 48,
             height: 48,
-            backgroundColor: 'rgba(255,255,255,0.1)',
+            backgroundColor: isRestricted ? 'rgba(255,0,0,0.1)' : 'rgba(255,255,255,0.1)',
             color: 'inherit',
           }}
         >
-          {getFileIcon(fileType)}
+          {isRestricted ? <LockIcon /> : getFileIcon(fileType)}
         </Avatar>
       )}
 
@@ -271,10 +389,28 @@ function FileItem({
             {fmtBytes(obj.size)}
           </Typography>
         )}
+        {isRestricted && (
+          <Typography variant="caption" sx={{ opacity: 0.7, display: 'block', color: 'error.main' }}>
+            محدود الوصول
+          </Typography>
+        )}
       </Box>
 
       {url && (
         <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+          <Tooltip title="إعدادات الخصوصية">
+            <Button
+              size="small"
+              variant="text"
+              onClick={(e) => {
+                e.stopPropagation()
+                onPrivacyToggle(obj.key, filename)
+              }}
+              sx={{ borderRadius: 999, minWidth: 'auto', p: 1 }}
+            >
+              <LockIcon sx={{ fontSize: 16, color: isRestricted ? 'error.main' : 'text.secondary' }} />
+            </Button>
+          </Tooltip>
           <Tooltip title="تنزيل">
             <Button
               size="small"
@@ -283,6 +419,7 @@ function FileItem({
                 e.stopPropagation()
                 void handleDownload(obj.key, filename)
               }}
+              disabled={!hasAccess}
               sx={{ borderRadius: 999, minWidth: 'auto', p: 1 }}
             >
               <DownloadIcon />
@@ -297,9 +434,10 @@ function FileItem({
                 e.stopPropagation()
                 void onDelete(obj.key)
               }}
+              disabled={isDeleting}
               sx={{ borderRadius: 999, minWidth: 'auto', p: 1, color: 'error.main' }}
             >
-              <DeleteIcon />
+              {isDeleting ? <CircularProgress size={20} /> : <DeleteIcon />}
             </Button>
           </Tooltip>
         </Box>
@@ -312,67 +450,108 @@ function FileItem({
 function FileItemGrid({
   obj,
   url,
+  thumbnailUrl,
   onDelete,
-  onPreview
+  onPreview,
+  onPrivacyToggle,
+  filePrivacySettings,
+  canAccessFile,
+  isDeleting
 }: {
-  obj: { key: string; size?: number }
+  obj: { key: string; size?: number; thumbnailKey?: string | null }
   url: string
+  thumbnailUrl?: string
   onDelete: (key: string) => void
   onPreview: (key: string, url: string) => void
+  onPrivacyToggle: (key: string, filename: string) => void
+  filePrivacySettings: Record<string, { restricted: boolean; allowedMembers: string[] }>
+  canAccessFile: (key: string) => boolean
+  isDeleting?: boolean
 }) {
   const filename = filenameFromKey(obj.key)
   const fileType = getFileType(filename)
   const isImage = fileType === 'image'
   const isVideo = fileType === 'video'
+  const resolvedThumbnailKey = obj.thumbnailKey || (isVideo ? buildVideoThumbnailKeyFromFileKey(obj.key) : null)
+  const hasAccess = canAccessFile(obj.key)
+  const privacySettings = filePrivacySettings[obj.key]
+  const isRestricted = privacySettings?.restricted
 
   return (
     <Card
-      onClick={() => url && onPreview(obj.key, url)}
+      onClick={() => hasAccess && url && onPreview(obj.key, url)}
       sx={{
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
         border: '1px solid rgba(255,255,255,0.08)',
-        backgroundColor: 'rgba(255,255,255,0.02)',
-        cursor: url ? 'pointer' : 'default',
+        backgroundColor: isRestricted ? 'rgba(255,0,0,0.02)' : 'rgba(255,255,255,0.02)',
+        cursor: hasAccess && url ? 'pointer' : 'default',
+        opacity: isRestricted && !hasAccess ? 0.6 : 1,
         '&:hover': {
-          backgroundColor: 'rgba(255,255,255,0.05)',
+          backgroundColor: hasAccess ? 'rgba(255,255,255,0.05)' : 'rgba(255,0,0,0.05)',
         },
       }}
     >
-      <Box sx={{ p: 2, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 120 }}>
-        {isImage && url ? (
-          <ImageThumbnail url={url} filename={filename} key={obj.key} size={80} />
-        ) : isVideo && url ? (
-          <VideoThumbnail url={url} size={80} />
+      <Box sx={{ p: 2, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 120, position: 'relative' }}>
+        {isImage && url && hasAccess ? (
+          <Box sx={{ position: 'relative' }}>
+            <ImageThumbnail url={url} filename={filename} key={obj.key} size={80} />
+            <ThumbnailTypeBadge fileType={fileType} size={16} />
+            {isRestricted && !hasAccess && (
+              <Box sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0,0,0,0.7)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 1,
+              }}>
+                <LockIcon sx={{ fontSize: 24, color: 'white' }} />
+              </Box>
+            )}
+          </Box>
+        ) : isVideo && hasAccess ? (
+          <Box sx={{ position: 'relative' }}>
+            <VideoThumbnail url={thumbnailUrl || ''} thumbnailKey={resolvedThumbnailKey} size={80} />
+            <ThumbnailTypeBadge fileType={fileType} size={16} />
+            {isRestricted && !hasAccess && (
+              <Box sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0,0,0,0.7)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 1,
+              }}>
+                <LockIcon sx={{ fontSize: 24, color: 'white' }} />
+              </Box>
+            )}
+          </Box>
         ) : (
           <Avatar
             sx={{
               width: 64,
               height: 64,
-              backgroundColor: 'rgba(255,255,255,0.1)',
+              backgroundColor: isRestricted ? 'rgba(255,0,0,0.1)' : 'rgba(255,255,255,0.1)',
               color: 'inherit',
             }}
           >
-            {getFileIcon(fileType)}
+            {isRestricted ? <LockIcon /> : getFileIcon(fileType)}
           </Avatar>
         )}
       </Box>
 
       <CardContent sx={{ p: 2, pt: 0, flex: 1 }}>
-        <Typography
-          variant="body2"
-          sx={{
-            wordBreak: 'break-word',
-            opacity: 0.92,
-            fontWeight: 500,
-            fontSize: '0.875rem',
-            textAlign: 'center',
-            mb: 1
-          }}
-        >
-          {filename}
-        </Typography>
+
         {obj.size && (
           <Typography
             variant="caption"
@@ -385,10 +564,24 @@ function FileItemGrid({
             {fmtBytes(obj.size)}
           </Typography>
         )}
+        {isRestricted && (
+          <Typography
+            variant="caption"
+            sx={{
+              opacity: 0.7,
+              display: 'block',
+              textAlign: 'center',
+              color: 'error.main'
+            }}
+          >
+            محدود الوصول
+          </Typography>
+        )}
       </CardContent>
 
       {url && (
-        <Box sx={{ p: 2, pt: 0, display: 'flex', gap: 0.5, justifyContent: 'center' }}>
+        <Box sx={{ p: 2, pt: 0, display: 'flex', justifyContent: 'center' }}>
+
           <Tooltip title="تنزيل">
             <Button
               size="small"
@@ -397,6 +590,7 @@ function FileItemGrid({
                 e.stopPropagation()
                 void handleDownload(obj.key, filename)
               }}
+              disabled={!hasAccess}
               sx={{ borderRadius: 999, minWidth: 'auto', p: 1 }}
             >
               <DownloadIcon />
@@ -411,9 +605,10 @@ function FileItemGrid({
                 e.stopPropagation()
                 void onDelete(obj.key)
               }}
+              disabled={isDeleting}
               sx={{ borderRadius: 999, minWidth: 'auto', p: 1, color: 'error.main' }}
             >
-              <DeleteIcon />
+              {isDeleting ? <CircularProgress size={20} /> : <DeleteIcon />}
             </Button>
           </Tooltip>
         </Box>
@@ -610,16 +805,19 @@ function FilePreviewModal({
 // Folder item component
 function FolderItem({
   folderPath,
-  onClick
+  onClick,
+  onDelete,
+  isDeleting
 }: {
   folderPath: string
   onClick: () => void
+  onDelete: (folderPath: string) => void
+  isDeleting?: boolean
 }) {
   const name = folderPath.split('/').filter(Boolean).pop() || folderPath
 
   return (
     <ListItem
-      onClick={onClick}
       sx={{
         py: 1.5,
         px: 2,
@@ -633,24 +831,52 @@ function FolderItem({
         },
       }}
     >
-      <Avatar
+      <Box
+        onClick={onClick}
         sx={{
-          width: 48,
-          height: 48,
-          backgroundColor: 'rgba(255,255,255,0.1)',
-          color: 'inherit',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          flex: 1,
+          cursor: 'pointer'
         }}
       >
-        <FolderIcon />
-      </Avatar>
+        <Avatar
+          sx={{
+            width: 48,
+            height: 48,
+            backgroundColor: 'rgba(255,255,255,0.1)',
+            color: 'inherit',
+          }}
+        >
+          <FolderIcon />
+        </Avatar>
 
-      <Box sx={{ flex: 1 }}>
-        <Typography variant="body2" sx={{ wordBreak: 'break-word', opacity: 0.92, fontWeight: 500 }}>
-          {name}
-        </Typography>
-        <Typography variant="caption" sx={{ opacity: 0.7 }}>
-          مجلد
-        </Typography>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="body2" sx={{ wordBreak: 'break-word', opacity: 0.92, fontWeight: 500 }}>
+            {name}
+          </Typography>
+          <Typography variant="caption" sx={{ opacity: 0.7 }}>
+            مجلد
+          </Typography>
+        </Box>
+      </Box>
+
+      <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+        <Tooltip title="حذف المجلد">
+          <Button
+            size="small"
+            variant="text"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete(folderPath)
+            }}
+            disabled={isDeleting}
+            sx={{ borderRadius: 999, minWidth: 'auto', p: 1, color: 'error.main' }}
+          >
+            {isDeleting ? <CircularProgress size={20} /> : <DeleteIcon />}
+          </Button>
+        </Tooltip>
       </Box>
     </ListItem>
   )
@@ -659,10 +885,14 @@ function FolderItem({
 // Grid view folder item component
 function FolderItemGrid({
   folderPath,
-  onClick
+  onClick,
+  onDelete,
+  isDeleting
 }: {
   folderPath: string
   onClick: () => void
+  onDelete: (folderPath: string) => void
+  isDeleting?: boolean
 }) {
   const name = folderPath.split('/').filter(Boolean).pop() || folderPath
 
@@ -679,48 +909,72 @@ function FolderItemGrid({
           backgroundColor: 'rgba(255,255,255,0.05)',
         },
       }}
-      onClick={onClick}
     >
-      <Box sx={{ p: 2, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 120 }}>
-        <Avatar
-          sx={{
-            width: 64,
-            height: 64,
-            backgroundColor: 'rgba(255,255,255,0.1)',
-            color: 'inherit',
-          }}
-        >
-          <FolderIcon />
-        </Avatar>
+      <Box
+        onClick={onClick}
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%',
+          cursor: 'pointer'
+        }}
+      >
+        <Box sx={{ p: 2, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 120 }}>
+          <Avatar
+            sx={{
+              width: 64,
+              height: 64,
+              backgroundColor: 'rgba(255,255,255,0.1)',
+              color: 'inherit',
+            }}
+          >
+            <FolderIcon />
+          </Avatar>
+        </Box>
+
+        <CardContent sx={{ p: 2, pt: 0, flex: 1 }}>
+          <Typography
+            variant="body2"
+            sx={{
+              wordBreak: 'break-word',
+              opacity: 0.92,
+              fontWeight: 500,
+              fontSize: '0.875rem',
+              textAlign: 'center',
+              mb: 1
+            }}
+          >
+            {name}
+          </Typography>
+          <Typography
+            variant="caption"
+            sx={{
+              opacity: 0.7,
+              display: 'block',
+              textAlign: 'center'
+            }}
+          >
+            مجلد
+          </Typography>
+        </CardContent>
       </Box>
 
-      <CardContent sx={{ p: 2, pt: 0, flex: 1 }}>
-        <Typography
-          variant="body2"
-          sx={{
-            wordBreak: 'break-word',
-            opacity: 0.92,
-            fontWeight: 500,
-            fontSize: '0.875rem',
-            textAlign: 'center',
-            mb: 1
-          }}
-        >
-          {name}
-        </Typography>
-        <Typography
-          variant="caption"
-          sx={{
-            opacity: 0.7,
-            display: 'block',
-            textAlign: 'center'
-          }}
-        >
-          مجلد
-        </Typography>
-      </CardContent>
-
-
+      <Box sx={{ p: 2, pt: 0, display: 'flex', gap: 0.5, justifyContent: 'center' }}>
+        <Tooltip title="حذف المجلد">
+          <Button
+            size="small"
+            variant="text"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete(folderPath)
+            }}
+            disabled={isDeleting}
+            sx={{ borderRadius: 999, minWidth: 'auto', p: 1, color: 'error.main' }}
+          >
+            {isDeleting ? <CircularProgress size={20} /> : <DeleteIcon />}
+          </Button>
+        </Tooltip>
+      </Box>
     </Card>
   )
 }
@@ -807,41 +1061,37 @@ function CopyLinkButton({ url }: { url: string }) {
 async function handleDownload(key: string, filename: string) {
   try {
     const base = API_ENV.apiBaseUrl?.trim() || ''
+    const token = localStorage.getItem('larthaa_auth_token')
+
     if (!base) {
       // Fallback to public URL if no API base URL
       const publicBase = API_ENV.r2PublicBaseUrl?.trim() || ''
       if (publicBase) {
         const safeKey = key.startsWith('/') ? key.slice(1) : key
         const publicUrl = `${publicBase.endsWith('/') ? publicBase.slice(0, -1) : publicBase}/${safeKey}`
-        window.open(publicUrl, '_blank')
+        const a = document.createElement('a')
+        a.href = publicUrl
+        a.download = filename
+        a.rel = 'noreferrer'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
       }
       return
     }
 
-    const normalized = base.endsWith('/') ? base.slice(0, -1) : base
-    const downloadUrl = `${normalized}/api/download?key=${encodeURIComponent(key)}`
-
-    // Create authenticated download request
-    const token = localStorage.getItem('larthaa_auth_token')
-    const response = await fetch(downloadUrl, {
-      headers: {
-        'Authorization': token ? `Bearer ${token}` : '',
-      },
-    })
-
-    if (!response.ok) {
-      throw new Error('Download failed')
+    if (!token) {
+      throw new Error('Missing auth token')
     }
 
-    // Create blob and download
-    const blob = await response.blob()
-    const url = window.URL.createObjectURL(blob)
+    const normalized = base.endsWith('/') ? base.slice(0, -1) : base
+    const downloadUrl = `${normalized}/api/download/direct?key=${encodeURIComponent(key)}&token=${encodeURIComponent(token)}`
     const a = document.createElement('a')
-    a.href = url
+    a.href = downloadUrl
     a.download = filename
+    a.rel = 'noreferrer'
     document.body.appendChild(a)
     a.click()
-    window.URL.revokeObjectURL(url)
     document.body.removeChild(a)
   } catch (error) {
     console.error('Download error:', error)
@@ -857,14 +1107,14 @@ async function handleDownload(key: string, filename: string) {
 
 export default function UploadPage() {
   const navigate = useNavigate()
-  const { logout } = useAuth()
+  const { logout, user } = useAuth()
   const { mode, toggle } = useThemeMode()
 
   const [selectedFiles, setSelectedFiles] = useState<SelectedUploadFile[]>([])
   // Explorer path under "uploads/". Examples: "" (root), "team1", "team1/sub1"
   const [currentPath, setCurrentPath] = useState('')
   const [foldersHere, setFoldersHere] = useState<string[]>([])
-  const [filesHere, setFilesHere] = useState<Array<{ key: string; size?: number }>>([])
+  const [filesHere, setFilesHere] = useState<Array<{ key: string; size?: number; lastModified?: string; createdAt?: string; updatedAt?: string; thumbnailKey?: string | null }>>([])
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
 
   const [uploading, setUploading] = useState(false)
@@ -872,6 +1122,9 @@ export default function UploadPage() {
   const [uploadSpeed, setUploadSpeed] = useState(0)
   const [bytesUploaded, setBytesUploaded] = useState(0)
   const [totalBytes, setTotalBytes] = useState(0)
+  const [currentUploadFileIndex, setCurrentUploadFileIndex] = useState(0)
+  const [currentUploadTotalFiles, setCurrentUploadTotalFiles] = useState(0)
+  const [currentUploadFilePath, setCurrentUploadFilePath] = useState('')
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -882,7 +1135,36 @@ export default function UploadPage() {
   const [previewModalOpen, setPreviewModalOpen] = useState(false)
   const [previewFile, setPreviewFile] = useState<{ key: string; url: string; filename: string; type: string } | null>(null)
 
+  // Folder creation state
+  const [showCreateFolderModal, setShowCreateFolderModal] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
+  const [creatingFolder, setCreatingFolder] = useState(false)
+
+  // Privacy controls state
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false)
+  const [selectedFileForPrivacy, setSelectedFileForPrivacy] = useState<{ key: string; filename: string } | null>(null)
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([])
+  const [teamMembers, setTeamMembers] = useState<Array<{ id: string; email: string; name?: string; user?: { name: string; email: string } }>>([])
+  const [loadingTeamMembers, setLoadingTeamMembers] = useState(false)
+  const [filePrivacySettings, setFilePrivacySettings] = useState<Record<string, { restricted: boolean; allowedMembers: string[] }>>({})
+
+  // Deletion loading states
+  const [deletingFiles, setDeletingFiles] = useState<Set<string>>(new Set())
+  const [deletingFolders, setDeletingFolders] = useState<Set<string>>(new Set())
+
+  // Filter and sort state
+  const [fileFilter, setFileFilter] = useState<'all' | 'images' | 'videos' | 'documents'>('all')
+  const [sortBy, setSortBy] = useState<'name' | 'date' | 'size'>('date')
+  const sortOrder = 'asc' // Fixed sort order since setSortOrder is unused
+
   const canUpload = useMemo(() => selectedFiles.length > 0 && !uploading, [selectedFiles, uploading])
+
+  // Filtered and sorted files
+  const filteredAndSortedFiles = useMemo(() => {
+    const filtered = filterFiles(filesHere)
+    const sorted = sortFiles(filtered)
+    return sorted
+  }, [filesHere, fileFilter, sortBy, sortOrder])
 
   // Auto-upload when files are selected (but not during initial render)
   const [hasTriggeredUpload, setHasTriggeredUpload] = useState(false)
@@ -927,7 +1209,10 @@ export default function UploadPage() {
     }
   }, [mode])
 
-  const ROOT_PREFIX = 'uploads'
+  const ROOT_PREFIX = useMemo(() => {
+    const workspaceId = user?.workspaceId?.trim()
+    return workspaceId ? `uploads/${workspaceId}` : 'uploads'
+  }, [user?.workspaceId])
   const explorerPrefix = currentPath.trim()
     ? `${ROOT_PREFIX}/${currentPath.trim()}`
     : ROOT_PREFIX
@@ -968,36 +1253,42 @@ export default function UploadPage() {
     setShowUploadModal(true)
     setUploading(true)
     setUploadProgress(0)
+    setCurrentUploadFileIndex(0)
+    setCurrentUploadTotalFiles(selectedFiles.length)
+    setCurrentUploadFilePath('')
 
     try {
-      const formData = new FormData()
-
-      // Destination prefix in R2. Root is always "uploads".
-      // If user is inside a folder, upload goes inside that folder.
-      formData.append('batchName', explorerPrefix)
-
-      // Check if we have folder structure from the files
       const hasFolderStructure = selectedFiles.some(sf => sf.relativePath.includes('/'))
+      let rootFolderName = ''
 
       if (hasFolderStructure) {
         // Extract the root folder name from the first file that has a path
         const firstFileWithPath = selectedFiles.find(sf => sf.relativePath.includes('/'))
         if (firstFileWithPath) {
-          const rootFolder = firstFileWithPath.relativePath.split('/')[0]
-          formData.append('folderName', rootFolder)
+          rootFolderName = firstFileWithPath.relativePath.split('/')[0]
         }
       }
 
-      for (const sf of selectedFiles) {
-        // Using relativePath as filename helps your backend preserve folder structure.
-        formData.append('files', sf.file, sf.relativePath)
-      }
-
-      const res = await uploadFiles(formData, (pct, uploaded, total, speed) => {
-        setUploadProgress(pct)
-        if (uploaded !== undefined) setBytesUploaded(uploaded)
-        if (total !== undefined) setTotalBytes(total)
-        if (speed !== undefined) setUploadSpeed(speed)
+      const res = await uploadFilesStreamed(selectedFiles, {
+        batchName: explorerPrefix,
+        ...(rootFolderName ? { folderName: rootFolderName } : {}),
+        onUploadProgress: ({
+          progressPercent,
+          bytesUploaded: uploaded,
+          totalBytes: total,
+          uploadSpeed: speed,
+          currentFileIndex,
+          totalFiles,
+          currentFilePath,
+        }) => {
+          setUploadProgress(progressPercent)
+          setBytesUploaded(uploaded)
+          setTotalBytes(total)
+          setUploadSpeed(speed)
+          setCurrentUploadFileIndex(currentFileIndex)
+          setCurrentUploadTotalFiles(totalFiles)
+          setCurrentUploadFilePath(currentFilePath)
+        }
       })
 
       const uploaded = res.uploaded ?? []
@@ -1012,13 +1303,22 @@ export default function UploadPage() {
     } catch (e: unknown) {
       const err = e as {
         message?: string
-        response?: { data?: { message?: string; error?: string } }
+        response?: { data?: { message?: string; error?: string }; status?: number }
       }
       const backendMsg = err.response?.data?.message ?? err.response?.data?.error
-      setError(`فشل الرفع: ${backendMsg ?? err.message ?? 'خطأ غير معروف'}`)
+
+      // Handle specific folder conflict error
+      if (err.response?.status === 409) {
+        setError('مجلد بهذا الاسم موجود بالفعل. يرجى استخدام اسم مختلف.')
+      } else {
+        setError(`فشل الرفع: ${backendMsg ?? err.message ?? 'خطأ غير معروف'}`)
+      }
     } finally {
       setUploading(false)
       setUploadSpeed(0)
+      setCurrentUploadFileIndex(0)
+      setCurrentUploadTotalFiles(0)
+      setCurrentUploadFilePath('')
       setHasTriggeredUpload(false) // Reset for next upload
       // Keep modal open for a moment to show success/error, then close
       setTimeout(() => {
@@ -1032,6 +1332,7 @@ export default function UploadPage() {
       return
     }
 
+    setDeletingFiles(prev => new Set(prev).add(key))
     try {
       await moveFileToTrash(key)
       setSuccess('تم نقل الملف إلى سلة المهملات بنجاح')
@@ -1039,6 +1340,12 @@ export default function UploadPage() {
     } catch (e: unknown) {
       const err = e as { message?: string; response?: { data?: { message?: string } } }
       setError(`فشل حذف الملف: ${err.response?.data?.message || err.message || 'خطأ غير معروف'}`)
+    } finally {
+      setDeletingFiles(prev => {
+        const next = new Set(prev)
+        next.delete(key)
+        return next
+      })
     }
   }
 
@@ -1089,6 +1396,348 @@ export default function UploadPage() {
     setPreviewFile(null)
   }
 
+  // Folder creation functions
+  async function handleCreateFolder() {
+    const trimmedName = newFolderName.trim()
+
+    // Client-side validation
+    if (!trimmedName) {
+      setError('يرجى إدخال اسم المجلد')
+      return
+    }
+
+    // Check for invalid characters
+    const invalidChars = /[<>:"/\\|?*]/
+    if (invalidChars.test(trimmedName)) {
+      setError('اسم المجلد يحتوي على أحرف غير صالحة: < > : " / \\ | ? *')
+      return
+    }
+
+    // Check for names that start or end with dots or spaces
+    if (trimmedName.startsWith('.') || trimmedName.startsWith(' ') ||
+      trimmedName.endsWith('.') || trimmedName.endsWith(' ')) {
+      setError('اسم المجلد لا يمكن أن يبدأ أو ينتهي بنقطة أو مسافة')
+      return
+    }
+
+    // Check for reserved names
+    const reservedNames = ['CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9', 'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9']
+    if (reservedNames.includes(trimmedName.toUpperCase())) {
+      setError('اسم المجلد محجوز. يرجى استخدام اسم مختلف.')
+      return
+    }
+
+    // Check length
+    if (trimmedName.length > 255) {
+      setError('اسم المجلد طويل جداً. الحد الأقصى هو 255 حرفًا.')
+      return
+    }
+
+    // Check for duplicate folder names in current location
+    const existingFolders = foldersHere.map(folder => {
+      const cleaned = folder.endsWith('/') ? folder.slice(0, -1) : folder
+      return cleaned.split('/').pop() || cleaned
+    })
+
+    if (existingFolders.includes(trimmedName)) {
+      setError('مجلد بهذا الاسم موجود بالفعل في هذا الموقع')
+      return
+    }
+
+    setCreatingFolder(true)
+    setError(null)
+
+    try {
+      const folderPath = currentPath ? `${currentPath}/${trimmedName}` : trimmedName
+      const token = localStorage.getItem('larthaa_auth_token')
+
+      const response = await fetch(`${API_ENV.apiBaseUrl?.trim()}/api/folders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : '',
+        },
+        body: JSON.stringify({
+          name: trimmedName,
+          path: folderPath,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        if (response.status === 409) {
+          setError('مجلد بهذا الاسم موجود بالفعل في هذا الموقع')
+        } else {
+          setError(data.message || 'فشل إنشاء المجلد')
+        }
+        return
+      }
+
+      setSuccess('تم إنشاء المجلد بنجاح')
+      setNewFolderName('')
+      setShowCreateFolderModal(false)
+      await fetchExplorer()
+    } catch (e: unknown) {
+      const err = e as { message?: string }
+      setError(`فشل إنشاء المجلد: ${err.message || 'خطأ غير معروف'}`)
+    } finally {
+      setCreatingFolder(false)
+    }
+  }
+
+  // Folder deletion function
+  async function handleDeleteFolder(folderPath: string) {
+    if (!confirm('هل أنت متأكد من أنك تريد حذف هذا المجلد وجميع محتوياته؟')) {
+      return
+    }
+
+    setError(null)
+    setDeletingFolders(prev => new Set(prev).add(folderPath))
+    try {
+      const token = localStorage.getItem('larthaa_auth_token')
+
+      const response = await fetch(`${API_ENV.apiBaseUrl?.trim()}/api/folders`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : '',
+        },
+        body: JSON.stringify({
+          path: folderPath,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to delete folder')
+      }
+
+      setSuccess('تم حذف المجلد بنجاح')
+      await fetchExplorer()
+    } catch (e: unknown) {
+      const err = e as { message?: string }
+      setError(`فشل حذف المجلد: ${err.message || 'خطأ غير معروف'}`)
+    } finally {
+      setDeletingFolders(prev => {
+        const next = new Set(prev)
+        next.delete(folderPath)
+        return next
+      })
+    }
+  }
+
+  // Team members functions
+  const fetchTeamMembers = useCallback(async () => {
+    setLoadingTeamMembers(true)
+    try {
+      const response = await api.get('/api/workspace/members')
+      setTeamMembers(response.data.members || [])
+    } catch (e: unknown) {
+      const err = e as { message?: string }
+      console.error('Failed to fetch team members:', err.message)
+    } finally {
+      setLoadingTeamMembers(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void fetchTeamMembers()
+  }, [fetchTeamMembers])
+
+  // Privacy control functions
+  function openPrivacyModal(fileKey: string, filename: string) {
+    setSelectedFileForPrivacy({ key: fileKey, filename })
+    const currentSettings = filePrivacySettings[fileKey]
+    setSelectedMembers(currentSettings?.allowedMembers || [])
+    setShowPrivacyModal(true)
+  }
+
+  async function savePrivacySettings() {
+    if (!selectedFileForPrivacy) return
+
+    try {
+      const token = localStorage.getItem('larthaa_auth_token')
+
+      const response = await fetch(`${API_ENV.apiBaseUrl?.trim()}/api/files/privacy`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : '',
+        },
+        body: JSON.stringify({
+          fileKey: selectedFileForPrivacy.key,
+          restricted: selectedMembers.length > 0,
+          allowedMembers: selectedMembers,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to save privacy settings')
+      }
+
+      setFilePrivacySettings(prev => ({
+        ...prev,
+        [selectedFileForPrivacy.key]: {
+          restricted: selectedMembers.length > 0,
+          allowedMembers: selectedMembers,
+        }
+      }))
+
+      setSuccess('تم حفظ إعدادات الخصوصية')
+      setShowPrivacyModal(false)
+      setSelectedFileForPrivacy(null)
+      setSelectedMembers([])
+    } catch (e: unknown) {
+      const err = e as { message?: string }
+      setError(`فشل حفظ الإعدادات: ${err.message || 'خطأ غير معروف'}`)
+    }
+  }
+
+  function toggleMemberSelection(memberId: string) {
+    setSelectedMembers(prev =>
+      prev.includes(memberId)
+        ? prev.filter(id => id !== memberId)
+        : [...prev, memberId]
+    )
+  }
+
+  function canAccessFile(fileKey: string): boolean {
+    const privacy = filePrivacySettings[fileKey]
+    if (!privacy?.restricted) return true
+    if (!privacy?.allowedMembers || privacy.allowedMembers.length === 0) return true
+
+    // For now, we'll assume the current user can access if they're the uploader
+    // In a real implementation, you'd check against the current user's ID
+    return true
+  }
+
+  // Helper functions for filtering and sorting
+  function getFileType(filename: string): 'image' | 'video' | 'document' | 'other' {
+    const ext = filename.split('.').pop()?.toLowerCase() || ''
+
+    const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico']
+    const videoExts = ['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv', 'webm', 'm4v']
+    const documentExts = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'rtf', 'odt', 'ods', 'odp']
+
+    if (imageExts.includes(ext)) return 'image'
+    if (videoExts.includes(ext)) return 'video'
+    if (documentExts.includes(ext)) return 'document'
+    return 'other'
+  }
+
+  function filterFiles(files: Array<{ key: string; size?: number; lastModified?: string; createdAt?: string; updatedAt?: string; thumbnailKey?: string | null }>) {
+    if (fileFilter === 'all') return files
+
+    return files.filter(file => {
+      const filename = file.key.split('/').pop() || ''
+      const fileType = getFileType(filename)
+
+      switch (fileFilter) {
+        case 'images':
+          return fileType === 'image'
+        case 'videos':
+          return fileType === 'video'
+        case 'documents':
+          return fileType === 'document'
+        default:
+          return true
+      }
+    })
+  }
+
+  function sortFiles(files: Array<{ key: string; size?: number; lastModified?: string; createdAt?: string; updatedAt?: string; thumbnailKey?: string | null }>) {
+    return [...files].sort((a, b) => {
+      const filenameA = a.key.split('/').pop() || ''
+      const filenameB = b.key.split('/').pop() || ''
+
+      let comparison = 0
+
+      switch (sortBy) {
+        case 'name':
+          comparison = filenameA.localeCompare(filenameB)
+          break
+        case 'size':
+          const sizeA = a.size || 0
+          const sizeB = b.size || 0
+          comparison = sizeA - sizeB
+          break
+        case 'date':
+          // Use actual creation dates from database, fallback to lastModified, then key
+          const dateA = getFileDate(a)
+          const dateB = getFileDate(b)
+
+          if (dateA && dateB) {
+            comparison = dateB.getTime() - dateA.getTime() // Newer first (descending)
+          } else if (dateA) {
+            comparison = -1 // a has date, b doesn't, so a comes first
+          } else if (dateB) {
+            comparison = 1 // b has date, a doesn't, so b comes first
+          } else {
+            // Fallback: reverse alphabetical order on key (often works for timestamped uploads)
+            comparison = b.key.localeCompare(a.key)
+          }
+          break
+        default:
+          comparison = 0
+      }
+
+      return sortOrder === 'asc' ? comparison : -comparison
+    })
+  }
+
+  // Helper function to get the most reliable date for a file
+  function getFileDate(file: { key: string; size?: number; lastModified?: string; createdAt?: string; updatedAt?: string }): Date | null {
+    // Prefer database creation date
+    if (file.createdAt) {
+      return new Date(file.createdAt)
+    }
+
+    // Then try database updated date
+    if (file.updatedAt) {
+      return new Date(file.updatedAt)
+    }
+
+    // Then try S3 last modified date
+    if (file.lastModified) {
+      return new Date(file.lastModified)
+    }
+
+    // Finally, try to extract timestamp from filename as fallback
+    return extractTimestampFromKey(file.key) ? new Date(extractTimestampFromKey(file.key)!) : null
+  }
+
+  // Helper function to extract timestamp from file key
+  function extractTimestampFromKey(key: string): number | null {
+    // Try to extract timestamp from common patterns
+    // Example: uploads/folder/1640995200000_filename.jpg or uploads/folder/2022-01-01_filename.jpg
+
+    const filename = key.split('/').pop() || ''
+
+    // Pattern 1: Unix timestamp at start (13 digits)
+    const unixTimestampMatch = filename.match(/^(\d{13})/)
+    if (unixTimestampMatch) {
+      return parseInt(unixTimestampMatch[1])
+    }
+
+    // Pattern 2: Date format YYYY-MM-DD or YYYY_MM_DD
+    const dateMatch = filename.match(/^(\d{4}[-_]\d{2}[-_]\d{2})/)
+    if (dateMatch) {
+      const dateStr = dateMatch[1].replace(/_/g, '-')
+      return new Date(dateStr).getTime()
+    }
+
+    // Pattern 3: Look for timestamp in the full path
+    const pathParts = key.split('/')
+    for (const part of pathParts) {
+      const pathTimestampMatch = part.match(/^(\d{13})/)
+      if (pathTimestampMatch) {
+        return parseInt(pathTimestampMatch[1])
+      }
+    }
+
+    return null
+  }
+
   const fetchExplorer = useCallback(async () => {
     setLoadingExplorer(true)
     try {
@@ -1111,6 +1760,7 @@ export default function UploadPage() {
     const unsubscribe = subscribeRealtime(
       (event) => {
         if (event.scope !== 'files') return
+        if (event.action === 'upload_progress') return
         void fetchExplorer()
         if (showTrash) {
           void fetchTrashFiles()
@@ -1132,16 +1782,9 @@ export default function UploadPage() {
     return `${base}/${safeKey}`
   }
 
-  function prefixToDisplayName(prefix: string) {
-    const p = String(prefix || '')
-    if (!p) return ROOT_PREFIX
-    const cleaned = p.endsWith('/') ? p.slice(0, -1) : p
-    return cleaned
-  }
-
   const breadcrumbs = useMemo(() => {
     const parts = currentPath.split('/').filter(Boolean)
-    const crumbs: Array<{ label: string; path: string }> = [{ label: ROOT_PREFIX, path: '' }]
+    const crumbs: Array<{ label: string; path: string }> = [{ label: 'uploads', path: '' }]
     const acc: string[] = []
     for (const seg of parts) {
       acc.push(seg)
@@ -1171,7 +1814,7 @@ export default function UploadPage() {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Button
               variant="text"
-              onClick={() => navigate('/tasks')}
+              onClick={() => navigate('/dashboard/tasks')}
               sx={{ color: 'inherit', borderRadius: 999, px: 2 }}
             >
               المهام
@@ -1202,89 +1845,90 @@ export default function UploadPage() {
         />
 
         <Box sx={{ mt: 2 }}>
-          <Box sx={{ display: 'flex', gap: 0, flexWrap: 'wrap', alignItems: 'center' }}>
-            <FolderIcon sx={{ fontSize: 20, color: 'primary.main' }} />
-            {breadcrumbs.map((c, idx) => (
-              <Box key={`${c.path}_${idx}`} sx={{ display: 'flex', alignItems: 'center', }}>
-                {idx > 0 && (
-                  <Typography variant="body2" sx={{ opacity: 0.5, }}>
-                    {">"}
-                  </Typography>
-                )}
-                <Button
-                  size="small"
-                  variant="text"
-                  onClick={() => setCurrentPath(c.path)}
-                  sx={{
-                    borderRadius: 999,
-                    fontSize: '0.875rem',
-                    fontWeight: c.path === currentPath ? 600 : 400,
-                    color: c.path === currentPath ? 'primary.main' : 'inherit',
-                    px: 1
-                  }}
-                >
-                  {c.label}
-                </Button>
-              </Box>
-            ))}
-            <Box sx={{ flex: '1 1 auto' }} />
-            <Typography variant="body2" sx={{ opacity: 0.7 }}>
-              وجهة الرفع: {prefixToDisplayName(explorerPrefix)}
-            </Typography>
-          </Box>
-        </Box>
+          <Box sx={{ mt: 2, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
 
-        <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
-          <Box sx={{ flex: '1 1 auto' }} />
-          <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-            <Tooltip title="عرض قائمة">
+            <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+              <Tooltip title="عرض قائمة">
+                <Button
+                  variant={viewMode === 'list' ? 'contained' : 'outlined'}
+                  onClick={() => setViewMode('list')}
+                  disabled={uploading || loadingExplorer}
+                  sx={{ borderRadius: 999, minWidth: 'auto', p: 1 }}
+                >
+                  <ViewListIcon />
+                </Button>
+              </Tooltip>
+              <Tooltip title="عرض شبكة">
+                <Button
+                  variant={viewMode === 'grid' ? 'contained' : 'outlined'}
+                  onClick={() => setViewMode('grid')}
+                  disabled={uploading || loadingExplorer}
+                  sx={{ borderRadius: 999, minWidth: 'auto', p: 1 }}
+                >
+                  <ViewModuleIcon />
+                </Button>
+              </Tooltip>
               <Button
-                variant={viewMode === 'list' ? 'contained' : 'outlined'}
-                onClick={() => setViewMode('list')}
-                disabled={uploading || loadingExplorer}
-                sx={{ borderRadius: 999, minWidth: 'auto', p: 1 }}
+                variant="outlined"
+                onClick={() => setShowTrash(!showTrash)}
+                disabled={uploading}
+                sx={{ borderRadius: 999 }}
               >
-                <ViewListIcon />
+                {showTrash ? 'الملفات' : 'سلة المهملات'}
               </Button>
-            </Tooltip>
-            <Tooltip title="عرض شبكة">
+
+            </Box>
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+              {/* Filter Dropdown */}
+              <FormControl size="small" sx={{ minWidth: 120 }}>
+                <InputLabel id="filter-label">تصفية</InputLabel>
+                <Select
+                  labelId="filter-label"
+                  value={fileFilter}
+                  onChange={(e) => setFileFilter(e.target.value as 'all' | 'images' | 'videos' | 'documents')}
+                  disabled={uploading || loadingExplorer}
+                  label="تصفية"
+                >
+                  <MenuItem value="all">الكل</MenuItem>
+                  <MenuItem value="images">الصور</MenuItem>
+                  <MenuItem value="videos">الفيديو</MenuItem>
+                  <MenuItem value="documents">المستندات</MenuItem>
+                </Select>
+              </FormControl>
+
+              {/* Sort Dropdown */}
+              <FormControl size="small" sx={{ minWidth: 120 }}>
+                <InputLabel id="sort-label">ترتيب</InputLabel>
+                <Select
+                  labelId="sort-label"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as 'name' | 'date' | 'size')}
+                  disabled={uploading || loadingExplorer}
+                  label="ترتيب"
+                >
+                  <MenuItem value="date">
+                    {sortBy === 'date' && sortOrder === 'asc' ? 'الأحدث' : 'التاريخ'}
+                  </MenuItem>
+                  <MenuItem value="name">الاسم</MenuItem>
+                  <MenuItem value="size">الحجم</MenuItem>
+                </Select>
+              </FormControl>
+
+
               <Button
-                variant={viewMode === 'grid' ? 'contained' : 'outlined'}
-                onClick={() => setViewMode('grid')}
+                variant="outlined"
+                onClick={() => setShowCreateFolderModal(true)}
                 disabled={uploading || loadingExplorer}
-                sx={{ borderRadius: 999, minWidth: 'auto', p: 1 }}
+                endIcon={<CreateNewFolderIcon />}
+                sx={{ borderRadius: 999, gap: 1, }}
               >
-                <ViewModuleIcon />
+                إنشاء مجلد
               </Button>
-            </Tooltip>
+            </Box>
           </Box>
-          <Button
-            variant="outlined"
-            onClick={() => {
-              void fetchExplorer()
-            }}
-            disabled={uploading || loadingExplorer}
-            startIcon={loadingExplorer ? <CircularProgress size={18} color="inherit" /> : <RefreshIcon />}
-            sx={{ borderRadius: 999 }}
-          >
-            {loadingExplorer ? 'جارٍ التحديث...' : 'تحديث المحتويات'}
-          </Button>
-          <Button
-            variant="outlined"
-            onClick={() => setShowTrash(!showTrash)}
-            disabled={uploading}
-            sx={{ borderRadius: 999 }}
-          >
-            {showTrash ? 'الملفات' : 'سلة المهملات'}
-          </Button>
-          <Button
-            variant="outlined"
-            onClick={() => navigate('/tasks')}
-            disabled={uploading}
-            sx={{ borderRadius: 999 }}
-          >
-            لوحة المهام
-          </Button>
+
+
+
         </Box>
 
         {success && (
@@ -1294,17 +1938,45 @@ export default function UploadPage() {
         )}
 
         <Box sx={{ mt: 3 }}>
-          <Typography variant="subtitle2" sx={{ mb: 1, opacity: 0.9 }}>
-            {showTrash ? 'سلة المهملات' : `داخل: ${prefixToDisplayName(explorerPrefix)}`}
-          </Typography>
+          <Box sx={{ display: 'flex', gap: 0, flexWrap: 'wrap', alignItems: 'center', mb: 2 }}>
+            <FolderIcon sx={{ fontSize: 20, color: 'primary.main' }} />
+            {breadcrumbs.map((c, idx) => (
+              <Box key={`${c.path}_${idx}`} sx={{ display: 'flex', alignItems: 'center' }}>
+                {idx > 0 && (
+                  <Typography variant="body2" sx={{ opacity: 0.5, }}>
+                    {">"}
+                  </Typography>
+                )}
+                <Button
+                  size="small"
+                  onClick={() => setCurrentPath(c.path)}
+                  sx={{
+                    borderRadius: 999,
+                    minWidth: 'auto',
+                    px: 1,
+                    py: 0.5,
+                    textTransform: 'none',
+                    fontWeight: c.path === currentPath ? 600 : 400,
+                    color: c.path === currentPath ? 'primary.main' : 'text.primary',
+                    bgcolor: c.path === currentPath ? 'primary.50' : 'transparent',
+                  }}
+                >
+                  {c.label}
+                </Button>
+              </Box>
+            ))}
+            <Box sx={{ flex: '1 1 auto' }} />
+
+          </Box>
 
           {showTrash ? (
-            loadingTrash ? (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <CircularProgress size={20} />
-                <Typography variant="body2" sx={{ opacity: 0.7 }}>
-                  جارٍ تحميل سلة المهملات...
-                </Typography>
+            loadingTrash && trashFiles.length === 0 ? (
+              <Box sx={{ maxHeight: 500, overflow: 'auto' }}>
+                <FileItemSkeleton />
+                <FileItemSkeleton />
+                <FileItemSkeleton />
+                <FileItemSkeleton />
+                <FileItemSkeleton />
               </Box>
             ) : trashFiles.length === 0 ? (
               <Typography variant="body2" sx={{ opacity: 0.7 }}>
@@ -1323,16 +1995,75 @@ export default function UploadPage() {
             )
           ) : (
             <>
-              {loadingExplorer ? (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <CircularProgress size={20} />
-                  <Typography variant="body2" sx={{ opacity: 0.7 }}>
-                    جارٍ التحميل...
-                  </Typography>
-                </Box>
+              {loadingExplorer && filesHere.length === 0 ? (
+                <>
+                  {/* Skeleton for folders */}
+                  <Box sx={{ mb: 2 }}>
+                    <Typography variant="body2" sx={{ opacity: 0.75, mb: 1, fontWeight: 600 }}>
+                      المجلدات
+                    </Typography>
+                    {viewMode === 'list' ? (
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                        <FolderItemSkeleton />
+                        <FolderItemSkeleton />
+                      </Box>
+                    ) : (
+                      <Box sx={{
+                        display: 'grid',
+                        gridTemplateColumns: {
+                          xs: 'repeat(2, 1fr)',
+                          sm: 'repeat(3, 1fr)',
+                          md: 'repeat(4, 1fr)',
+                          lg: 'repeat(5, 1fr)'
+                        },
+                        gap: 2
+                      }}>
+                        <FolderItemGridSkeleton />
+                        <FolderItemGridSkeleton />
+                        <FolderItemGridSkeleton />
+                      </Box>
+                    )}
+                  </Box>
+                  {/* Skeleton for files */}
+                  <Box>
+                    <Typography variant="body2" sx={{ opacity: 0.75, mb: 1, fontWeight: 600 }}>
+                      الملفات
+                    </Typography>
+                    {viewMode === 'list' ? (
+                      <Box sx={{ maxHeight: 500, overflow: 'auto' }}>
+                        <FileItemSkeleton />
+                        <FileItemSkeleton />
+                        <FileItemSkeleton />
+                        <FileItemSkeleton />
+                        <FileItemSkeleton />
+                        <FileItemSkeleton />
+                      </Box>
+                    ) : (
+                      <Box sx={{ maxHeight: 500, overflow: 'auto' }}>
+                        <Box sx={{
+                          display: 'grid',
+                          gridTemplateColumns: {
+                            xs: 'repeat(2, 1fr)',
+                            sm: 'repeat(3, 1fr)',
+                            md: 'repeat(4, 1fr)',
+                            lg: 'repeat(5, 1fr)'
+                          },
+                          gap: 2
+                        }}>
+                          <FileItemGridSkeleton />
+                          <FileItemGridSkeleton />
+                          <FileItemGridSkeleton />
+                          <FileItemGridSkeleton />
+                          <FileItemGridSkeleton />
+                          <FileItemGridSkeleton />
+                        </Box>
+                      </Box>
+                    )}
+                  </Box>
+                </>
               ) : (
                 <>
-                  {foldersHere.length === 0 && filesHere.length === 0 ? (
+                  {foldersHere.length === 0 && filteredAndSortedFiles.length === 0 ? (
                     <Typography variant="body2" sx={{ opacity: 0.7 }}>
                       لا يوجد شيء هنا (0).
                     </Typography>
@@ -1347,16 +2078,15 @@ export default function UploadPage() {
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
                               {foldersHere.map((p) => {
                                 const cleaned = p.endsWith('/') ? p.slice(0, -1) : p
-                                const rel = cleaned.startsWith(`${ROOT_PREFIX}/`)
-                                  ? cleaned.slice(`${ROOT_PREFIX}/`.length)
-                                  : cleaned === ROOT_PREFIX
-                                    ? ''
-                                    : cleaned
+                                // The server returns relative folder names (e.g., "subfolder/"), so we need to construct the full path
+                                const fullPath = currentPath ? `${currentPath}/${cleaned}` : cleaned
                                 return (
                                   <FolderItem
                                     key={p}
-                                    folderPath={rel}
-                                    onClick={() => setCurrentPath(rel)}
+                                    folderPath={fullPath}
+                                    onClick={() => setCurrentPath(fullPath)}
+                                    onDelete={handleDeleteFolder}
+                                    isDeleting={deletingFolders.has(fullPath)}
                                   />
                                 )
                               })}
@@ -1374,16 +2104,15 @@ export default function UploadPage() {
                             }}>
                               {foldersHere.map((p) => {
                                 const cleaned = p.endsWith('/') ? p.slice(0, -1) : p
-                                const rel = cleaned.startsWith(`${ROOT_PREFIX}/`)
-                                  ? cleaned.slice(`${ROOT_PREFIX}/`.length)
-                                  : cleaned === ROOT_PREFIX
-                                    ? ''
-                                    : cleaned
+                                // The server returns relative folder names (e.g., "subfolder/"), so we need to construct the full path
+                                const fullPath = currentPath ? `${currentPath}/${cleaned}` : cleaned
                                 return (
                                   <FolderItemGrid
                                     key={p}
-                                    folderPath={rel}
-                                    onClick={() => setCurrentPath(rel)}
+                                    folderPath={fullPath}
+                                    onClick={() => setCurrentPath(fullPath)}
+                                    onDelete={handleDeleteFolder}
+                                    isDeleting={deletingFolders.has(fullPath)}
                                   />
                                 )
                               })}
@@ -1392,29 +2121,35 @@ export default function UploadPage() {
                         </Box>
                       )}
 
-                      {filesHere.length > 0 && (
+                      {filteredAndSortedFiles.length > 0 && (
                         <Box>
                           <Typography variant="body2" sx={{ opacity: 0.75, mb: 1, fontWeight: 600 }}>
-                            الملفات ({filesHere.length})
+                            الملفات ({filteredAndSortedFiles.length})
                           </Typography>
                           {viewMode === 'list' ? (
                             <Box sx={{ maxHeight: 500, overflow: 'auto' }}>
-                              {filesHere.slice(0, 200).map((obj) => {
+                              {filteredAndSortedFiles.slice(0, 200).map((obj) => {
                                 const url = keyToPublicUrl(obj.key)
+                                const thumbnailUrl = obj.thumbnailKey ? keyToPublicUrl(obj.thumbnailKey) : ''
                                 return (
                                   <FileItem
                                     key={obj.key}
                                     obj={obj}
                                     url={url}
+                                    thumbnailUrl={thumbnailUrl}
                                     onDelete={handleDelete}
                                     onPreview={handlePreview}
+                                    onPrivacyToggle={openPrivacyModal}
+                                    filePrivacySettings={filePrivacySettings}
+                                    canAccessFile={canAccessFile}
+                                    isDeleting={deletingFiles.has(obj.key)}
                                   />
                                 )
                               })}
-                              {filesHere.length > 200 && (
+                              {filteredAndSortedFiles.length > 200 && (
                                 <Box sx={{ p: 2, textAlign: 'center' }}>
                                   <Typography variant="body2" sx={{ opacity: 0.7 }}>
-                                    + {filesHere.length - 200} المزيد من الملفات...
+                                    + {filteredAndSortedFiles.length - 200} المزيد من الملفات...
                                   </Typography>
                                 </Box>
                               )}
@@ -1431,23 +2166,29 @@ export default function UploadPage() {
                                 },
                                 gap: 2
                               }}>
-                                {filesHere.slice(0, 200).map((obj) => {
+                                {filteredAndSortedFiles.slice(0, 200).map((obj) => {
                                   const url = keyToPublicUrl(obj.key)
+                                  const thumbnailUrl = obj.thumbnailKey ? keyToPublicUrl(obj.thumbnailKey) : ''
                                   return (
                                     <FileItemGrid
                                       key={obj.key}
                                       obj={obj}
                                       url={url}
+                                      thumbnailUrl={thumbnailUrl}
                                       onDelete={handleDelete}
                                       onPreview={handlePreview}
+                                      onPrivacyToggle={openPrivacyModal}
+                                      filePrivacySettings={filePrivacySettings}
+                                      canAccessFile={canAccessFile}
+                                      isDeleting={deletingFiles.has(obj.key)}
                                     />
                                   )
                                 })}
                               </Box>
-                              {filesHere.length > 200 && (
+                              {filteredAndSortedFiles.length > 200 && (
                                 <Box sx={{ p: 2, textAlign: 'center' }}>
                                   <Typography variant="body2" sx={{ opacity: 0.7 }}>
-                                    + {filesHere.length - 200} المزيد من الملفات...
+                                    + {filteredAndSortedFiles.length - 200} المزيد من الملفات...
                                   </Typography>
                                 </Box>
                               )}
@@ -1521,9 +2262,15 @@ export default function UploadPage() {
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
                 <CircularProgress size={20} />
                 <Typography variant="body2" sx={{ opacity: 0.75 }}>
-                  جاري رفع {selectedFiles.length} ملفات...
+                  جاري رفع الملف {currentUploadFileIndex || 1} من {currentUploadTotalFiles || selectedFiles.length}...
                 </Typography>
               </Box>
+            )}
+
+            {uploading && currentUploadFilePath && (
+              <Typography variant="caption" sx={{ display: 'block', mt: 1, opacity: 0.65, wordBreak: 'break-word' }}>
+                {currentUploadFilePath}
+              </Typography>
             )}
 
             {success && !uploading && (
@@ -1539,6 +2286,126 @@ export default function UploadPage() {
             )}
           </Box>
         </DialogContent>
+      </Dialog>
+
+      {/* Create Folder Modal */}
+      <Dialog
+        open={showCreateFolderModal}
+        onClose={() => setShowCreateFolderModal(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            backgroundColor: 'background.default',
+            backgroundImage: 'none',
+          }
+        }}
+      >
+        <DialogTitle>إنشاء مجلد جديد</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="اسم المجلد"
+            fullWidth
+            variant="outlined"
+            value={newFolderName}
+            onChange={(e) => setNewFolderName(e.target.value)}
+            disabled={creatingFolder}
+            error={!!error && error.includes('اسم المجلد')}
+            helperText={error && error.includes('اسم المجلد') ? error : 'أدخل اسمًا فريدًا للمجلد (الأحرف المسموحة: أ-ب، 0-9، _، -)'}
+            inputProps={{
+              maxLength: 255,
+              style: { direction: 'ltr' }
+            }}
+            sx={{
+              '& .MuiInputBase-input': {
+                direction: 'ltr !important',
+                textAlign: 'left !important'
+              }
+            }}
+          />
+          {error && !error.includes('اسم المجلد') && (
+            <Alert severity="error" sx={{ mt: 1 }}>
+              {error}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowCreateFolderModal(false)} disabled={creatingFolder}>
+            إلغاء
+          </Button>
+          <Button
+            onClick={handleCreateFolder}
+            disabled={creatingFolder || !newFolderName.trim()}
+            variant="contained"
+          >
+            {creatingFolder ? 'جارٍ الإنشاء...' : 'إنشاء'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Privacy Settings Modal */}
+      <Dialog
+        open={showPrivacyModal}
+        onClose={() => setShowPrivacyModal(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            backgroundColor: 'background.default',
+            backgroundImage: 'none',
+          }
+        }}
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <LockIcon />
+            <Typography>إعدادات الخصوصية: {selectedFileForPrivacy?.filename}</Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 2, opacity: 0.8 }}>
+            اختر أعضاء الفريق المسموح لهم الوصول إلى هذا الملف. إذا لم يتم تحديد أي عضو، سيكون الملف متاحًا للجميع.
+          </Typography>
+
+          {loadingTeamMembers ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 2 }}>
+              <CircularProgress size={20} />
+              <Typography variant="body2" sx={{ opacity: 0.7 }}>
+                جارٍ تحميل أعضاء الفريق...
+              </Typography>
+            </Box>
+          ) : (
+            <List sx={{ maxHeight: 300, overflow: 'auto' }}>
+              {teamMembers.map((member) => (
+                <ListItem key={member.id}>
+                  <ListItemIcon>
+                    <Checkbox
+                      checked={selectedMembers.includes(member.id)}
+                      onChange={() => toggleMemberSelection(member.id)}
+                    />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={member.user?.name || member.name || member.email}
+                    secondary={member.email}
+                  />
+                </ListItem>
+              ))}
+            </List>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowPrivacyModal(false)}>
+            إلغاء
+          </Button>
+          <Button
+            onClick={savePrivacySettings}
+            variant="contained"
+          >
+            حفظ الإعدادات
+          </Button>
+        </DialogActions>
       </Dialog>
     </Box>
   )

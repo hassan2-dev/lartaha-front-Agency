@@ -6,6 +6,8 @@ export interface RealtimeEvent {
   scope: RealtimeScope
   action: string
   id?: string
+  targetUserId?: string
+  data?: Record<string, unknown>
   timestamp: string
 }
 

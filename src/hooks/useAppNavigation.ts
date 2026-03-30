@@ -8,14 +8,14 @@ export function useAppNavigation() {
 
   const goToLogin = () => navigate('/login')
   const goToRegister = () => navigate('/register')
-  const goToDashboard = () => navigate('/app/dashboard')
-  const goToTasks = () => navigate('/app/tasks')
-  const goToUpload = () => navigate('/app/upload')
-  const goToChat = () => navigate('/app/chat')
-  const goToTeams = () => user?.isAdmin ? navigate('/app/teams') : goToDashboard()
-  const goToActivity = () => navigate('/app/activity')
-  const goToSettings = () => navigate('/app/settings')
-  const goToProfile = () => navigate('/app/profile')
+  const goToDashboard = () => navigate('/dashboard')
+  const goToTasks = () => navigate('/dashboard/tasks')
+  const goToUpload = () => navigate('/dashboard/upload')
+  const goToChat = () => navigate('/dashboard/chat')
+  const goToTeams = () => user?.isAdmin ? navigate('/dashboard/teams') : goToDashboard()
+  const goToActivity = () => navigate('/dashboard/activity')
+  const goToSettings = () => navigate('/dashboard/settings')
+  const goToProfile = () => navigate('/dashboard/profile')
   const goHome = () => navigate('/')
 
   const isActiveRoute = (path: string) => {
@@ -23,7 +23,7 @@ export function useAppNavigation() {
   }
 
   const isAppRoute = () => {
-    return location.pathname.startsWith('/app/')
+    return location.pathname.startsWith('/dashboard')
   }
 
   return {
@@ -39,7 +39,7 @@ export function useAppNavigation() {
     goToActivity,
     goToSettings,
     goToProfile,
-    
+
     // Route helpers
     isActiveRoute,
     isAppRoute,

@@ -26,6 +26,7 @@ import {
   GroupAdd as GroupAddIcon,
 } from '@mui/icons-material'
 import { fetchActivities, type Activity } from '../api/activitiesApi'
+import { ActivityItemSkeleton, PageHeaderSkeleton } from '../components/SkeletonLoaders'
 
 function getActivityIcon(action: string) {
   switch (action) {
@@ -184,9 +185,18 @@ export default function ActivityPage() {
       )}
 
       {loading && activities.length === 0 ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-          <CircularProgress />
-        </Box>
+        <>
+          <PageHeaderSkeleton />
+          <Card>
+            <CardContent sx={{ p: 0 }}>
+              <ActivityItemSkeleton />
+              <ActivityItemSkeleton />
+              <ActivityItemSkeleton />
+              <ActivityItemSkeleton />
+              <ActivityItemSkeleton />
+            </CardContent>
+          </Card>
+        </>
       ) : (
         <Card>
           <CardContent sx={{ p: 0 }}>

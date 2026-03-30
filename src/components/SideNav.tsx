@@ -36,13 +36,13 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { text: 'الرئيسية', icon: <HomeIcon />, path: '/app/dashboard' },
-  { text: 'رفع الملفات', icon: <UploadIcon />, path: '/app/upload' },
-  { text: 'المهام', icon: <TaskIcon />, path: '/app/tasks' },
-  { text: 'الدردشة', icon: <ChatIcon />, path: '/app/chat' },
-  { text: 'الفرق', icon: <TeamsIcon />, path: '/app/teams' },
-  { text: 'الأنشطة', icon: <ActivityIcon />, path: '/app/activity' },
-  { text: 'الإعدادات', icon: <SettingsIcon />, path: '/app/settings' },
+  { text: 'الرئيسية', icon: <HomeIcon />, path: '/dashboard' },
+  { text: 'رفع الملفات', icon: <UploadIcon />, path: '/dashboard/upload' },
+  { text: 'المهام', icon: <TaskIcon />, path: '/dashboard/tasks' },
+  { text: 'الدردشة', icon: <ChatIcon />, path: '/dashboard/chat' },
+  { text: 'الفرق', icon: <TeamsIcon />, path: '/dashboard/teams' },
+  { text: 'الأنشطة', icon: <ActivityIcon />, path: '/dashboard/activity' },
+  { text: 'الإعدادات', icon: <SettingsIcon />, path: '/dashboard/settings' },
 ]
 
 interface SideNavProps {
@@ -61,7 +61,7 @@ export default function SideNav({ children, title = 'larthaa Agency' }: SideNavP
   // Filter navigation items based on user role
   const filteredNavItems = navItems.filter(item => {
     // Only show teams page for admins
-    if (item.path === '/teams') {
+    if (item.path === '/dashboard/teams') {
       return user?.isAdmin === true
     }
     return true
@@ -104,6 +104,7 @@ export default function SideNav({ children, title = 'larthaa Agency' }: SideNavP
               sx={{
                 mx: 1,
                 borderRadius: 2,
+
                 '&.Mui-selected': {
                   backgroundColor: 'primary.main',
                   color: 'primary.contrastText',

@@ -17,6 +17,7 @@ import {
   alpha,
   CardContent,
   IconButton,
+  Fade,
 } from '@mui/material'
 import {
   Business,
@@ -27,6 +28,8 @@ import {
   ArrowBack as ArrowForward,
   CloudUpload,
   Delete,
+  Visibility,
+  VisibilityOff,
 } from '@mui/icons-material'
 import { api } from '../api/http'
 import { useAuth } from '../contexts/AuthContext'
@@ -66,6 +69,9 @@ export default function SignUpPage() {
     logo: '',
     logoFile: null,
   })
+
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   const steps = ['إنشاء حساب المدير', 'إعداد مساحة العمل', 'دعوة أعضاء الفريق']
 
@@ -162,7 +168,7 @@ export default function SignUpPage() {
   }
 
   const handleFinish = () => {
-    navigate('/teams')
+    navigate('/dashboard/teams')
   }
 
   const handleAdminChange = (field: keyof AdminData) => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -254,12 +260,19 @@ export default function SignUpPage() {
                   fullWidth
                   name="password"
                   label="كلمة المرور"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   id="password"
                   autoComplete="new-password"
                   value={adminData.password}
                   onChange={handleAdminChange('password')}
                   variant="outlined"
+                  InputProps={{
+                    endAdornment: (
+                      <IconButton onClick={() => setShowPassword(!showPassword)}>
+                        {showPassword ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
+                    ),
+                  }}
                 />
               </Grid>
               <Grid size={{ xs: 12, md: 6 }}>
@@ -268,11 +281,18 @@ export default function SignUpPage() {
                   fullWidth
                   name="confirmPassword"
                   label="تأكيد كلمة المرور"
-                  type="password"
+                  type={showConfirmPassword ? 'text' : 'password'}
                   id="confirmPassword"
                   value={adminData.confirmPassword}
                   onChange={handleAdminChange('confirmPassword')}
                   variant="outlined"
+                  InputProps={{
+                    endAdornment: (
+                      <IconButton onClick={() => setShowConfirmPassword(!showConfirmPassword)}>
+                        {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
+                    ),
+                  }}
                 />
               </Grid>
             </Grid>
@@ -532,66 +552,100 @@ export default function SignUpPage() {
       }}
     >
       <Container maxWidth="md">
-        <Paper
-          elevation={8}
-          sx={{
-            borderRadius: 3,
-            overflow: 'hidden',
-          }}
-        >
-          <Box
+        <Fade in timeout={600}>
+          <Paper
+            elevation={8}
             sx={{
-              p: 4,
-              background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
-              textAlign: 'center',
-              color: 'white',
+              borderRadius: 4,
+              overflow: 'hidden',
+              transition: 'transform 0.3s ease-in-out',
+              '&:hover': {
+                transform: 'translateY(-4px)',
+              }
             }}
           >
-            <Typography component="h1" variant="h3" gutterBottom fontWeight="bold">
-              إنشاء مساحة العمل الخاصة بك
-            </Typography>
-            <Typography variant="body1" sx={{ opacity: 0.9 }}>
-              ابدأ رحلتك معنا من خلال إنشاء حساب مدير وإعداد مساحة العمل الخاصة بك
-            </Typography>
-          </Box>
-
-          <CardContent sx={{ p: 4 }}>
-            {error && (
-              <Alert severity="error" sx={{ mb: 4, borderRadius: 2 }}>
-                {error}
-              </Alert>
-            )}
-
-            <Stepper
-              activeStep={activeStep}
-              alternativeLabel
+            <Box
               sx={{
-                mb: 6,
-                direction: 'rtl',
-                '& .MuiStepLabel-root .Mui-active': {
-                  color: 'primary.main',
-                },
-                '& .MuiStepLabel-root .Mui-completed': {
-                  color: 'success.main',
-                },
-                '& .MuiStepConnector-root': {
-                  direction: 'rtl',
-                },
-                '& .MuiStepConnector-line': {
-                  direction: 'rtl',
-                },
+                p: 6,
+                background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+                textAlign: 'center',
+                color: 'white',
+                position: 'relative',
+                '&::before': {
+                  content: '""',
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: 'radial-gradient(circle at top right, rgba(255,255,255,0.1) 0%, transparent 70%)',
+                }
               }}
             >
-              {steps.map((label) => (
-                <Step key={label}>
-                  <StepLabel>{label}</StepLabel>
-                </Step>
-              ))}
-            </Stepper>
+              <Avatar
+                sx={{
+                  width: 80,
+                  height: 80,
+                  mx: 'auto',
+                  mb: 3,
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  backdropFilter: 'blur(10px)',
+                  border: '2px solid rgba(255, 255, 255, 0.3)',
+                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+                }}
+              >
+                <Business sx={{ fontSize: 40 }} />
+              </Avatar>
+              <Typography component="h1" variant="h3" gutterBottom fontWeight="bold" sx={{ position: 'relative', zIndex: 1 }}>
+                إنشاء مساحة العمل الخاصة بك
+              </Typography>
+              <Typography variant="body1" sx={{ opacity: 0.9, position: 'relative', zIndex: 1 }}>
+                ابدأ رحلتك معنا من خلال إنشاء حساب مدير وإعداد مساحة العمل الخاصة بك
+              </Typography>
+            </Box>
 
-            {renderStepContent(activeStep)}
-          </CardContent>
-        </Paper>
+            <CardContent sx={{ p: 6 }}>
+              <Fade in timeout={800}>
+                <Box>
+                  {error && (
+                    <Alert severity="error" sx={{ mb: 4, borderRadius: 3, animation: 'shake 0.5s ease-in-out' }}>
+                      {error}
+                    </Alert>
+                  )}
+
+                  <Stepper
+                    activeStep={activeStep}
+                    alternativeLabel
+                    sx={{
+                      mb: 8,
+                      direction: 'rtl',
+                      '& .MuiStepLabel-root .Mui-active': {
+                        color: 'primary.main',
+                      },
+                      '& .MuiStepLabel-root .Mui-completed': {
+                        color: 'success.main',
+                      },
+                      '& .MuiStepConnector-root': {
+                        direction: 'rtl',
+                      },
+                      '& .MuiStepConnector-line': {
+                        direction: 'rtl',
+                      },
+                    }}
+                  >
+                    {steps.map((label) => (
+                      <Step key={label}>
+                        <StepLabel>{label}</StepLabel>
+                      </Step>
+                    ))}
+                  </Stepper>
+
+                  {renderStepContent(activeStep)}
+                </Box>
+              </Fade>
+            </CardContent>
+          </Paper>
+        </Fade>
       </Container>
     </Box>
   )

@@ -5,7 +5,6 @@ import {
   Box,
   Button,
   Chip,
-  CircularProgress,
   Container,
   Dialog,
   DialogActions,
@@ -48,6 +47,7 @@ import { uploadFiles } from '../api/uploadApi'
 import { API_ENV } from '../config/api'
 import { subscribeRealtime } from '../api/realtimeApi'
 import LiveKitMeetingDialog from '../components/chat/LiveKitMeetingDialog'
+import { ConversationItemSkeleton, MessageSkeleton } from '../components/SkeletonLoaders'
 
 const EMOJIS = ['😀', '😂', '😍', '😎', '🤝', '🔥', '🚀', '🎯', '✅', '💡', '🙏', '🎉']
 const URL_REGEX = /(https?:\/\/[^\s]+)/g
@@ -511,9 +511,13 @@ export default function ChatPage() {
             الأعضاء
           </Typography>
 
-          {loadingConversations ? (
-            <Box sx={{ py: 2, display: 'flex', justifyContent: 'center' }}>
-              <CircularProgress size={22} />
+          {loadingConversations && memberList.length === 0 ? (
+            <Box sx={{ py: 2 }}>
+              <ConversationItemSkeleton />
+              <ConversationItemSkeleton />
+              <ConversationItemSkeleton />
+              <ConversationItemSkeleton />
+              <ConversationItemSkeleton />
             </Box>
           ) : memberList.length === 0 ? (
             <Typography variant="body2" sx={{ opacity: 0.7 }}>
@@ -605,9 +609,13 @@ export default function ChatPage() {
                   gap: 1.5,
                 }}
               >
-                {loadingMessages ? (
-                  <Box sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
-                    <CircularProgress size={24} />
+                {loadingMessages && messages.length === 0 ? (
+                  <Box sx={{ py: 4, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                    <MessageSkeleton isMine={false} />
+                    <MessageSkeleton isMine={true} />
+                    <MessageSkeleton isMine={false} />
+                    <MessageSkeleton isMine={true} />
+                    <MessageSkeleton isMine={false} />
                   </Box>
                 ) : messages.length === 0 ? (
                   <Typography variant="body2" sx={{ opacity: 0.7 }}>

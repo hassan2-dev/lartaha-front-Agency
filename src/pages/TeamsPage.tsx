@@ -20,6 +20,7 @@ import {
   Alert,
 } from '@mui/material'
 import { api } from '../api/http'
+import { TeamMemberSkeleton } from '../components/SkeletonLoaders'
 
 interface WorkspaceMember {
   id: string
@@ -42,7 +43,7 @@ interface WorkspaceMember {
 
 export default function TeamsPage() {
   const [teams, setTeams] = useState<WorkspaceMember[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
@@ -53,10 +54,13 @@ export default function TeamsPage() {
 
   const fetchTeams = async () => {
     try {
+      setLoading(true)
       const response = await api.get('/api/workspace/members')
       setTeams(response.data.members || [])
     } catch (err) {
       setError('فشل في جلب أعضاء مساحة العمل')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -99,7 +103,14 @@ export default function TeamsPage() {
 
       <Box>
         <Typography variant="h6" mb={2}>جميع الأعضاء</Typography>
-        {teams.length === 0 ? (
+        {loading && teams.length === 0 ? (
+          <>
+            <TeamMemberSkeleton />
+            <TeamMemberSkeleton />
+            <TeamMemberSkeleton />
+            <TeamMemberSkeleton />
+          </>
+        ) : teams.length === 0 ? (
           <Box
             display="flex"
             flexDirection="column"

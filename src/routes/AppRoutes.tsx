@@ -26,17 +26,14 @@ export default function AppRoutes() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/invite/:token?" element={<RegisterPage />} />
 
-      {/* Redirect old signup route to maintain compatibility */}
-      <Route path="/signup" element={<Navigate to="/register" replace />} />
-
       {/* Authenticated Routes */}
       <Route
-        path="/app/*"
+        path="/dashboard/*"
         element={
           <ProtectedRoute>
             <SideNav>
               <Routes>
-                <Route path="dashboard" element={<HomePage />} />
+                <Route path="" element={<HomePage />} />
                 <Route path="upload" element={<UploadPage />} />
                 <Route path="tasks" element={<TasksPage />} />
                 <Route path="chat" element={<ChatPage />} />
@@ -45,8 +42,8 @@ export default function AppRoutes() {
                 <Route path="settings" element={<SettingsPage />} />
                 <Route path="profile" element={<ProfilePage />} />
 
-                {/* Default redirect for /app */}
-                <Route path="" element={<Navigate to="/app/dashboard" replace />} />
+                {/* Backward-compatibility redirect for old nested path */}
+                <Route path="dashboard" element={<Navigate to="/dashboard" replace />} />
                 <Route path="*" element={<NotFoundPage />} />
               </Routes>
             </SideNav>
