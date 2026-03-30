@@ -65,6 +65,10 @@ export default function EnhancedTaskCard({
     if ((e.target as HTMLElement).closest('button, input, a, [role="button"]')) {
       return
     }
+    // Prevent click during drag operations
+    if (e.defaultPrevented) {
+      return
+    }
     onTaskClick?.(task)
   }
 
@@ -142,7 +146,15 @@ export default function EnhancedTaskCard({
             {task.assignees.map((assignment) => (
               <Chip
                 key={assignment.user.id}
-                avatar={<Avatar src={assignment.user.avatar} sx={{ width: 20, height: 20 }} />}
+                avatar={
+                  assignment.user.avatar ? (
+                    <Avatar src={assignment.user.avatar} sx={{ width: 20, height: 20 }} />
+                  ) : (
+                    <Avatar sx={{ width: 20, height: 20, fontSize: '0.7rem' }}>
+                      {assignment.user.name.charAt(0).toUpperCase()}
+                    </Avatar>
+                  )
+                }
                 label={assignment.user.name}
                 size="small"
                 variant="outlined"
@@ -266,7 +278,15 @@ export default function EnhancedTaskCard({
                         <Chip label={STATUS_LABEL[subtask.status]} size="small" variant="outlined" />
                         {subtask.assignees && subtask.assignees.length > 0 && (
                           <Chip
-                            avatar={<Avatar src={subtask.assignees[0].user.avatar} sx={{ width: 16, height: 16 }} />}
+                            avatar={
+                              subtask.assignees[0].user.avatar ? (
+                                <Avatar src={subtask.assignees[0].user.avatar} sx={{ width: 16, height: 16 }} />
+                              ) : (
+                                <Avatar sx={{ width: 16, height: 16, fontSize: '0.6rem' }}>
+                                  {subtask.assignees[0].user.name.charAt(0).toUpperCase()}
+                                </Avatar>
+                              )
+                            }
                             label={subtask.assignees[0].user.name}
                             size="small"
                             variant="outlined"

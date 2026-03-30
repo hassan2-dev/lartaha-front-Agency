@@ -353,3 +353,15 @@ export async function listTrashFiles(): Promise<ListTrashResult> {
   return res.data as ListTrashResult
 }
 
+export type BulkPrivacyResult = {
+  ok?: boolean
+  settings?: Record<string, { restricted: boolean; allowedMembers: string[]; canAccess: boolean }>
+}
+
+export async function fetchBulkPrivacySettings(fileKeys: string[]): Promise<BulkPrivacyResult> {
+  if (fileKeys.length === 0) {
+    return { ok: true, settings: {} }
+  }
+  const res = await api.post('/api/files/privacy/bulk', { fileKeys })
+  return res.data as BulkPrivacyResult
+}

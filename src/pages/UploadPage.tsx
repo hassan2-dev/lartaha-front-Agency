@@ -55,7 +55,7 @@ import UploadDropzone, { type SelectedUploadFile } from '../components/UploadDro
 import { useAuth } from '../contexts/AuthContext'
 import { useThemeMode } from '../contexts/ThemeContext'
 import { API_ENV } from '../config/api'
-import { listUploadedObjects, uploadFilesStreamed, moveFileToTrash, restoreFileFromTrash, listTrashFiles } from '../api/uploadApi'
+import { listUploadedObjects, uploadFilesStreamed, moveFileToTrash, restoreFileFromTrash, listTrashFiles, fetchBulkPrivacySettings } from '../api/uploadApi'
 import { subscribeRealtime } from '../api/realtimeApi'
 import { api } from '../api/http'
 import { FileItemSkeleton, FileItemGridSkeleton, FolderItemSkeleton, FolderItemGridSkeleton } from '../components/SkeletonLoaders'
@@ -292,7 +292,7 @@ function FileItem({
   onDelete: (key: string) => void
   onPreview: (key: string, url: string) => void
   onPrivacyToggle: (key: string, filename: string) => void
-  filePrivacySettings: Record<string, { restricted: boolean; allowedMembers: string[] }>
+  filePrivacySettings: Record<string, { restricted: boolean; allowedMembers: string[]; canAccess?: boolean }>
   canAccessFile: (key: string) => boolean
   isDeleting?: boolean
 }) {
@@ -464,7 +464,7 @@ function FileItemGrid({
   onDelete: (key: string) => void
   onPreview: (key: string, url: string) => void
   onPrivacyToggle: (key: string, filename: string) => void
-  filePrivacySettings: Record<string, { restricted: boolean; allowedMembers: string[] }>
+  filePrivacySettings: Record<string, { restricted: boolean; allowedMembers: string[]; canAccess?: boolean }>
   canAccessFile: (key: string) => boolean
   isDeleting?: boolean
 }) {
@@ -641,6 +641,25 @@ function TrashFileItem({
   const fileType = getFileType(filename)
   const deletedDate = file.deletedAt ? new Date(file.deletedAt).toLocaleDateString('ar-SA') : ''
   const permanentDeleteDate = file.permanentDeleteAt ? new Date(file.permanentDeleteAt).toLocaleDateString('ar-SA') : ''
+  const deletedBy = file.deletedBy
+  const isImage = fileType === 'image'
+  const isVideo = fileType === 'video'
+
+  // Build thumbnail URL for trashed files
+  const buildTrashThumbnailUrl = () => {
+    if (!file.originalKey) return null
+    const baseUrl = API_ENV.apiBaseUrl?.trim() || ''
+    if (isImage) {
+      return `${baseUrl}/api/image/${encodeURIComponent(file.originalKey)}`
+    }
+    if (isVideo) {
+      const videoThumbnailKey = buildVideoThumbnailKeyFromFileKey(file.originalKey)
+      return videoThumbnailKey ? `${baseUrl}/api/image/${encodeURIComponent(videoThumbnailKey)}` : null
+    }
+    return null
+  }
+
+  const thumbnailUrl = buildTrashThumbnailUrl()
 
   return (
     <ListItem
@@ -659,21 +678,42 @@ function TrashFileItem({
         },
       }}
     >
-      <Avatar
-        sx={{
-          width: 48,
-          height: 48,
-          backgroundColor: 'rgba(255,0,0,0.1)',
-          color: 'inherit',
-        }}
-      >
-        {getFileIcon(fileType)}
-      </Avatar>
+      {/* Thumbnail or icon */}
+      {isImage && thumbnailUrl ? (
+        <Box sx={{ position: 'relative' }}>
+          <ImageThumbnail url={thumbnailUrl} filename={filename} key={file.originalKey} />
+          <ThumbnailTypeBadge fileType={fileType} size={14} />
+        </Box>
+      ) : isVideo && thumbnailUrl ? (
+        <Box sx={{ position: 'relative' }}>
+          <VideoThumbnail url={thumbnailUrl} thumbnailKey={buildVideoThumbnailKeyFromFileKey(file.originalKey)} />
+          <ThumbnailTypeBadge fileType={fileType} size={14} />
+        </Box>
+      ) : (
+        <Avatar
+          sx={{
+            width: 48,
+            height: 48,
+            backgroundColor: 'rgba(255,0,0,0.1)',
+            color: 'inherit',
+          }}
+        >
+          {getFileIcon(fileType)}
+        </Avatar>
+      )}
 
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography variant="body2" sx={{ wordBreak: 'break-word', opacity: 0.92, fontWeight: 500 }}>
           {filename}
         </Typography>
+
+        {/* Deleted by information */}
+        {deletedBy && (
+          <Typography variant="caption" sx={{ opacity: 0.8, display: 'block', color: 'primary.main' }}>
+            حذف بواسطة: {deletedBy.name} {deletedBy.isAdmin ? '(مدير)' : '(عضو)'}
+          </Typography>
+        )}
+
         <Typography variant="caption" sx={{ opacity: 0.7 }}>
           تم الحذف: {deletedDate} | سيتم الحذف النهائي: {permanentDeleteDate}
         </Typography>
@@ -1158,7 +1198,7 @@ export default function UploadPage() {
   const [selectedMembers, setSelectedMembers] = useState<string[]>([])
   const [teamMembers, setTeamMembers] = useState<Array<{ id: string; email: string; name?: string; user?: { name: string; email: string } }>>([])
   const [loadingTeamMembers, setLoadingTeamMembers] = useState(false)
-  const [filePrivacySettings, setFilePrivacySettings] = useState<Record<string, { restricted: boolean; allowedMembers: string[] }>>({})
+  const [filePrivacySettings, setFilePrivacySettings] = useState<Record<string, { restricted: boolean; allowedMembers: string[]; canAccess?: boolean }>>({})
 
   // Deletion loading states
   const [deletingFiles, setDeletingFiles] = useState<Set<string>>(new Set())
@@ -1592,6 +1632,7 @@ export default function UploadPage() {
         [selectedFileForPrivacy.key]: {
           restricted: selectedMembers.length > 0,
           allowedMembers: selectedMembers,
+          canAccess: true,
         }
       }))
 
@@ -1615,12 +1656,8 @@ export default function UploadPage() {
 
   function canAccessFile(fileKey: string): boolean {
     const privacy = filePrivacySettings[fileKey]
-    if (!privacy?.restricted) return true
-    if (!privacy?.allowedMembers || privacy.allowedMembers.length === 0) return true
-
-    // For now, we'll assume the current user can access if they're the uploader
-    // In a real implementation, you'd check against the current user's ID
-    return true
+    if (!privacy) return true
+    return privacy.canAccess !== false
   }
 
   // Helper functions for filtering and sorting
@@ -1756,6 +1793,19 @@ export default function UploadPage() {
       const res = await listUploadedObjects(explorerPrefix, 1000, true)
       setFoldersHere(res.folders ?? [])
       setFilesHere(res.objects ?? [])
+
+      // Fetch privacy settings for all files
+      const fileKeys = (res.objects ?? []).map(obj => obj.key)
+      if (fileKeys.length > 0) {
+        try {
+          const privacyRes = await fetchBulkPrivacySettings(fileKeys)
+          if (privacyRes.settings) {
+            setFilePrivacySettings(privacyRes.settings)
+          }
+        } catch (privacyError) {
+          console.error('Failed to fetch privacy settings:', privacyError)
+        }
+      }
     } catch (e: unknown) {
       const err = e as { message?: string; response?: { data?: { message?: string } } }
       setError(err.response?.data?.message ?? err.message ?? 'فشل جلب الملفات')
