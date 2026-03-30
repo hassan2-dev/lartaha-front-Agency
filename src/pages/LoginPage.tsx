@@ -130,6 +130,120 @@ export default function LoginPage() {
                   </Alert>
                 )}
 
+                <Box sx={{ mb: 4 }}>
+                  <Typography variant="h6" sx={{ mb: 2, textAlign: 'center', fontWeight: 600, color: 'text.primary' }}>
+                    تسجيل دخول سريع
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
+                    <Button
+                      variant="contained"
+                      onClick={async () => {
+                        setLocalError(null)
+                        setIsLoading(true)
+                        try {
+                          localStorage.removeItem('token')
+                          await login({ username: 'employee@example.com', password: 'employee123' })
+                          navigate('/dashboard', { replace: true })
+                        } catch {
+                          setLocalError('فشل تسجيل الدخول كموظف.')
+                        } finally {
+                          setIsLoading(false)
+                        }
+                      }}
+                      disabled={isLoading}
+                      sx={{
+                        textTransform: 'none',
+                        borderRadius: 3,
+                        px: 4,
+                        py: 2,
+                        fontSize: '1.1rem',
+                        fontWeight: 600,
+                        width: '100%',
+                        maxWidth: '320px',
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        color: 'white',
+                        boxShadow: '0 6px 20px rgba(102, 126, 234, 0.35)',
+                        border: 'none',
+                        transition: 'all 0.3s ease',
+                        '&:hover': {
+                          transform: 'translateY(-2px)',
+                          boxShadow: '0 8px 28px rgba(102, 126, 234, 0.45)',
+                        },
+                        '&:active': {
+                          transform: 'translateY(0)',
+                        },
+                        '&:disabled': {
+                          background: 'rgba(0, 0, 0, 0.12)',
+                          color: 'rgba(0, 0, 0, 0.26)',
+                        }
+                      }}
+                    >
+                      🧑‍💼 الدخول كموظف
+                    </Button>
+                    <Button
+                      variant="contained"
+                      onClick={async () => {
+                        setLocalError(null)
+                        setIsLoading(true)
+                        try {
+                          localStorage.removeItem('token')
+                          await login({ username: 'admin@example.com', password: 'admin123' })
+                          navigate('/dashboard', { replace: true })
+                        } catch {
+                          setLocalError('فشل تسجيل الدخول كمدير.')
+                        } finally {
+                          setIsLoading(false)
+                        }
+                      }}
+                      disabled={isLoading}
+                      sx={{
+                        textTransform: 'none',
+                        borderRadius: 3,
+                        px: 4,
+                        py: 2,
+                        fontSize: '1.1rem',
+                        fontWeight: 600,
+                        width: '100%',
+                        maxWidth: '320px',
+                        background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                        color: 'white',
+                        boxShadow: '0 6px 20px rgba(240, 147, 251, 0.35)',
+                        border: 'none',
+                        transition: 'all 0.3s ease',
+                        '&:hover': {
+                          transform: 'translateY(-2px)',
+                          boxShadow: '0 8px 28px rgba(240, 147, 251, 0.45)',
+                        },
+                        '&:active': {
+                          transform: 'translateY(0)',
+                        },
+                        '&:disabled': {
+                          background: 'rgba(0, 0, 0, 0.12)',
+                          color: 'rgba(0, 0, 0, 0.26)',
+                        }
+                      }}
+                    >
+                      👔 الدخول كمدير
+                    </Button>
+                  </Box>
+                </Box>
+
+                <Box sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  my: 4,
+                  '&::before, &::after': {
+                    content: '""',
+                    flex: 1,
+                    borderBottom: '1px solid',
+                    borderColor: 'divider',
+                  }
+                }}>
+                  <Typography variant="body2" sx={{ px: 2, color: 'text.secondary', fontWeight: 500 }}>
+                    أو سجل الدخول بحسابك
+                  </Typography>
+                </Box>
+
                 <Box component="form" onSubmit={onSubmit} sx={{ '& .MuiTextField-root': { mb: 2 } }}>
                   <TextField
                     label="البريد الإلكتروني"
@@ -236,7 +350,7 @@ export default function LoginPage() {
                   </Button>
                 </Box>
 
-                <Box sx={{ textAlign: 'center', mb: 3 }}>
+                <Box sx={{ textAlign: 'center' }}>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                     جديد على منصتنا؟{' '}
                     <Button
@@ -256,98 +370,6 @@ export default function LoginPage() {
                       أنشئ مساحة العمل الخاصة بك
                     </Button>
                   </Typography>
-                </Box>
-
-                <Box sx={{ textAlign: 'center', mt: 4 }}>
-                  <Button
-                    variant="contained"
-                    onClick={async () => {
-                      setLocalError(null)
-                      setIsLoading(true)
-                      try {
-                        localStorage.removeItem('token')
-                        await login({ username: 'employee@example.com', password: 'employee123' })
-                        navigate('/dashboard', { replace: true })
-                      } catch {
-                        setLocalError('فشل تسجيل الدخول كموظف.')
-                      } finally {
-                        setIsLoading(false)
-                      }
-                    }}
-                    disabled={isLoading}
-                    sx={{
-                      textTransform: 'none',
-                      borderRadius: 3,
-                      px: 6,
-                      py: 3,
-                      fontSize: '1.2rem',
-                      fontWeight: 500,
-                      mb: 3,
-                      width: '100%',
-                      maxWidth: '280px',
-                      height: '60px',
-                      backgroundColor: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                      color: 'white',
-                      boxShadow: '0 8px 24px rgba(102, 126, 234, 0.3)',
-                      border: 'none',
-                      transition: 'all 0.3s ease',
-                      '&:hover': {
-                        transform: 'translateY(-2px)',
-                        boxShadow: '0 12px 32px rgba(102, 126, 234, 0.4)',
-                        backgroundColor: 'linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)',
-                      },
-                      '&:active': {
-                        transform: 'translateY(0)',
-                        boxShadow: '0 4px 16px rgba(102, 126, 234, 0.3)',
-                      }
-                    }}
-                  >
-                    الدخول كموظف
-                  </Button>
-                  <Button
-                    variant="contained"
-                    onClick={async () => {
-                      setLocalError(null)
-                      setIsLoading(true)
-                      try {
-                        localStorage.removeItem('token')
-                        await login({ username: 'admin@example.com', password: 'admin123' })
-                        navigate('/dashboard', { replace: true })
-                      } catch {
-                        setLocalError('فشل تسجيل الدخول كمدير.')
-                      } finally {
-                        setIsLoading(false)
-                      }
-                    }}
-                    disabled={isLoading}
-                    sx={{
-                      textTransform: 'none',
-                      borderRadius: 3,
-                      px: 6,
-                      py: 3,
-                      fontSize: '1.2rem',
-                      fontWeight: 500,
-                      width: '100%',
-                      maxWidth: '280px',
-                      height: '60px',
-                      backgroundColor: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-                      color: 'white',
-                      boxShadow: '0 8px 24px rgba(240, 147, 251, 0.3)',
-                      border: 'none',
-                      transition: 'all 0.3s ease',
-                      '&:hover': {
-                        transform: 'translateY(-2px)',
-                        boxShadow: '0 12px 32px rgba(240, 147, 251, 0.4)',
-                        backgroundColor: 'linear-gradient(135deg, #e081e9 0%, #e4455a 100%)',
-                      },
-                      '&:active': {
-                        transform: 'translateY(0)',
-                        boxShadow: '0 4px 16px rgba(240, 147, 251, 0.3)',
-                      }
-                    }}
-                  >
-                    الدخول كمدير
-                  </Button>
                 </Box>
               </Box>
             </Fade>
