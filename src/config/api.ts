@@ -8,7 +8,7 @@ function normalizeApiBaseUrl(input: string | undefined) {
   return withoutTrailingSlash.replace(/\/api\/?$/i, '')
 }
 
-const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL
+const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL || "https://majlis.larthaa.com"
 const normalizedApiBaseUrl = rawApiBaseUrl === undefined ? undefined : normalizeApiBaseUrl(rawApiBaseUrl)
 const isProd = import.meta.env.PROD
 
