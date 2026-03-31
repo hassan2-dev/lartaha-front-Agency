@@ -23,8 +23,8 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       // Clear invalid token
       localStorage.removeItem(TOKEN_STORAGE_KEY)
-      // Redirect to login page
-      window.location.href = '/login'
+      // Trigger a custom event for auth context to handle redirect
+      window.dispatchEvent(new CustomEvent('auth:logout'))
     }
     return Promise.reject(error)
   }

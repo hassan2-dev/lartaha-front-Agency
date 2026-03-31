@@ -1,10 +1,10 @@
 import { useState } from "react"
 import { cn } from "../../lib/utils"
-import { 
-  LayoutGrid, 
-  Upload, 
-  Shield, 
-  MessageCircle, 
+import {
+  LayoutGrid,
+  Upload,
+  Shield,
+  MessageCircle,
   Activity,
   Check,
   Clock,
@@ -117,7 +117,7 @@ export function FeatureShowcase() {
             </div>
 
             {/* Visual Preview */}
-            <div className="order-1 lg:order-1">
+            <div className="order-1 lg:order-1 hidden sm:block">
               <div className="rounded-2xl border border-border bg-card p-2 shadow-xl">
                 <div className="rounded-xl bg-muted overflow-hidden">
                   {/* Dynamic Preview based on active tab */}

@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { TOKEN_STORAGE_KEY } from '../config/api'
 import { fetchMe, loginUser, type LoginPayload, type LoginResult } from '../api/authApi'
 
@@ -32,6 +33,7 @@ function extractToken(data: LoginResult): string | null {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const navigate = useNavigate()
   const [token, setToken] = useState<string | null>(() => {
     try {
       return localStorage.getItem(TOKEN_STORAGE_KEY)
@@ -54,6 +56,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Handle auth logout events from axios interceptor
+  useEffect(() => {
+    const handleAuthLogout = () => {
+      setToken(null)
+      setUser(null)
+      setError(null)
+      navigate('/login')
+    }
+
+    window.addEventListener('auth:logout', handleAuthLogout)
+    return () => window.removeEventListener('auth:logout', handleAuthLogout)
+  }, [navigate])
+
   async function refreshMe() {
     if (!token) return
     try {
@@ -73,6 +88,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void refreshMe()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
+
+  // Navigate to login when token is cleared
+  useEffect(() => {
+    if (!token && window.location.pathname !== '/login' && window.location.pathname !== '/') {
+      navigate('/login')
+    }
+  }, [token, navigate])
 
   const value = useMemo<AuthContextValue>(
     () => ({
