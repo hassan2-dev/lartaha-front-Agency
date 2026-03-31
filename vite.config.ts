@@ -7,10 +7,13 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'https://majlis.larthaa.com',
         changeOrigin: true,
         secure: false,
       },
     },
+  },
+  preview: {
+    port: 4173,
   },
 })
