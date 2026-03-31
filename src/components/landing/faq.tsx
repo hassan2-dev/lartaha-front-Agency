@@ -62,23 +62,20 @@ export function FAQ() {
             >
               <button
                 onClick={() => setOpenIndex(openIndex === index ? null : index)}
-                className={`w-full text-right p-6 rounded-xl transition-all duration-300 flex items-center justify-between gap-4 ${
-                  openIndex === index
-                    ? "bg-primary text-primary-foreground shadow-lg"
-                    : "bg-card border border-border hover:border-primary/30"
-                }`}
+                className={`w-full text-right p-6 rounded-xl transition-all duration-300 flex items-center justify-between gap-4 ${openIndex === index
+                  ? "bg-primary text-primary-foreground shadow-lg"
+                  : "bg-card border border-border text-slate-700 hover:border-primary/30"
+                  }`}
               >
                 <span className="font-semibold text-lg">{faq.question}</span>
                 <ChevronDown
-                  className={`w-5 h-5 flex-shrink-0 transition-transform duration-300 ${
-                    openIndex === index ? "rotate-180" : ""
-                  }`}
+                  className={`w-5 h-5 flex-shrink-0 transition-transform duration-300 ${openIndex === index ? "rotate-180" : ""
+                    }`}
                 />
               </button>
               <div
-                className={`overflow-hidden transition-all duration-300 ${
-                  openIndex === index ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
-                }`}
+                className={`overflow-hidden transition-all duration-300 ${openIndex === index ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
+                  }`}
               >
                 <div className="p-6 bg-card border border-t-0 border-border rounded-b-xl">
                   <p className="text-muted-foreground leading-relaxed">{faq.answer}</p>
