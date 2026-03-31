@@ -1,6 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { TOKEN_STORAGE_KEY } from '../config/api'
 import { fetchMe, loginUser, type LoginPayload, type LoginResult } from '../api/authApi'
 
@@ -33,7 +32,6 @@ function extractToken(data: LoginResult): string | null {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const navigate = useNavigate()
   const [token, setToken] = useState<string | null>(() => {
     try {
       return localStorage.getItem(TOKEN_STORAGE_KEY)
@@ -53,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     workspaceId?: string
     workspaceName?: string
   } | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true) // Start with true for initial auth check
   const [error, setError] = useState<string | null>(null)
 
   // Handle auth logout events from axios interceptor
@@ -62,15 +60,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(null)
       setUser(null)
       setError(null)
-      navigate('/login')
+      // Let ProtectedRoute handle navigation
     }
 
     window.addEventListener('auth:logout', handleAuthLogout)
     return () => window.removeEventListener('auth:logout', handleAuthLogout)
-  }, [navigate])
+  }, [])
 
   async function refreshMe() {
-    if (!token) return
+    if (!token) {
+      setLoading(false)
+      return
+    }
     try {
       console.log('🔄 Calling fetchMe with token:', token?.substring(0, 20) + '...')
       const me = await fetchMe()
@@ -81,6 +82,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error('❌ fetchMe error:', error)
       // If /me fails (expired token, etc) we'll just keep user as null.
       setUser(null)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -89,12 +92,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 
-  // Navigate to login when token is cleared
+  // Navigate to login when token is cleared (only if not already on login page)
   useEffect(() => {
-    if (!token && window.location.pathname !== '/login' && window.location.pathname !== '/') {
-      navigate('/login')
-    }
-  }, [token, navigate])
+    // Remove this - let ProtectedRoute handle navigation
+  }, [])
 
   const value = useMemo<AuthContextValue>(
     () => ({
