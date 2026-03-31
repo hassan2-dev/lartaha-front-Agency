@@ -8,16 +8,15 @@ function normalizeApiBaseUrl(input: string | undefined) {
   return withoutTrailingSlash.replace(/\/api\/?$/i, '')
 }
 
-const rawApiBaseUrl = "https://majlis.larthaa.com"
-// const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL || "https://majlis.larthaa.com"
-const normalizedApiBaseUrl = rawApiBaseUrl === undefined ? undefined : normalizeApiBaseUrl(rawApiBaseUrl)
-const isProd = import.meta.env.PROD
+// const rawApiBaseUrl = "https://majlis.larthaa.com"
+const rawApiBaseUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL || "https://majlis.larthaa.com")
+// const isProd = import.meta.env.PROD
 
 export const API_ENV = {
   // If Vercel env var is empty string, we keep `apiBaseUrl=''` so axios calls same-origin `/api/...`
   // and Vercel rewrites can forward to the backend.
   // In production, always call same-origin (`/api/...`) to guarantee rewrites apply.
-  apiBaseUrl: isProd ? '' : normalizedApiBaseUrl === undefined ? 'http://localhost:3000' : normalizedApiBaseUrl,
+  apiBaseUrl: rawApiBaseUrl,
   authLoginPath: import.meta.env.VITE_AUTH_LOGIN_PATH ?? '/api/auth/login',
   authMePath: import.meta.env.VITE_AUTH_ME_PATH ?? '/api/auth/me',
   uploadPath: import.meta.env.VITE_UPLOAD_PATH ?? '/api/upload',
