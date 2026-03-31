@@ -172,7 +172,7 @@ export default function SettingsPage() {
             <IconButton
               onClick={() => {
                 console.log('🔗 Profile navigation button clicked')
-                navigate('/profile')
+                navigate('/dashboard/profile')
               }}
               sx={{ bgcolor: 'primary.main', color: 'white', '&:hover': { bgcolor: 'primary.dark' } }}
             >
