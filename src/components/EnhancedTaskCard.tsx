@@ -165,139 +165,88 @@ export default function EnhancedTaskCard({
       )}
 
       {/* Expandable Details */}
-      {(task.checklists?.length || task.links?.length || task.attachments?.length || task.subtasks?.length) && (
-        <Accordion>
+      {((task.checklists?.length ?? 0) > 0 || (task.links?.length ?? 0) > 0 || (task.attachments?.length ?? 0) > 0) && (
+        <Accordion sx={{ background: 'transparent', boxShadow: 'none' }}>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-            <Typography variant="subtitle2">
-              التفاصيل ({[
-                task.checklists?.length && `${completedChecklistItems}/${totalChecklistItems} checklist`,
-                task.links?.length && `${task.links.length} links`,
-                task.attachments?.length && `${task.attachments.length} attachments`,
-                task.subtasks?.length && `${task.subtasks.length} subtasks`,
-              ].filter(Boolean).join(', ')})
-            </Typography>
+            <Typography variant="body2">التفاصيل الإضافية</Typography>
           </AccordionSummary>
           <AccordionDetails>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {/* Checklist */}
-              {task.checklists && task.checklists.length > 0 && (
-                <Box>
-                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                    قائمة التحقق ({completedChecklistItems}/{totalChecklistItems})
-                  </Typography>
-                  <List dense>
-                    {task.checklists.map((item) => (
-                      <ListItem key={item.id}>
+            {/* Checklist */}
+            {task.checklists && task.checklists.length > 0 && (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
+                  قائمة المهام ({completedChecklistItems}/{totalChecklistItems})
+                </Typography>
+                <List dense>
+                  {task.checklists.map((item) => (
+                    <ListItem key={item.id} disablePadding>
+                      <ListItemIcon sx={{ minWidth: 36 }}>
                         <Checkbox
+                          edge="start"
                           checked={item.completed}
                           onChange={(e) => handleChecklistToggle(item.id, e.target.checked)}
+                          size="small"
                         />
-                        <ListItemText
-                          primary={item.text}
-                          sx={{
-                            textDecoration: item.completed ? 'line-through' : 'none',
-                            opacity: item.completed ? 0.6 : 1,
-                          }}
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                </Box>
-              )}
-
-              {/* Links */}
-              {task.links && task.links.length > 0 && (
-                <Box>
-                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                    الروابط
-                  </Typography>
-                  <List dense>
-                    {task.links.map((link) => (
-                      <ListItem key={link.id}>
-                        <ListItemIcon>
-                          <LinkIcon />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={
-                            <MuiLink href={link.url} target="_blank" rel="noopener noreferrer">
-                              {link.title || link.url}
-                            </MuiLink>
-                          }
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                </Box>
-              )}
-
-              {/* Attachments */}
-              {task.attachments && task.attachments.length > 0 && (
-                <Box>
-                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                    المرفقات
-                  </Typography>
-                  <List dense>
-                    {task.attachments.map((attachment) => (
-                      <ListItem key={attachment.id}>
-                        <ListItemIcon>
-                          <AttachFileIcon />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={attachment.filename}
-                          secondary={attachment.size ? `${(attachment.size / 1024).toFixed(1)} KB` : undefined}
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                </Box>
-              )}
-
-              {/* Subtasks */}
-              {task.subtasks && task.subtasks.length > 0 && (
-                <Box>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                    <Typography variant="subtitle2">
-                      المهام الفرعية ({task.subtasks.length})
-                    </Typography>
-                    {onSubtaskCreate && (
-                      <Button
-                        size="small"
-                        onClick={() => onSubtaskCreate(task.id)}
-                        startIcon={<SubdirectoryArrowRightIcon />}
-                      >
-                        إضافة مهمة فرعية
-                      </Button>
-                    )}
-                  </Box>
-                  {task.subtasks.map((subtask) => (
-                    <Box key={subtask.id} sx={{ ml: 2, mt: 1, p: 1, bgcolor: 'rgba(0,0,0,0.02)', borderRadius: 1 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                        {subtask.title}
-                      </Typography>
-                      <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
-                        <Chip label={STATUS_LABEL[subtask.status]} size="small" variant="outlined" />
-                        {subtask.assignees && subtask.assignees.length > 0 && (
-                          <Chip
-                            avatar={
-                              subtask.assignees[0].user.avatar ? (
-                                <Avatar src={subtask.assignees[0].user.avatar} sx={{ width: 16, height: 16 }} />
-                              ) : (
-                                <Avatar sx={{ width: 16, height: 16, fontSize: '0.6rem' }}>
-                                  {subtask.assignees[0].user.name.charAt(0).toUpperCase()}
-                                </Avatar>
-                              )
-                            }
-                            label={subtask.assignees[0].user.name}
-                            size="small"
-                            variant="outlined"
-                          />
-                        )}
-                      </Box>
-                    </Box>
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={item.text}
+                        sx={{
+                          textDecoration: item.completed ? 'line-through' : 'none',
+                          opacity: item.completed ? 0.6 : 1,
+                        }}
+                      />
+                    </ListItem>
                   ))}
-                </Box>
-              )}
-            </Box>
+                </List>
+              </Box>
+            )}
+
+            {/* Links */}
+            {task.links && task.links.length > 0 && (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
+                  الروابط:
+                </Typography>
+                <List dense>
+                  {task.links.map((link) => (
+                    <ListItem key={link.id} disablePadding>
+                      <ListItemIcon sx={{ minWidth: 36 }}>
+                        <LinkIcon fontSize="small" />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={
+                          <MuiLink href={link.url} target="_blank" rel="noopener noreferrer" underline="hover">
+                            {link.title || link.url}
+                          </MuiLink>
+                        }
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              </Box>
+            )}
+
+            {/* Attachments */}
+            {task.attachments && task.attachments.length > 0 && (
+              <Box>
+                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
+                  المرفقات:
+                </Typography>
+                <List dense>
+                  {task.attachments.map((attachment) => (
+                    <ListItem key={attachment.id} disablePadding>
+                      <ListItemIcon sx={{ minWidth: 36 }}>
+                        <AttachFileIcon fontSize="small" />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={attachment.filename}
+                        secondary={attachment.size ? `${(attachment.size / 1024).toFixed(2)} KB` : undefined}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              </Box>
+            )}
           </AccordionDetails>
         </Accordion>
       )}

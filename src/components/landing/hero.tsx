@@ -85,12 +85,12 @@ export function Hero() {
         <div className="mt-20 sm:mt-24">
           <div className="relative mx-auto max-w-6xl">
             {/* Glow Effect */}
-            <div className="absolute -inset-4 bg-gradient-to-r from-indigo-500/20 via-indigo-600/20 to-indigo-500/20 rounded-3xl blur-2xl" />
+            <div className="absolute -inset-4 bg-linear-to-r from-indigo-500/20 via-indigo-600/20 to-indigo-500/20 rounded-3xl blur-2xl" />
 
             <div className="relative rounded-2xl border-2 border-indigo-200/50 bg-card p-2 shadow-2xl shadow-indigo-500/20">
               <div className="rounded-xl bg-muted overflow-hidden">
                 {/* Mock Dashboard */}
-                <div className="aspect-[16/9] relative">
+                <div className="aspect-video relative">
                   <div className="absolute inset-0 bg-card">
                     {/* Dashboard Header */}
                     <div className="flex items-center justify-between border-b border-border px-6 py-4">
