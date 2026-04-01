@@ -12,7 +12,6 @@ import {
   ListItemText,
   ListItemIcon,
   Checkbox,
-  Button,
   Link as MuiLink,
 } from '@mui/material'
 import {
@@ -26,7 +25,6 @@ import type { Task, TaskStatus, TaskPriority } from '../api/tasksApi'
 interface EnhancedTaskCardProps {
   task: Task
   onChecklistUpdate: (taskId: string, itemId: string, update: { completed?: boolean; text?: string }) => Promise<void>
-  onSubtaskCreate?: (parentId: string) => void
   onTaskClick?: (task: Task) => void
 }
 
@@ -53,7 +51,6 @@ const PRIORITY_COLOR: Record<TaskPriority, 'default' | 'primary' | 'secondary' |
 export default function EnhancedTaskCard({
   task,
   onChecklistUpdate,
-  onSubtaskCreate,
   onTaskClick,
 }: EnhancedTaskCardProps) {
   const handleChecklistToggle = (itemId: string, completed: boolean) => {

@@ -272,10 +272,6 @@ export default function TasksPage() {
     resetForm()
   }
 
-  async function handleSubtaskCreate(parentId: string) {
-    // For now, we'll just log this. In a full implementation, you'd open a dialog or form
-    console.log('Create subtask for parent:', parentId)
-  }
 
   async function handleChecklistUpdate(taskId: string, itemId: string, update: { completed?: boolean; text?: string }) {
     setError(null)
@@ -441,7 +437,6 @@ export default function TasksPage() {
                   key={t.id}
                   task={t}
                   onChecklistUpdate={handleChecklistUpdate}
-                  onSubtaskCreate={handleSubtaskCreate}
                   onTaskClick={openEditModal}
                 />
               ))}
@@ -533,7 +528,6 @@ export default function TasksPage() {
                 <EnhancedTaskCard
                   task={activeTask}
                   onChecklistUpdate={handleChecklistUpdate}
-                  onSubtaskCreate={handleSubtaskCreate}
                   onTaskClick={openEditModal}
                 />
               </Box>

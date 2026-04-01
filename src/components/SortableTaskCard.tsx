@@ -7,14 +7,12 @@ import EnhancedTaskCard from './EnhancedTaskCard'
 interface SortableTaskCardProps {
   task: Task
   onChecklistUpdate: (taskId: string, itemId: string, update: { completed?: boolean; text?: string }) => Promise<void>
-  onSubtaskCreate?: (parentId: string) => void
   onTaskClick?: (task: Task) => void
 }
 
 export default function SortableTaskCard({
   task,
   onChecklistUpdate,
-  onSubtaskCreate,
   onTaskClick,
 }: SortableTaskCardProps) {
   const {
@@ -73,7 +71,6 @@ export default function SortableTaskCard({
       <EnhancedTaskCard
         task={task}
         onChecklistUpdate={onChecklistUpdate}
-        onSubtaskCreate={onSubtaskCreate}
         onTaskClick={undefined} // Disable internal click handler, we handle it here
       />
     </Box>
