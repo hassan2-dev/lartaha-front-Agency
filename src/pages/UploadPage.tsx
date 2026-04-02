@@ -859,11 +859,13 @@ function FolderItem({
   folderPath,
   onClick,
   onDelete,
+  onDownload,
   isDeleting
 }: {
   folderPath: string
   onClick: () => void
   onDelete: (folderPath: string) => void
+  onDownload: (folderPath: string) => void
   isDeleting?: boolean
 }) {
   const name = folderPath.split('/').filter(Boolean).pop() || folderPath
@@ -915,6 +917,19 @@ function FolderItem({
       </Box>
 
       <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+        <Tooltip title="تنزيل المجلد">
+          <Button
+            size="small"
+            variant="text"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDownload(folderPath)
+            }}
+            sx={{ borderRadius: 999, minWidth: 'auto', p: 1 }}
+          >
+            <DownloadIcon />
+          </Button>
+        </Tooltip>
         <Tooltip title="حذف المجلد">
           <Button
             size="small"
@@ -939,11 +954,13 @@ function FolderItemGrid({
   folderPath,
   onClick,
   onDelete,
+  onDownload,
   isDeleting
 }: {
   folderPath: string
   onClick: () => void
   onDelete: (folderPath: string) => void
+  onDownload: (folderPath: string) => void
   isDeleting?: boolean
 }) {
   const name = folderPath.split('/').filter(Boolean).pop() || folderPath
@@ -1012,6 +1029,19 @@ function FolderItemGrid({
       </Box>
 
       <Box sx={{ p: 2, pt: 0, display: 'flex', gap: 0.5, justifyContent: 'center' }}>
+        <Tooltip title="تنزيل المجلد">
+          <Button
+            size="small"
+            variant="text"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDownload(folderPath)
+            }}
+            sx={{ borderRadius: 999, minWidth: 'auto', p: 1 }}
+          >
+            <DownloadIcon />
+          </Button>
+        </Tooltip>
         <Tooltip title="حذف المجلد">
           <Button
             size="small"
@@ -1579,6 +1609,41 @@ export default function UploadPage() {
         next.delete(folderPath)
         return next
       })
+    }
+  }
+
+  // Folder download function
+  async function handleDownloadFolder(folderPath: string) {
+    try {
+      const token = localStorage.getItem('larthaa_auth_token')
+      const baseUrl = API_ENV.apiBaseUrl?.trim() || ''
+
+      if (!token) {
+        throw new Error('Missing auth token')
+      }
+
+      if (!baseUrl) {
+        throw new Error('Missing API base URL')
+      }
+
+      // Construct the full folder path for the API
+      const fullFolderPath = currentPath ? `${currentPath}/${folderPath}` : folderPath
+
+      const downloadUrl = `${baseUrl}/api/download/folder?path=${encodeURIComponent(fullFolderPath)}&token=${encodeURIComponent(token)}`
+
+      // Create a temporary link and trigger download
+      const a = document.createElement('a')
+      a.href = downloadUrl
+      a.download = `${folderPath.split('/').pop() || 'folder'}.zip`
+      a.rel = 'noreferrer'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+
+      setSuccess('بدأ تنزيل المجلد')
+    } catch (error) {
+      console.error('Folder download error:', error)
+      setError(`فشل تنزيل المجلد: ${error instanceof Error ? error.message : 'خطأ غير معروف'}`)
     }
   }
 
@@ -2192,6 +2257,7 @@ export default function UploadPage() {
                                     folderPath={fullPath}
                                     onClick={() => setCurrentPath(fullPath)}
                                     onDelete={handleDeleteFolder}
+                                    onDownload={handleDownloadFolder}
                                     isDeleting={deletingFolders.has(fullPath)}
                                   />
                                 )
@@ -2218,6 +2284,7 @@ export default function UploadPage() {
                                     folderPath={fullPath}
                                     onClick={() => setCurrentPath(fullPath)}
                                     onDelete={handleDeleteFolder}
+                                    onDownload={handleDownloadFolder}
                                     isDeleting={deletingFolders.has(fullPath)}
                                   />
                                 )
