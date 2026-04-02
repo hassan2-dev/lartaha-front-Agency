@@ -21,6 +21,7 @@ import {
   SubdirectoryArrowRight as SubdirectoryArrowRightIcon,
 } from '@mui/icons-material'
 import type { Task, TaskStatus, TaskPriority } from '../api/tasksApi'
+import { useAuth } from '../contexts/AuthContext'
 
 interface EnhancedTaskCardProps {
   task: Task
@@ -53,7 +54,15 @@ export default function EnhancedTaskCard({
   onChecklistUpdate,
   onTaskClick,
 }: EnhancedTaskCardProps) {
+  const { user } = useAuth()
+
+  // Permission helper function
+  const canEditTask = () => {
+    return user?.isAdmin || task.createdBy?.id === user?.id
+  }
+
   const handleChecklistToggle = (itemId: string, completed: boolean) => {
+    if (!canEditTask()) return
     onChecklistUpdate(task.id, itemId, { completed })
   }
 
@@ -183,6 +192,7 @@ export default function EnhancedTaskCard({
                           checked={item.completed}
                           onChange={(e) => handleChecklistToggle(item.id, e.target.checked)}
                           size="small"
+                          disabled={!canEditTask()}
                         />
                       </ListItemIcon>
                       <ListItemText

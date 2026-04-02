@@ -96,9 +96,45 @@ export interface UpdateTaskInput {
   links?: { url: string; title?: string; type?: string }[]
 }
 
-export async function getTasks(): Promise<Task[]> {
-  const res = await api.get('/api/tasks')
-  return (res.data?.tasks ?? []) as Task[]
+export interface TasksPaginationParams {
+  limit?: number
+  cursor?: string
+  offset?: number
+}
+
+export interface TasksResponse {
+  ok: boolean
+  tasks: Task[]
+  pagination: {
+    hasMore: boolean
+    nextCursor: string | null
+    limit: number
+    offset: number
+  }
+}
+
+export async function getTasks(params?: TasksPaginationParams): Promise<TasksResponse> {
+  const searchParams = new URLSearchParams()
+
+  if (params?.limit) {
+    searchParams.set('limit', String(params.limit))
+  }
+  if (params?.cursor) {
+    searchParams.set('cursor', params.cursor)
+  }
+  if (params?.offset) {
+    searchParams.set('offset', String(params.offset))
+  }
+
+  const query = searchParams.toString()
+  const url = `/api/tasks${query ? `?${query}` : ''}`
+
+  console.log('🌐 Making API call to:', url)
+
+  const res = await api.get(url)
+  console.log('🌐 Raw response from server:', res.data)
+
+  return res.data as TasksResponse
 }
 
 export async function createTask(input: CreateTaskInput): Promise<Task> {

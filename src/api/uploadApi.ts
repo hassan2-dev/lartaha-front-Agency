@@ -14,6 +14,12 @@ export type ListObjectsResult = {
   delimiter?: boolean
   folders?: string[]
   objects?: Array<{ key: string; size?: number; lastModified?: string; createdAt?: string; updatedAt?: string; thumbnailKey?: string | null }>
+  pagination?: {
+    hasMore: boolean
+    nextContinuationToken: string | null
+    limit: number
+    count: number
+  }
 }
 
 export type TrashResult = {
@@ -327,13 +333,26 @@ export async function uploadFilesStreamed(
   }
 }
 
+export type ListObjectsParams = {
+  prefix?: string
+  limit?: number
+  delimiter?: boolean
+  continuationToken?: string
+}
+
 export async function listUploadedObjects(
   prefix: string,
-  limit: number = 200,
-  delimiter: boolean = true
+  limit: number = 50,
+  delimiter: boolean = true,
+  continuationToken?: string
 ): Promise<ListObjectsResult> {
+  const params: ListObjectsParams = { prefix, limit, delimiter }
+  if (continuationToken) {
+    params.continuationToken = continuationToken
+  }
+
   const res = await api.get(`${API_ENV.uploadPath}/list`, {
-    params: { prefix, limit, delimiter },
+    params,
   })
   return res.data as ListObjectsResult
 }

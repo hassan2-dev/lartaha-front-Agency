@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import {
   Alert,
   AppBar,
@@ -1167,6 +1167,10 @@ export default function UploadPage() {
   const [currentPath, setCurrentPath] = useState('')
   const [foldersHere, setFoldersHere] = useState<string[]>([])
   const [filesHere, setFilesHere] = useState<Array<{ key: string; size?: number; lastModified?: string; createdAt?: string; updatedAt?: string; thumbnailKey?: string | null }>>([])
+  const [hasMoreFiles, setHasMoreFiles] = useState(true)
+  const [nextContinuationToken, setNextContinuationToken] = useState<string | null>(null)
+  const [isLoadingMoreFiles, setIsLoadingMoreFiles] = useState(false)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
 
   const [uploading, setUploading] = useState(false)
@@ -1787,35 +1791,75 @@ export default function UploadPage() {
     return null
   }
 
-  const fetchExplorer = useCallback(async () => {
-    setLoadingExplorer(true)
-    try {
-      const res = await listUploadedObjects(explorerPrefix, 1000, true)
-      setFoldersHere(res.folders ?? [])
-      setFilesHere(res.objects ?? [])
+  const fetchExplorer = useCallback(async (reset: boolean = false) => {
+    if (reset) {
+      setLoadingExplorer(true)
+      setFilesHere([])
+      setHasMoreFiles(true)
+      setNextContinuationToken(null)
+    } else {
+      setIsLoadingMoreFiles(true)
+    }
 
-      // Fetch privacy settings for all files
-      const fileKeys = (res.objects ?? []).map(obj => obj.key)
-      if (fileKeys.length > 0) {
-        try {
-          const privacyRes = await fetchBulkPrivacySettings(fileKeys)
-          if (privacyRes.settings) {
-            setFilePrivacySettings(privacyRes.settings)
+    try {
+      const limit = reset ? 50 : 50
+      const continuationToken = reset ? undefined : (nextContinuationToken || undefined)
+      const res = await listUploadedObjects(explorerPrefix, limit, true, continuationToken)
+
+      if (reset) {
+        setFoldersHere(res.folders ?? [])
+        setFilesHere(res.objects ?? [])
+      } else {
+        setFilesHere(prev => [...prev, ...(res.objects ?? [])])
+      }
+
+      setHasMoreFiles(res.pagination?.hasMore ?? false)
+      setNextContinuationToken(res.pagination?.nextContinuationToken ?? null)
+
+      // Fetch privacy settings for all files (only on reset or first load)
+      if (reset || (!nextContinuationToken && res.objects)) {
+        const fileKeys = (res.objects ?? []).map(obj => obj.key)
+        if (fileKeys.length > 0) {
+          try {
+            const privacyRes = await fetchBulkPrivacySettings(fileKeys)
+            if (privacyRes.settings) {
+              setFilePrivacySettings(prev => ({ ...prev, ...privacyRes.settings }))
+            }
+          } catch (privacyError) {
+            console.error('Failed to fetch privacy settings:', privacyError)
           }
-        } catch (privacyError) {
-          console.error('Failed to fetch privacy settings:', privacyError)
         }
       }
     } catch (e: unknown) {
       const err = e as { message?: string; response?: { data?: { message?: string } } }
       setError(err.response?.data?.message ?? err.message ?? 'فشل جلب الملفات')
     } finally {
-      setLoadingExplorer(false)
+      if (reset) {
+        setLoadingExplorer(false)
+      } else {
+        setIsLoadingMoreFiles(false)
+      }
     }
-  }, [explorerPrefix])
+  }, [explorerPrefix, nextContinuationToken])
+
+  const loadMoreFiles = useCallback(async () => {
+    if (!hasMoreFiles || isLoadingMoreFiles || loadingExplorer) return
+
+    await fetchExplorer(false)
+  }, [hasMoreFiles, isLoadingMoreFiles, loadingExplorer, fetchExplorer])
+
+  // Infinite scroll handler
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget
+
+    // When user is within 200px of bottom, load more
+    if (scrollHeight - scrollTop - clientHeight < 200) {
+      void loadMoreFiles()
+    }
+  }, [loadMoreFiles])
 
   useEffect(() => {
-    void fetchExplorer()
+    void fetchExplorer(true)
   }, [fetchExplorer])
 
   useEffect(() => {
@@ -1823,7 +1867,7 @@ export default function UploadPage() {
       (event) => {
         if (event.scope !== 'files') return
         if (event.action === 'upload_progress') return
-        void fetchExplorer()
+        void fetchExplorer(true)
         if (showTrash) {
           void fetchTrashFiles()
         }
@@ -2189,8 +2233,12 @@ export default function UploadPage() {
                             الملفات ({filteredAndSortedFiles.length})
                           </Typography>
                           {viewMode === 'list' ? (
-                            <Box sx={{ maxHeight: 500, overflow: 'auto' }}>
-                              {filteredAndSortedFiles.slice(0, 200).map((obj) => {
+                            <Box
+                              ref={scrollContainerRef}
+                              sx={{ maxHeight: 500, overflow: 'auto' }}
+                              onScroll={handleScroll}
+                            >
+                              {filteredAndSortedFiles.map((obj) => {
                                 const url = keyToPublicUrl(obj.key)
                                 const thumbnailUrl = obj.thumbnailKey ? keyToPublicUrl(obj.thumbnailKey) : ''
                                 return (
@@ -2208,16 +2256,27 @@ export default function UploadPage() {
                                   />
                                 )
                               })}
-                              {filteredAndSortedFiles.length > 200 && (
-                                <Box sx={{ p: 2, textAlign: 'center' }}>
-                                  <Typography variant="body2" sx={{ opacity: 0.7 }}>
-                                    + {filteredAndSortedFiles.length - 200} المزيد من الملفات...
+                              {/* Infinite Scroll Loading Indicator */}
+                              {isLoadingMoreFiles && (
+                                <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                                  <CircularProgress size={24} />
+                                  <Typography variant="body2" sx={{ ml: 2, opacity: 0.7 }}>
+                                    جاري تحميل المزيد من الملفات...
                                   </Typography>
                                 </Box>
                               )}
+                              {!hasMoreFiles && filteredAndSortedFiles.length > 0 && (
+                                <Typography variant="body2" sx={{ textAlign: 'center', opacity: 0.5, p: 2 }}>
+                                  تم تحميل جميع الملفات
+                                </Typography>
+                              )}
                             </Box>
                           ) : (
-                            <Box sx={{ maxHeight: 500, overflow: 'auto' }}>
+                            <Box
+                              ref={scrollContainerRef}
+                              sx={{ maxHeight: 500, overflow: 'auto' }}
+                              onScroll={handleScroll}
+                            >
                               <Box sx={{
                                 display: 'grid',
                                 gridTemplateColumns: {
@@ -2228,7 +2287,7 @@ export default function UploadPage() {
                                 },
                                 gap: 2
                               }}>
-                                {filteredAndSortedFiles.slice(0, 200).map((obj) => {
+                                {filteredAndSortedFiles.map((obj) => {
                                   const url = keyToPublicUrl(obj.key)
                                   const thumbnailUrl = obj.thumbnailKey ? keyToPublicUrl(obj.thumbnailKey) : ''
                                   return (
@@ -2247,12 +2306,19 @@ export default function UploadPage() {
                                   )
                                 })}
                               </Box>
-                              {filteredAndSortedFiles.length > 200 && (
-                                <Box sx={{ p: 2, textAlign: 'center' }}>
-                                  <Typography variant="body2" sx={{ opacity: 0.7 }}>
-                                    + {filteredAndSortedFiles.length - 200} المزيد من الملفات...
+                              {/* Infinite Scroll Loading Indicator for Grid View */}
+                              {isLoadingMoreFiles && (
+                                <Box sx={{ display: 'flex', justifyContent: 'center', p: 2, gridColumn: '1 / -1' }}>
+                                  <CircularProgress size={24} />
+                                  <Typography variant="body2" sx={{ ml: 2, opacity: 0.7 }}>
+                                    جاري تحميل المزيد من الملفات...
                                   </Typography>
                                 </Box>
+                              )}
+                              {!hasMoreFiles && filteredAndSortedFiles.length > 0 && (
+                                <Typography variant="body2" sx={{ textAlign: 'center', opacity: 0.5, p: 2, gridColumn: '1 / -1' }}>
+                                  تم تحميل جميع الملفات
+                                </Typography>
                               )}
                             </Box>
                           )}

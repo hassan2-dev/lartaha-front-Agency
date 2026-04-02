@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import {
   DndContext,
   pointerWithin,
@@ -38,6 +38,7 @@ import {
 import LogoutIcon from '@mui/icons-material/Logout'
 import ArrowBackIcon from '@mui/icons-material/ArrowBackIosNew'
 import AddIcon from '@mui/icons-material/Add'
+import DeleteIcon from '@mui/icons-material/Delete'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useThemeMode } from '../contexts/ThemeContext'
@@ -45,12 +46,14 @@ import {
   createTask,
   getTasks,
   updateTask,
+  deleteTask,
   getWorkspaceUsers,
   updateChecklistItem,
   type Task,
   type TaskStatus,
   type TaskPriority,
   type User,
+  type TasksResponse,
 } from '../api/tasksApi'
 import { subscribeRealtime } from '../api/realtimeApi'
 import EnhancedTaskForm from '../components/EnhancedTaskForm'
@@ -73,8 +76,12 @@ export default function TasksPage() {
 
   const [tasks, setTasks] = useState<Task[]>([])
   const [workspaceUsers, setWorkspaceUsers] = useState<User[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [hasMore, setHasMore] = useState(true)
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   // Modal state
   const [createModalOpen, setCreateModalOpen] = useState(false)
@@ -108,8 +115,9 @@ export default function TasksPage() {
     })
   )
 
-  const refresh = useCallback(async (options?: { silent?: boolean }) => {
+  const refresh = useCallback(async (options?: { silent?: boolean; reset?: boolean }) => {
     const silent = options?.silent === true
+    const reset = options?.reset === true
 
     if (!silent) {
       setError(null)
@@ -117,8 +125,33 @@ export default function TasksPage() {
     }
 
     try {
-      const [tasksData, usersData] = await Promise.all([getTasks(), getWorkspaceUsers()])
-      setTasks(tasksData)
+      const tasksParams = reset ? { limit: 50 } : { limit: 50, ...(nextCursor && { cursor: nextCursor }) }
+
+      console.log('🔄 Tasks fetch request:', {
+        reset,
+        nextCursor,
+        params: tasksParams,
+        currentTasksCount: tasks.length
+      })
+
+      const [tasksData, usersData] = await Promise.all([getTasks(tasksParams), getWorkspaceUsers()])
+
+      console.log('🔄 Raw API response:', tasksData)
+
+      // Log workspace information for debugging
+      console.log('🏢 Current user workspace:', user?.workspaceId, user?.workspaceName)
+      console.log('📋 Tasks loaded:', tasksData.tasks.length)
+      console.log('📋 Task workspace IDs:', tasksData.tasks.map(t => ({ id: t.id, title: t.title, workspaceId: (t as any).workspaceId })))
+      console.log('📋 Pagination response:', tasksData.pagination)
+
+      if (reset) {
+        setTasks(tasksData.tasks)
+      } else {
+        setTasks(prev => [...prev, ...tasksData.tasks])
+      }
+
+      setHasMore(tasksData.pagination?.hasMore ?? false)
+      setNextCursor(tasksData.pagination?.nextCursor ?? null)
       setWorkspaceUsers(usersData)
     } catch (e: unknown) {
       const err = e as { message?: string; response?: { data?: { message?: string } } }
@@ -128,17 +161,18 @@ export default function TasksPage() {
         setLoading(false)
       }
     }
-  }, [])
+  }, [user?.workspaceId, user?.workspaceName])
 
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    void refresh({ reset: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     const unsubscribe = subscribeRealtime(
       (event) => {
         if (event.scope !== 'tasks') return
-        void refresh({ silent: true })
+        void refresh({ silent: true, reset: true })
       },
       () => {
         // keep UI functional even if realtime stream disconnects
@@ -147,6 +181,28 @@ export default function TasksPage() {
 
     return unsubscribe
   }, [refresh])
+
+  const loadMoreTasks = useCallback(async () => {
+    if (!hasMore || isLoadingMore || loading) return
+
+    setIsLoadingMore(true)
+    try {
+      await refresh({ silent: true })
+    } finally {
+      setIsLoadingMore(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasMore, isLoadingMore, loading])
+
+  // Infinite scroll handler
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget
+
+    // When user is within 200px of bottom, load more
+    if (scrollHeight - scrollTop - clientHeight < 200) {
+      void loadMoreTasks()
+    }
+  }, [loadMoreTasks])
 
   const resetForm = () => {
     setTitle('')
@@ -184,12 +240,21 @@ export default function TasksPage() {
   }
 
   const grouped = useMemo(() => {
+    // Additional safety filter: ensure only tasks from current workspace are displayed
+    const workspaceFilteredTasks = user?.workspaceId
+      ? tasks.filter((t) => {
+        const taskWorkspaceId = (t as any).workspaceId;
+        // Include tasks that belong to current workspace or don't have workspaceId (for backward compatibility)
+        return !taskWorkspaceId || taskWorkspaceId === user.workspaceId;
+      })
+      : tasks;
+
     return {
-      todo: tasks.filter((t) => t.status === 'todo'),
-      in_progress: tasks.filter((t) => t.status === 'in_progress'),
-      done: tasks.filter((t) => t.status === 'done'),
+      todo: workspaceFilteredTasks.filter((t) => t.status === 'todo'),
+      in_progress: workspaceFilteredTasks.filter((t) => t.status === 'in_progress'),
+      done: workspaceFilteredTasks.filter((t) => t.status === 'done'),
     }
-  }, [tasks])
+  }, [tasks, user?.workspaceId])
 
   async function onCreate() {
     const isEditing = Boolean(selectedTask)
@@ -253,7 +318,18 @@ export default function TasksPage() {
     resetForm()
   }
 
+  // Permission helper function
+  const canEditTask = (task: Task) => {
+    return user?.isAdmin || task.createdBy?.id === user?.id
+  }
+
   const openEditModal = (task: Task) => {
+    // Check if user has permission to edit this task
+    if (!canEditTask(task)) {
+      setError('لا يمكنك تعديل هذه المهمة. فقط المسؤول أو منشئ المهمة يمكنه التعديل.')
+      return
+    }
+
     setSelectedTask(task)
     setTitle(task.title)
     setDescription(task.description || '')
@@ -273,7 +349,40 @@ export default function TasksPage() {
   }
 
 
+  async function handleDeleteTask() {
+    if (!selectedTask) return
+
+    // Check if user has permission to delete this task
+    if (!canEditTask(selectedTask)) {
+      setError('لا يمكنك حذف هذه المهمة. فقط المسؤول أو منشئ المهمة يمكنه الحذف.')
+      return
+    }
+
+    const confirmDelete = window.confirm(`هل أنت متأكد من حذف المهمة "${selectedTask.title}"؟ هذا الإجراء لا يمكن التراجع عنه.`)
+    if (!confirmDelete) return
+
+    setError(null)
+    setLoading(true)
+    try {
+      await deleteTask(selectedTask.id)
+      setTasks((prev) => prev.filter((t) => t.id !== selectedTask.id))
+      closeEditModal()
+    } catch (e: unknown) {
+      const err = e as { message?: string; response?: { data?: { message?: string } } }
+      setError(err.response?.data?.message ?? err.message ?? 'فشل حذف المهمة')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function handleChecklistUpdate(taskId: string, itemId: string, update: { completed?: boolean; text?: string }) {
+    // Find the task to check permissions
+    const task = tasks.find(t => t.id === taskId)
+    if (!task || !canEditTask(task)) {
+      setError('لا يمكنك تعديل هذه المهمة. فقط المسؤول أو منشئ المهمة يمكنه التعديل.')
+      return
+    }
+
     setError(null)
     try {
       await updateChecklistItem(taskId, itemId, update)
@@ -348,6 +457,12 @@ export default function TasksPage() {
     const activeTask = tasks.find((t) => t.id === activeId)
     if (!activeTask) return
 
+    // Check if user has permission to edit this task
+    if (!canEditTask(activeTask)) {
+      setError('لا يمكنك تعديل هذه المهمة. فقط المسؤول أو منشئ المهمة يمكنه التعديل.')
+      return
+    }
+
     // Determine target status
     let targetStatus: TaskStatus
     const overTask = tasks.find((t) => t.id === overId)
@@ -395,7 +510,7 @@ export default function TasksPage() {
         setError(err.response?.data?.message ?? err.message ?? 'فشل تحديث حالة المهمة')
       }
     }
-  }, [tasks, reorderTasks])
+  }, [tasks, reorderTasks, canEditTask])
 
   const activeTask = useMemo(() => tasks.find(t => t.id === activeId), [tasks, activeId])
 
@@ -493,7 +608,12 @@ export default function TasksPage() {
         </Toolbar>
       </AppBar>
 
-      <Container maxWidth="lg" sx={{ py: 3 }}>
+      <Container
+        ref={scrollContainerRef}
+        maxWidth="lg"
+        sx={{ py: 3, maxHeight: 'calc(100vh - 120px)', overflowY: 'auto' }}
+        onScroll={handleScroll}
+      >
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>
             {error}
@@ -534,6 +654,22 @@ export default function TasksPage() {
             ) : null}
           </DragOverlay>
         </DndContext>
+
+        {/* Infinite Scroll Loading Indicator */}
+        {isLoadingMore && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4, mb: 2 }}>
+            <CircularProgress size={24} />
+            <Typography variant="body2" sx={{ ml: 2, opacity: 0.7 }}>
+              جاري تحميل المزيد من المهام...
+            </Typography>
+          </Box>
+        )}
+
+        {!hasMore && tasks.length > 0 && (
+          <Typography variant="body2" sx={{ textAlign: 'center', opacity: 0.5, mt: 2, mb: 2 }}>
+            تم تحميل جميع المهام
+          </Typography>
+        )}
       </Container>
 
       {/* Floating Action Button */}
@@ -659,6 +795,17 @@ export default function TasksPage() {
           <Button onClick={closeEditModal} color="inherit" disabled={loading}>
             إلغاء
           </Button>
+          {selectedTask && canEditTask(selectedTask) && (
+            <Button
+              onClick={handleDeleteTask}
+              color="error"
+              variant="outlined"
+              disabled={loading}
+              startIcon={<DeleteIcon />}
+            >
+              {loading ? <CircularProgress size={20} color="inherit" /> : 'حذف المهمة'}
+            </Button>
+          )}
           {selectedTask && (
             <Button onClick={onCreate} variant="contained" disabled={!title.trim() || loading}>
               {loading ? <CircularProgress size={20} color="inherit" /> : 'حفظ التغييرات'}

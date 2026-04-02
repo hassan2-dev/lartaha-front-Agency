@@ -59,7 +59,7 @@ export default function HomePage() {
         getTasks(),
         listUploadedObjects('', 1000, false),
       ])
-      setTasks(tasksResult)
+      setTasks(tasksResult.tasks)
       setFilesCount(filesResult.objects?.length ?? 0)
     } catch (error: unknown) {
       const err = error as { message?: string; response?: { data?: { message?: string } } }
