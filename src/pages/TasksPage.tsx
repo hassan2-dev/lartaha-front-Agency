@@ -54,7 +54,6 @@ import {
   type TaskStatus,
   type TaskPriority,
   type User,
-  type TasksResponse,
 } from '../api/tasksApi'
 import { subscribeRealtime } from '../api/realtimeApi'
 import EnhancedTaskForm from '../components/EnhancedTaskForm'
