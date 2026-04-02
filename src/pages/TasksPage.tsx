@@ -4,6 +4,7 @@ import {
   pointerWithin,
   KeyboardSensor,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -104,10 +105,23 @@ export default function TasksPage() {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [overColumn, setOverColumn] = useState<TaskStatus | null>(null)
 
+  // Detect mobile devices
+  const isMobile = useMemo(() => {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      typeof navigator !== 'undefined' ? navigator.userAgent : ''
+    )
+  }, [])
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 5,
+        distance: 10, // Further increased distance for desktop
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 500, // Increased to 500ms delay before drag starts on touch devices
+        tolerance: 5, // Reduced tolerance to be more precise
       },
     }),
     useSensor(KeyboardSensor, {
@@ -620,13 +634,8 @@ export default function TasksPage() {
           </Alert>
         )}
 
-        <DndContext
-          sensors={sensors}
-          collisionDetection={pointerWithin}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragEnd={handleDragEnd}
-        >
+        {isMobile ? (
+          // Mobile view - no drag and drop
           <Box sx={{ display: 'flex', gap: 2, mt: 2, flexWrap: 'wrap' }}>
             {loading && tasks.length === 0 ? (
               <>
@@ -642,18 +651,43 @@ export default function TasksPage() {
               </>
             )}
           </Box>
-          <DragOverlay>
-            {activeTask ? (
-              <Box sx={{ transform: 'rotate(2deg)', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
-                <EnhancedTaskCard
-                  task={activeTask}
-                  onChecklistUpdate={handleChecklistUpdate}
-                  onTaskClick={openEditModal}
-                />
-              </Box>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
+        ) : (
+          // Desktop view - with drag and drop
+          <DndContext
+            sensors={sensors}
+            collisionDetection={pointerWithin}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+          >
+            <Box sx={{ display: 'flex', gap: 2, mt: 2, flexWrap: 'wrap' }}>
+              {loading && tasks.length === 0 ? (
+                <>
+                  <ColumnSkeleton />
+                  <ColumnSkeleton />
+                  <ColumnSkeleton />
+                </>
+              ) : (
+                <>
+                  <DroppableColumn s="todo" />
+                  <DroppableColumn s="in_progress" />
+                  <DroppableColumn s="done" />
+                </>
+              )}
+            </Box>
+            <DragOverlay>
+              {activeTask ? (
+                <Box sx={{ transform: 'rotate(2deg)', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
+                  <EnhancedTaskCard
+                    task={activeTask}
+                    onChecklistUpdate={handleChecklistUpdate}
+                    onTaskClick={openEditModal}
+                  />
+                </Box>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        )}
 
         {/* Infinite Scroll Loading Indicator */}
         {isLoadingMore && (
