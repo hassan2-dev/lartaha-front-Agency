@@ -25,7 +25,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Person as PersonIcon, ArrowForward as ArrowForwardIcon } from '@mui/icons-material'
 import { usePushNotifications } from '../hooks/usePushNotifications'
-import PushNotificationDebug from '../components/PushNotificationDebug'
+// import PushNotificationDebug from '../components/PushNotificationDebug' // Commented out - not used
 
 export default function SettingsPage() {
   const theme = useTheme()

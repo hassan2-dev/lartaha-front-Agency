@@ -19,6 +19,7 @@ export type ListObjectsResult = {
     nextContinuationToken: string | null
     limit: number
     count: number
+    totalFileCount?: number
   }
 }
 
