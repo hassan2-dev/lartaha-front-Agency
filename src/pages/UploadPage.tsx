@@ -1200,6 +1200,7 @@ export default function UploadPage() {
   const [hasMoreFiles, setHasMoreFiles] = useState(true)
   const [nextContinuationToken, setNextContinuationToken] = useState<string | null>(null)
   const [isLoadingMoreFiles, setIsLoadingMoreFiles] = useState(false)
+  const [totalFileCount, setTotalFileCount] = useState<number | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
 
@@ -1885,6 +1886,7 @@ export default function UploadPage() {
       setFilesHere([])
       setHasMoreFiles(true)
       setNextContinuationToken(null)
+      setTotalFileCount(null)
     } else {
       setIsLoadingMoreFiles(true)
     }
@@ -1903,6 +1905,11 @@ export default function UploadPage() {
 
       setHasMoreFiles(res.pagination?.hasMore ?? false)
       setNextContinuationToken(res.pagination?.nextContinuationToken ?? null)
+
+      // Store total file count from first page response
+      if (reset && res.pagination?.totalFileCount !== undefined) {
+        setTotalFileCount(res.pagination.totalFileCount)
+      }
 
       // Fetch privacy settings for all files (only on reset or first load)
       if (reset || (!continuationToken && res.objects)) {
@@ -2320,7 +2327,7 @@ export default function UploadPage() {
                       {filteredAndSortedFiles.length > 0 && (
                         <Box>
                           <Typography variant="body2" sx={{ opacity: 0.75, mb: 1, fontWeight: 600 }}>
-                            الملفات ({filteredAndSortedFiles.length})
+                            الملفات ({totalFileCount !== null ? totalFileCount : filteredAndSortedFiles.length})
                           </Typography>
                           {viewMode === 'list' ? (
                             <Box
