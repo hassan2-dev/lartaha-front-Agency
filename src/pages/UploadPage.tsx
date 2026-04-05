@@ -11,7 +11,6 @@ import {
   Toolbar,
   Typography,
   Card,
-  CardContent,
   Avatar,
   Tooltip,
   Dialog,
@@ -325,75 +324,76 @@ function FileItem({
         },
       }}
     >
-      {isImage && url && hasAccess ? (
-        <Box sx={{ position: 'relative' }}>
-          <ImageThumbnail url={url} filename={filename} fileKey={obj.key} />
-          <ThumbnailTypeBadge fileType={fileType} size={14} />
-          {isRestricted && !hasAccess && (
-            <Box sx={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: 'rgba(0,0,0,0.7)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: 1,
-            }}>
-              <LockIcon sx={{ fontSize: 24, color: 'white' }} />
-            </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
+        {isImage && url && hasAccess ? (
+          <Box sx={{ position: 'relative' }}>
+            <ImageThumbnail url={url} filename={filename} fileKey={obj.key} />
+            <ThumbnailTypeBadge fileType={fileType} size={14} />
+            {isRestricted && !hasAccess && (
+              <Box sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0,0,0,0.7)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 1,
+              }}>
+                <LockIcon sx={{ fontSize: 24, color: 'white' }} />
+              </Box>
+            )}
+          </Box>
+        ) : isVideo && hasAccess ? (
+          <Box sx={{ position: 'relative' }}>
+            <VideoThumbnail url={thumbnailUrl || ''} thumbnailKey={resolvedThumbnailKey} />
+            <ThumbnailTypeBadge fileType={fileType} size={14} />
+            {isRestricted && !hasAccess && (
+              <Box sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0,0,0,0.7)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 1,
+              }}>
+                <LockIcon sx={{ fontSize: 24, color: 'white' }} />
+              </Box>
+            )}
+          </Box>
+        ) : (
+          <Avatar
+            sx={{
+              width: 48,
+              height: 48,
+              backgroundColor: isRestricted ? 'rgba(255,0,0,0.1)' : 'rgba(255,255,255,0.1)',
+              color: 'inherit',
+            }}
+          >
+            {isRestricted ? <LockIcon /> : getFileIcon(fileType)}
+          </Avatar>
+        )}
+        <Box sx={{ minWidth: 0, maxWidth: 300, display: "flex", flexDirection: "column" }}>
+          <Typography variant="body2" sx={{ wordBreak: 'break-word', opacity: 0.92, fontWeight: 500 }}>
+            {filename}
+          </Typography>
+          {obj.size && (
+            <Typography variant="caption" sx={{ opacity: 0.7, textAlign: "start" }}>
+              {fmtBytes(obj.size)}
+            </Typography>
+          )}
+          {isRestricted && (
+            <Typography variant="caption" sx={{ opacity: 0.7, display: 'block', color: 'error.main' }}>
+              محدود الوصول
+            </Typography>
           )}
         </Box>
-      ) : isVideo && hasAccess ? (
-        <Box sx={{ position: 'relative' }}>
-          <VideoThumbnail url={thumbnailUrl || ''} thumbnailKey={resolvedThumbnailKey} />
-          <ThumbnailTypeBadge fileType={fileType} size={14} />
-          {isRestricted && !hasAccess && (
-            <Box sx={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: 'rgba(0,0,0,0.7)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: 1,
-            }}>
-              <LockIcon sx={{ fontSize: 24, color: 'white' }} />
-            </Box>
-          )}
-        </Box>
-      ) : (
-        <Avatar
-          sx={{
-            width: 48,
-            height: 48,
-            backgroundColor: isRestricted ? 'rgba(255,0,0,0.1)' : 'rgba(255,255,255,0.1)',
-            color: 'inherit',
-          }}
-        >
-          {isRestricted ? <LockIcon /> : getFileIcon(fileType)}
-        </Avatar>
-      )}
-
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography variant="body2" sx={{ wordBreak: 'break-word', opacity: 0.92, fontWeight: 500 }}>
-          {filename}
-        </Typography>
-        {obj.size && (
-          <Typography variant="caption" sx={{ opacity: 0.7 }}>
-            {fmtBytes(obj.size)}
-          </Typography>
-        )}
-        {isRestricted && (
-          <Typography variant="caption" sx={{ opacity: 0.7, display: 'block', color: 'error.main' }}>
-            محدود الوصول
-          </Typography>
-        )}
       </Box>
 
       {url && (
@@ -435,7 +435,7 @@ function FileItem({
                 void onDelete(obj.key)
               }}
               disabled={isDeleting}
-              sx={{ borderRadius: 999, minWidth: 'auto', p: 1, color: 'error.main' }}
+              sx={{ borderRadius: 999, minWidth: 'auto', p: 1, color: '#666' }}
             >
               {isDeleting ? <CircularProgress size={20} /> : <DeleteIcon />}
             </Button>
@@ -493,71 +493,73 @@ function FileItemGrid({
         },
       }}
     >
-      <Box sx={{ p: 2, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 120, position: 'relative' }}>
-        {isImage && url && hasAccess ? (
-          <Box sx={{ position: 'relative' }}>
-            <ImageThumbnail url={url} filename={filename} fileKey={obj.key} size={80} />
-            <ThumbnailTypeBadge fileType={fileType} size={16} />
-            {isRestricted && !hasAccess && (
-              <Box sx={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                backgroundColor: 'rgba(0,0,0,0.7)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: 1,
-              }}>
-                <LockIcon sx={{ fontSize: 24, color: 'white' }} />
-              </Box>
-            )}
+      <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', minHeight: 120, position: 'relative' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+          {isImage && url && hasAccess ? (
+            <Box sx={{ position: 'relative' }}>
+              <ImageThumbnail url={url} filename={filename} fileKey={obj.key} size={60} />
+              <ThumbnailTypeBadge fileType={fileType} size={14} />
+              {isRestricted && !hasAccess && (
+                <Box sx={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'rgba(0,0,0,0.7)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 1,
+                }}>
+                  <LockIcon sx={{ fontSize: 20, color: 'white' }} />
+                </Box>
+              )}
+            </Box>
+          ) : isVideo && hasAccess ? (
+            <Box sx={{ position: 'relative' }}>
+              <VideoThumbnail url={thumbnailUrl || ''} thumbnailKey={resolvedThumbnailKey} size={60} />
+              <ThumbnailTypeBadge fileType={fileType} size={14} />
+              {isRestricted && !hasAccess && (
+                <Box sx={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'rgba(0,0,0,0.7)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 1,
+                }}>
+                  <LockIcon sx={{ fontSize: 20, color: 'white' }} />
+                </Box>
+              )}
+            </Box>
+          ) : (
+            <Avatar
+              sx={{
+                width: 48,
+                height: 48,
+                backgroundColor: isRestricted ? 'rgba(255,0,0,0.1)' : 'rgba(255,255,255,0.1)',
+                color: 'inherit',
+              }}
+            >
+              {isRestricted ? <LockIcon /> : getFileIcon(fileType)}
+            </Avatar>
+          )}
+          <Box sx={{ minWidth: 0, maxWidth: 120, flex: 1 }}>
+            <Typography variant="body2" sx={{ wordBreak: 'break-word', opacity: 0.92, fontWeight: 500, fontSize: '0.75rem', lineHeight: 1.2 }}>
+              {filename}
+            </Typography>
           </Box>
-        ) : isVideo && hasAccess ? (
-          <Box sx={{ position: 'relative' }}>
-            <VideoThumbnail url={thumbnailUrl || ''} thumbnailKey={resolvedThumbnailKey} size={80} />
-            <ThumbnailTypeBadge fileType={fileType} size={16} />
-            {isRestricted && !hasAccess && (
-              <Box sx={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                backgroundColor: 'rgba(0,0,0,0.7)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: 1,
-              }}>
-                <LockIcon sx={{ fontSize: 24, color: 'white' }} />
-              </Box>
-            )}
-          </Box>
-        ) : (
-          <Avatar
-            sx={{
-              width: 64,
-              height: 64,
-              backgroundColor: isRestricted ? 'rgba(255,0,0,0.1)' : 'rgba(255,255,255,0.1)',
-              color: 'inherit',
-            }}
-          >
-            {isRestricted ? <LockIcon /> : getFileIcon(fileType)}
-          </Avatar>
-        )}
-      </Box>
-
-      <CardContent sx={{ p: 2, pt: 0, flex: 1 }}>
-
+        </Box>
         {obj.size && (
           <Typography
             variant="caption"
             sx={{
               opacity: 0.7,
-              display: 'block',
               textAlign: 'center'
             }}
           >
@@ -569,7 +571,6 @@ function FileItemGrid({
             variant="caption"
             sx={{
               opacity: 0.7,
-              display: 'block',
               textAlign: 'center',
               color: 'error.main'
             }}
@@ -577,7 +578,7 @@ function FileItemGrid({
             محدود الوصول
           </Typography>
         )}
-      </CardContent>
+      </Box>
 
       {url && (
         <Box sx={{ p: 2, pt: 0, display: 'flex', justifyContent: 'center' }}>
@@ -618,7 +619,7 @@ function FileItemGrid({
                 void onDelete(obj.key)
               }}
               disabled={isDeleting}
-              sx={{ borderRadius: 999, minWidth: 'auto', p: 1, color: 'error.main' }}
+              sx={{ borderRadius: 999, minWidth: 'auto', p: 1, color: '#666' }}
             >
               {isDeleting ? <CircularProgress size={20} /> : <DeleteIcon />}
             </Button>
@@ -890,7 +891,7 @@ function FolderItem({
         sx={{
           display: 'flex',
           alignItems: 'center',
-          gap: 2,
+          gap: 1,
           flex: 1,
           cursor: 'pointer'
         }}
@@ -905,12 +906,11 @@ function FolderItem({
         >
           <FolderIcon />
         </Avatar>
-
-        <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Box sx={{ minWidth: 0, maxWidth: 300, justifyContent: "center", display: "flex", flexDirection: "column" }}>
           <Typography variant="body2" sx={{ wordBreak: 'break-word', opacity: 0.92, fontWeight: 500 }}>
             {name}
           </Typography>
-          <Typography variant="caption" sx={{ opacity: 0.7 }}>
+          <Typography variant="caption" sx={{ opacity: 0.7, textAlign: "start" }}>
             مجلد
           </Typography>
         </Box>
@@ -939,7 +939,7 @@ function FolderItem({
               onDelete(folderPath)
             }}
             disabled={isDeleting}
-            sx={{ borderRadius: 999, minWidth: 'auto', p: 1, color: 'error.main' }}
+            sx={{ borderRadius: 999, minWidth: 'auto', p: 1, color: '#666' }}
           >
             {isDeleting ? <CircularProgress size={20} /> : <DeleteIcon />}
           </Button>
@@ -988,44 +988,43 @@ function FolderItemGrid({
           cursor: 'pointer'
         }}
       >
-        <Box sx={{ p: 2, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 120 }}>
-          <Avatar
-            sx={{
-              width: 64,
-              height: 64,
-              backgroundColor: 'rgba(255,255,255,0.1)',
-              color: 'inherit',
-            }}
-          >
-            <FolderIcon />
-          </Avatar>
+        <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', minHeight: 120 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+            <Avatar
+              sx={{
+                width: 48,
+                height: 48,
+                backgroundColor: 'rgba(255,255,255,0.1)',
+                color: 'inherit',
+              }}
+            >
+              <FolderIcon />
+            </Avatar>
+            <Box sx={{ minWidth: 0, maxWidth: 120, flex: 1 }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  wordBreak: 'break-word',
+                  opacity: 0.92,
+                  fontWeight: 500,
+                  fontSize: '0.75rem',
+                  lineHeight: 1.2
+                }}
+              >
+                {name}
+              </Typography>
+              <Typography
+                variant="caption"
+                sx={{
+                  opacity: 0.7,
+                  display: 'block'
+                }}
+              >
+                مجلد
+              </Typography>
+            </Box>
+          </Box>
         </Box>
-
-        <CardContent sx={{ p: 2, pt: 0, flex: 1 }}>
-          <Typography
-            variant="body2"
-            sx={{
-              wordBreak: 'break-word',
-              opacity: 0.92,
-              fontWeight: 500,
-              fontSize: '0.875rem',
-              textAlign: 'center',
-              mb: 1
-            }}
-          >
-            {name}
-          </Typography>
-          <Typography
-            variant="caption"
-            sx={{
-              opacity: 0.7,
-              display: 'block',
-              textAlign: 'center'
-            }}
-          >
-            مجلد
-          </Typography>
-        </CardContent>
       </Box>
 
       <Box sx={{ p: 2, pt: 0, display: 'flex', gap: 0.5, justifyContent: 'center' }}>
@@ -1051,7 +1050,7 @@ function FolderItemGrid({
               onDelete(folderPath)
             }}
             disabled={isDeleting}
-            sx={{ borderRadius: 999, minWidth: 'auto', p: 1, color: 'error.main' }}
+            sx={{ borderRadius: 999, minWidth: 'auto', p: 1, color: '#666' }}
           >
             {isDeleting ? <CircularProgress size={20} /> : <DeleteIcon />}
           </Button>

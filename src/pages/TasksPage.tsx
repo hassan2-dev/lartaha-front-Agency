@@ -20,7 +20,6 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import {
-  Alert,
   AppBar,
   Box,
   Button,
@@ -60,6 +59,7 @@ import EnhancedTaskForm from '../components/EnhancedTaskForm'
 import EnhancedTaskCard from '../components/EnhancedTaskCard'
 import SortableTaskCard from '../components/SortableTaskCard'
 import { ColumnSkeleton } from '../components/SkeletonLoaders'
+import Toast from '../components/Toast'
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
   todo: 'قيد الانتظار',
@@ -78,6 +78,7 @@ export default function TasksPage() {
   const [workspaceUsers, setWorkspaceUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showToast, setShowToast] = useState(false)
   const [hasMore, setHasMore] = useState(true)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
@@ -314,6 +315,7 @@ export default function TasksPage() {
     } catch (e: unknown) {
       const err = e as { message?: string; response?: { data?: { message?: string } } }
       setError(err.response?.data?.message ?? err.message ?? (isEditing ? 'فشل تحديث المهمة' : 'فشل إنشاء المهمة'))
+      setShowToast(true)
     } finally {
       setLoading(false)
     }
@@ -333,13 +335,15 @@ export default function TasksPage() {
 
   // Permission helper function
   const canEditTask = (task: Task) => {
-    return user?.isAdmin || task.createdBy?.id === user?.id
+    const isAssignee = task.assignees?.some(a => a.userId === user?.id)
+    return user?.isAdmin || task.createdBy?.id === user?.id || isAssignee
   }
 
   const openEditModal = (task: Task) => {
     // Check if user has permission to edit this task
     if (!canEditTask(task)) {
-      setError('لا يمكنك تعديل هذه المهمة. فقط المسؤول أو منشئ المهمة يمكنه التعديل.')
+      setError('لا يمكنك تعديل هذه المهمة. فقط المسؤول أو منشئ المهمة أو الأعضاء المعينين يمكنهم التعديل.')
+      setShowToast(true)
       return
     }
 
@@ -367,7 +371,8 @@ export default function TasksPage() {
 
     // Check if user has permission to delete this task
     if (!canEditTask(selectedTask)) {
-      setError('لا يمكنك حذف هذه المهمة. فقط المسؤول أو منشئ المهمة يمكنه الحذف.')
+      setError('لا يمكنك حذف هذه المهمة. فقط المسؤول أو منشئ المهمة أو الأعضاء المعينين يمكنهم الحذف.')
+      setShowToast(true)
       return
     }
 
@@ -383,6 +388,7 @@ export default function TasksPage() {
     } catch (e: unknown) {
       const err = e as { message?: string; response?: { data?: { message?: string } } }
       setError(err.response?.data?.message ?? err.message ?? 'فشل حذف المهمة')
+      setShowToast(true)
     } finally {
       setLoading(false)
     }
@@ -627,12 +633,6 @@ export default function TasksPage() {
         sx={{ py: 3, maxHeight: 'calc(100vh - 120px)', overflowY: 'auto' }}
         onScroll={handleScroll}
       >
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
-
         {isMobile ? (
           // Mobile view - no drag and drop
           <Box sx={{ display: 'flex', gap: 2, mt: 2, flexWrap: 'wrap' }}>
@@ -846,6 +846,18 @@ export default function TasksPage() {
           )}
         </DialogActions>
       </Dialog>
+
+      {/* Toast Notification */}
+      {showToast && error && (
+        <Toast
+          message={error}
+          type="error"
+          onClose={() => {
+            setShowToast(false)
+            setError(null)
+          }}
+        />
+      )}
     </Box>
   )
 }

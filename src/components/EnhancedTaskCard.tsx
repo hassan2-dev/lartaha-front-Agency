@@ -58,7 +58,8 @@ export default function EnhancedTaskCard({
 
   // Permission helper function
   const canEditTask = () => {
-    return user?.isAdmin || task.createdBy?.id === user?.id
+    const isAssignee = task.assignees?.some(a => a.userId === user?.id)
+    return user?.isAdmin || task.createdBy?.id === user?.id || isAssignee
   }
 
   const handleChecklistToggle = (itemId: string, completed: boolean) => {
@@ -85,6 +86,7 @@ export default function EnhancedTaskCard({
 
   const completedChecklistItems = task.checklists?.filter(item => item.completed).length || 0
   const totalChecklistItems = task.checklists?.length || 0
+  const hasAccess = canEditTask()
 
   return (
     <Paper
@@ -96,6 +98,7 @@ export default function EnhancedTaskCard({
         border: task.parentId ? '1px solid rgba(25, 118, 210, 0.3)' : '1px solid rgba(255,255,255,0.1)',
         transition: 'all 0.2s ease-in-out',
         cursor: 'pointer',
+        opacity: hasAccess ? 1 : 0.6,
         '&:hover': {
           background: 'rgba(255,255,255,0.04)',
           transform: 'translateY(-2px)',
@@ -148,7 +151,7 @@ export default function EnhancedTaskCard({
           <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
             المسند إليهم:
           </Typography>
-          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
             {task.assignees.map((assignment) => (
               <Chip
                 key={assignment.user.id}

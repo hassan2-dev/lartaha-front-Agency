@@ -349,7 +349,7 @@ export function useChat() {
 
       if (composerFiles.length > 0) {
         const formData = new FormData()
-        formData.append('batchName', 'uploads/chat')
+        formData.append('batchName', 'uploads/.chat-files')
         composerFiles.forEach((file) => {
           formData.append('files', file, file.name)
         })
