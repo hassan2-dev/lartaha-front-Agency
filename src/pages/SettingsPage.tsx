@@ -85,7 +85,7 @@ export default function SettingsPage() {
         </Typography>
 
         {/* Debug Info - Temporary */}
-        <PushNotificationDebug />
+        {/* <PushNotificationDebug /> */}
 
         <List sx={{ py: 0 }}>
           <ListItem sx={{ px: 0 }}>
