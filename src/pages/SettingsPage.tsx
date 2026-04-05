@@ -24,6 +24,8 @@ import { useTheme } from '@mui/material/styles'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Person as PersonIcon, ArrowForward as ArrowForwardIcon } from '@mui/icons-material'
+import { usePushNotifications } from '../hooks/usePushNotifications'
+import PushNotificationDebug from '../components/PushNotificationDebug'
 
 export default function SettingsPage() {
   const theme = useTheme()
@@ -34,12 +36,29 @@ export default function SettingsPage() {
   console.log('👤 User email:', user?.email)
   console.log('👤 User avatar:', user?.avatar)
 
-  const [notifications, setNotifications] = useState(true)
-  const [autoUpload, setAutoUpload] = useState(true)
+  const { isSubscribed, subscribe, unsubscribe, isSupported } = usePushNotifications()
+  console.log('🔔 [SettingsPage] Push notification state:', { isSubscribed, isSupported })
+  console.log('🔔 [SettingsPage] Switch will be disabled:', !isSupported)
+  const [successMessage, setSuccessMessage] = useState('')
   const [darkMode, setDarkMode] = useState(theme.palette.mode === 'dark')
+  const [autoUpload, setAutoUpload] = useState(true)
   const [language, setLanguage] = useState('ar')
   const [maxFileSize, setMaxFileSize] = useState('100')
-  const [successMessage, setSuccessMessage] = useState('')
+
+  const handlePushToggle = async () => {
+    if (isSubscribed) {
+      const success = await unsubscribe()
+      if (success) {
+        setSuccessMessage('تم إلغاء الاشتراك في الإشعارات بنجاح')
+      }
+    } else {
+      const success = await subscribe()
+      if (success) {
+        setSuccessMessage('تم الاشتراك في الإشعارات بنجاح')
+      }
+    }
+    setTimeout(() => setSuccessMessage(''), 3000)
+  }
 
   const handleSaveSettings = () => {
     // In a real app, this would save to backend/localStorage
@@ -65,6 +84,9 @@ export default function SettingsPage() {
           الإعدادات العامة
         </Typography>
 
+        {/* Debug Info - Temporary */}
+        <PushNotificationDebug />
+
         <List sx={{ py: 0 }}>
           <ListItem sx={{ px: 0 }}>
             <ListItemText
@@ -84,13 +106,14 @@ export default function SettingsPage() {
 
           <ListItem sx={{ px: 0 }}>
             <ListItemText
-              primary="الإشعارات"
-              secondary="تلقي إشعارات عند اكتمال العمليات"
+              primary="إشعارات المتصفح والجوّال (Push)"
+              secondary={isSupported ? "تلقي إشعارات فورية عند وصول رسائل جديدة" : "هذا المتصفح لا يدعم الإشعارات الفورية"}
             />
             <ListItemSecondaryAction>
               <Switch
-                checked={notifications}
-                onChange={(e) => setNotifications(e.target.checked)}
+                checked={isSubscribed}
+                onChange={handlePushToggle}
+                disabled={!isSupported}
                 color="primary"
               />
             </ListItemSecondaryAction>

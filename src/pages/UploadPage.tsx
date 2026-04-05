@@ -135,16 +135,16 @@ function filenameFromKey(key: string) {
 }
 
 // Thumbnail preview component for images
-function ImageThumbnail({ url, filename, key, size = 60 }: { url: string; filename: string; key: string; size?: number }) {
+function ImageThumbnail({ url, filename, fileKey, size = 60 }: { url: string; filename: string; fileKey: string; size?: number }) {
   const [imgError, setImgError] = useState(false)
   const [imgUrl, setImgUrl] = useState(url)
 
   // If public URL fails, try the image proxy API as fallback
   const handleImageError = () => {
-    if (!imgError && key) {
+    if (!imgError && fileKey) {
       // Try using image proxy API as image source with the full key
       const baseUrl = API_ENV.apiBaseUrl?.trim() || ''
-      const proxyUrl = `${baseUrl}/api/image/${encodeURIComponent(key)}`
+      const proxyUrl = `${baseUrl}/api/image/${encodeURIComponent(fileKey)}`
       setImgUrl(proxyUrl)
       setImgError(true)
     }
@@ -327,7 +327,7 @@ function FileItem({
     >
       {isImage && url && hasAccess ? (
         <Box sx={{ position: 'relative' }}>
-          <ImageThumbnail url={url} filename={filename} key={obj.key} />
+          <ImageThumbnail url={url} filename={filename} fileKey={obj.key} />
           <ThumbnailTypeBadge fileType={fileType} size={14} />
           {isRestricted && !hasAccess && (
             <Box sx={{
@@ -496,7 +496,7 @@ function FileItemGrid({
       <Box sx={{ p: 2, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 120, position: 'relative' }}>
         {isImage && url && hasAccess ? (
           <Box sx={{ position: 'relative' }}>
-            <ImageThumbnail url={url} filename={filename} key={obj.key} size={80} />
+            <ImageThumbnail url={url} filename={filename} fileKey={obj.key} size={80} />
             <ThumbnailTypeBadge fileType={fileType} size={16} />
             {isRestricted && !hasAccess && (
               <Box sx={{
@@ -681,7 +681,7 @@ function TrashFileItem({
       {/* Thumbnail or icon */}
       {isImage && thumbnailUrl ? (
         <Box sx={{ position: 'relative' }}>
-          <ImageThumbnail url={thumbnailUrl} filename={filename} key={file.originalKey} />
+          <ImageThumbnail url={thumbnailUrl} filename={filename} fileKey={file.originalKey} />
           <ThumbnailTypeBadge fileType={fileType} size={14} />
         </Box>
       ) : isVideo && thumbnailUrl ? (
@@ -1626,10 +1626,9 @@ export default function UploadPage() {
         throw new Error('Missing API base URL')
       }
 
-      // Construct the full folder path for the API
-      const fullFolderPath = currentPath ? `${currentPath}/${folderPath}` : folderPath
+      const normalizedFolderPath = String(folderPath || '').replace(/^\/+|\/+$/g, '')
 
-      const downloadUrl = `${baseUrl}/api/download/folder?path=${encodeURIComponent(fullFolderPath)}&token=${encodeURIComponent(token)}`
+      const downloadUrl = `${baseUrl}/api/download/folder?path=${encodeURIComponent(normalizedFolderPath)}&token=${encodeURIComponent(token)}`
 
       // Create a temporary link and trigger download
       const a = document.createElement('a')
@@ -1856,7 +1855,7 @@ export default function UploadPage() {
     return null
   }
 
-  const fetchExplorer = useCallback(async (reset: boolean = false) => {
+  const fetchExplorer = useCallback(async (reset: boolean = true, continuationTokenOverride?: string | null) => {
     if (reset) {
       setLoadingExplorer(true)
       setFilesHere([])
@@ -1867,8 +1866,8 @@ export default function UploadPage() {
     }
 
     try {
-      const limit = reset ? 50 : 50
-      const continuationToken = reset ? undefined : (nextContinuationToken || undefined)
+      const limit = 50
+      const continuationToken = reset ? undefined : (continuationTokenOverride || undefined)
       const res = await listUploadedObjects(explorerPrefix, limit, true, continuationToken)
 
       if (reset) {
@@ -1882,7 +1881,7 @@ export default function UploadPage() {
       setNextContinuationToken(res.pagination?.nextContinuationToken ?? null)
 
       // Fetch privacy settings for all files (only on reset or first load)
-      if (reset || (!nextContinuationToken && res.objects)) {
+      if (reset || (!continuationToken && res.objects)) {
         const fileKeys = (res.objects ?? []).map(obj => obj.key)
         if (fileKeys.length > 0) {
           try {
@@ -1905,13 +1904,13 @@ export default function UploadPage() {
         setIsLoadingMoreFiles(false)
       }
     }
-  }, [explorerPrefix, nextContinuationToken])
+  }, [explorerPrefix])
 
   const loadMoreFiles = useCallback(async () => {
     if (!hasMoreFiles || isLoadingMoreFiles || loadingExplorer) return
 
-    await fetchExplorer(false)
-  }, [hasMoreFiles, isLoadingMoreFiles, loadingExplorer, fetchExplorer])
+    await fetchExplorer(false, nextContinuationToken)
+  }, [hasMoreFiles, isLoadingMoreFiles, loadingExplorer, fetchExplorer, nextContinuationToken])
 
   // Infinite scroll handler
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {

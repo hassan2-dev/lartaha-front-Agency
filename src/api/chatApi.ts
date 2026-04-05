@@ -35,6 +35,7 @@ export interface ChatMessage {
   sticker?: string | null
   attachments?: ChatAttachment[]
   mentions?: ChatMention[]
+  readBy?: string[] // Array of user IDs who have read this message
   createdAt: string
 }
 

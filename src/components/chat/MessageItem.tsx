@@ -31,6 +31,85 @@ interface MessageItemProps {
   usersById: Map<string, ChatUser>
   onOpenDirectConversation: (memberId: string) => void
   getMentionHref: (mention: ChatMention) => string | null
+  currentUserId?: string
+  conversationParticipantIds?: string[]
+}
+
+function getReadStatusInfo(
+  message: ChatMessage,
+  currentUserId: string,
+  conversationParticipantIds: string[]
+) {
+  if (!message.readBy || !currentUserId) return null
+
+  // Get other participants (excluding current user and sender)
+  const otherParticipants = conversationParticipantIds.filter(
+    id => id !== currentUserId && id !== message.senderId
+  )
+
+  // Count how many other participants have read the message
+  const readCount = otherParticipants.filter(id => message.readBy?.includes(id)).length
+  const totalCount = otherParticipants.length
+
+  if (totalCount === 0) return null
+
+  return (
+    <div className="flex items-center gap-1">
+      {readCount === 0 ? (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="opacity-50">
+          <path
+            d="M18 7L8 17L3 12"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ) : readCount === totalCount ? (
+        <div className="flex items-center">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M18 7L8 17L3 12"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="-ml-2">
+            <path
+              d="M18 7L8 17L3 12"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
+      ) : (
+        <div className="flex items-center">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M18 7L8 17L3 12"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="-ml-2 opacity-50">
+            <path
+              d="M18 7L8 17L3 12"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function MessageItem({
@@ -41,6 +120,8 @@ export default function MessageItem({
   usersById,
   onOpenDirectConversation,
   getMentionHref,
+  currentUserId,
+  conversationParticipantIds = [],
 }: MessageItemProps) {
   const linkPreviews = extractLinks(message.text || '')
 
@@ -228,6 +309,12 @@ export default function MessageItem({
               minute: '2-digit',
             })}
           </span>
+
+          {isMine && currentUserId && conversationParticipantIds.length > 1 && (
+            <div className="flex items-center gap-1 mt-2">
+              {getReadStatusInfo(message, currentUserId, conversationParticipantIds)}
+            </div>
+          )}
         </div>
 
 

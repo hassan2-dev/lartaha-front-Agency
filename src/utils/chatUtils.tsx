@@ -10,7 +10,7 @@ export function linkifyText(text: string) {
         </a>
       )
     }
-    return <span key={`${part}_${idx}`}>{part}</span>
+    return <span key={`${part}_${idx}`} style={{ whiteSpace: 'pre-wrap' }}>{part}</span>
   })
 }
 

@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Push Notification Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .info { background-color: #d1ecf1; color: #0c5460; }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .primary { background-color: #007bff; color: white; }
+        .secondary { background-color: #6c757d; color: white; }
+        .danger { background-color: #dc3545; color: white; }
+        .user-info {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Push Notification Test for Admin Users</h1>
+        
+        <div class="user-info" id="userInfo">
+            <h3>Current User Info</h3>
+            <div id="userDetails">Loading...</div>
+        </div>
+        
+        <div class="test-section">
+            <h3>Browser Support & Permissions</h3>
+            <button onclick="checkSupport()" class="primary">Check Support</button>
+            <button onclick="checkPermission()" class="primary">Check Permission</button>
+            <button onclick="requestPermission()" class="primary">Request Permission</button>
+        </div>
+        
+        <div class="test-section">
+            <h3>Service Worker</h3>
+            <button onclick="checkServiceWorker()" class="primary">Check Service Worker</button>
+            <button onclick="registerServiceWorker()" class="primary">Register Service Worker</button>
+        </div>
+        
+        <div class="test-section">
+            <h3>Subscription Management</h3>
+            <button onclick="checkSubscription()" class="primary">Check Subscription</button>
+            <button onclick="testSubscribe()" class="primary">Test Subscribe</button>
+            <button onclick="testUnsubscribe()" class="secondary">Test Unsubscribe</button>
+        </div>
+        
+        <div class="test-section">
+            <h3>Test Notifications</h3>
+            <button onclick="testBrowserNotification()" class="primary">Test Browser Notification</button>
+            <button onclick="testPushNotification()" class="primary">Test Push Notification</button>
+        </div>
+        
+        <div class="test-section">
+            <h3>Debug</h3>
+            <button onclick="runFullTest()" class="primary">Run Full Test</button>
+            <button onclick="clearLogs()" class="danger">Clear Logs</button>
+        </div>
+        
+        <div id="status-container"></div>
+    </div>
+    
+    <script>
+        const VAPID_PUBLIC_KEY = 'BAgC3zJfuk84d1KrCBH84um-KfM5UjEm1Yj_VIH4u5ytmQ5y9UHrzI6W2QGzPmpcFgKVk9MM4CFQwBlgmg3_84';
+        const API_BASE = 'http://localhost:3030';
+        
+        function log(message, type = 'info') {
+            const container = document.getElementById('status-container');
+            const div = document.createElement('div');
+            div.className = `status ${type}`;
+            div.innerHTML = `<strong>[${new Date().toLocaleTimeString()}]</strong> ${message}`;
+            container.appendChild(div);
+            console.log(`[${type.toUpperCase()}] ${message}`);
+            // Auto scroll to bottom
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        function urlBase64ToUint8Array(base64String) {
+            const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+            const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+            const rawData = window.atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) {
+                outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray;
+        }
+        
+        async function getUserInfo() {
+            try {
+                const token = localStorage.getItem('token');
+                if (!token) {
+                    log('No authentication token found', 'error');
+                    return;
+                }
+                
+                const response = await fetch(`${API_BASE}/api/auth/me`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    const user = data.user;
+                    document.getElementById('userDetails').innerHTML = `
+                        <strong>ID:</strong> ${user.id}<br>
+                        <strong>Name:</strong> ${user.name}<br>
+                        <strong>Email:</strong> ${user.email}<br>
+                        <strong>Username:</strong> ${user.username}<br>
+                        <strong>Is Admin:</strong> <span style="color: ${user.isAdmin ? 'green' : 'red'}">${user.isAdmin}</span><br>
+                        <strong>Workspace ID:</strong> ${user.workspaceId || 'N/A'}
+                    `;
+                    log(`User loaded: ${user.name} (Admin: ${user.isAdmin})`, 'success');
+                } else {
+                    log(`Failed to load user info: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                log(`Error loading user info: ${error.message}`, 'error');
+            }
+        }
+        
+        async function checkSupport() {
+            const supported = 'serviceWorker' in navigator && 'PushManager' in window;
+            log(`Push notifications supported: ${supported}`, supported ? 'success' : 'error');
+        }
+        
+        async function checkPermission() {
+            const permission = Notification.permission;
+            log(`Current permission: ${permission}`, permission === 'granted' ? 'success' : 'info');
+        }
+        
+        async function requestPermission() {
+            try {
+                const permission = await Notification.requestPermission();
+                log(`Permission requested: ${permission}`, permission === 'granted' ? 'success' : 'error');
+            } catch (error) {
+                log(`Error requesting permission: ${error.message}`, 'error');
+            }
+        }
+        
+        async function checkServiceWorker() {
+            try {
+                if ('serviceWorker' in navigator) {
+                    const registration = await navigator.serviceWorker.getRegistration();
+                    if (registration) {
+                        log(`Service worker registered: ${registration.scope}`, 'success');
+                        log(`Service worker state: ${registration.active?.state}`, 'info');
+                    } else {
+                        log('No service worker registration found', 'error');
+                    }
+                } else {
+                    log('Service workers not supported', 'error');
+                }
+            } catch (error) {
+                log(`Error checking service worker: ${error.message}`, 'error');
+            }
+        }
+        
+        async function registerServiceWorker() {
+            try {
+                const registration = await navigator.serviceWorker.register('/sw.js');
+                log(`Service worker registered: ${registration.scope}`, 'success');
+            } catch (error) {
+                log(`Error registering service worker: ${error.message}`, 'error');
+            }
+        }
+        
+        async function checkSubscription() {
+            try {
+                const registration = await navigator.serviceWorker.ready;
+                const subscription = await registration.pushManager.getSubscription();
+                if (subscription) {
+                    log(`Subscription found: ${subscription.endpoint.substring(0, 50)}...`, 'success');
+                    log(`Keys: p256dh=${subscription.keys.p256dh.substring(0, 20)}...`, 'info');
+                } else {
+                    log('No subscription found', 'info');
+                }
+            } catch (error) {
+                log(`Error checking subscription: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testSubscribe() {
+            try {
+                log('Starting subscription test...', 'info');
+                
+                // Check permission first
+                if (Notification.permission !== 'granted') {
+                    log('Permission not granted, requesting...', 'info');
+                    const permission = await Notification.requestPermission();
+                    if (permission !== 'granted') {
+                        log('Permission denied', 'error');
+                        return;
+                    }
+                }
+                
+                const registration = await navigator.serviceWorker.ready;
+                const subscription = await registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+                });
+                
+                log(`Subscription created: ${subscription.endpoint.substring(0, 50)}...`, 'success');
+                
+                // Send to server
+                const token = localStorage.getItem('token');
+                const response = await fetch(`${API_BASE}/api/push/subscribe`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(subscription.toJSON())
+                });
+                
+                if (response.ok) {
+                    log('Subscription sent to server successfully', 'success');
+                } else {
+                    const errorText = await response.text();
+                    log(`Failed to send subscription to server: ${response.status} - ${errorText}`, 'error');
+                }
+            } catch (error) {
+                log(`Error subscribing: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testUnsubscribe() {
+            try {
+                const registration = await navigator.serviceWorker.ready;
+                const subscription = await registration.pushManager.getSubscription();
+                
+                if (subscription) {
+                    await subscription.unsubscribe();
+                    log('Unsubscribed successfully', 'success');
+                    
+                    // Remove from server
+                    const token = localStorage.getItem('token');
+                    const response = await fetch(`${API_BASE}/api/push/unsubscribe`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({ endpoint: subscription.endpoint })
+                    });
+                    
+                    if (response.ok) {
+                        log('Subscription removed from server', 'success');
+                    } else {
+                        log(`Failed to remove subscription from server: ${response.status}`, 'error');
+                    }
+                } else {
+                    log('No subscription to unsubscribe', 'info');
+                }
+            } catch (error) {
+                log(`Error unsubscribing: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testBrowserNotification() {
+            try {
+                if (Notification.permission !== 'granted') {
+                    log('Permission not granted for browser notifications', 'error');
+                    return;
+                }
+                
+                await new Notification('Test Browser Notification', {
+                    body: 'This is a test browser notification',
+                    icon: '/favicon.svg',
+                    badge: '/favicon.svg',
+                    tag: 'test-browser'
+                });
+                log('Browser notification sent successfully', 'success');
+            } catch (error) {
+                log(`Error sending browser notification: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testPushNotification() {
+            try {
+                const registration = await navigator.serviceWorker.ready;
+                await registration.showNotification('Test Push Notification', {
+                    body: 'This is a test push notification via service worker',
+                    icon: '/favicon.svg',
+                    badge: '/favicon.svg',
+                    tag: 'test-push'
+                });
+                log('Push notification sent successfully', 'success');
+            } catch (error) {
+                log(`Error sending push notification: ${error.message}`, 'error');
+            }
+        }
+        
+        async function runFullTest() {
+            log('🚀 Starting full test sequence...', 'info');
+            await getUserInfo();
+            await checkSupport();
+            await checkPermission();
+            await checkServiceWorker();
+            await checkSubscription();
+            log('✅ Full test completed', 'success');
+        }
+        
+        function clearLogs() {
+            document.getElementById('status-container').innerHTML = '';
+            log('Logs cleared', 'info');
+        }
+        
+        // Auto-run on load
+        window.addEventListener('load', () => {
+            getUserInfo();
+            checkSupport();
+            checkPermission();
+            checkServiceWorker();
+        });
+    </script>
+</body>
+</html>

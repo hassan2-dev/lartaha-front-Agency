@@ -19,3 +19,23 @@ createRoot(document.getElementById('root')!).render(
     </AppThemeProvider>
   </StrictMode>,
 )
+
+// Register Service Worker for PWA Push Notifications
+if ('serviceWorker' in navigator) {
+  console.log('🔔 [main.tsx] Service Worker API available, registering on load...');
+  window.addEventListener('load', () => {
+    console.log('🔔 [main.tsx] Page loaded, attempting to register service worker...');
+    navigator.serviceWorker
+      .register('/sw.js')
+      .then((registration) => {
+        console.log('🔔 [main.tsx] SW registered successfully: ', registration);
+        console.log('🔔 [main.tsx] SW scope: ', registration.scope);
+        console.log('🔔 [main.tsx] SW active state: ', registration.active?.state);
+      })
+      .catch((registrationError) => {
+        console.error('🔔 [main.tsx] SW registration failed: ', registrationError);
+      });
+  });
+} else {
+  console.error('🔔 [main.tsx] Service Worker API not available in this browser');
+}

@@ -31,6 +31,7 @@ export function useChat() {
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [unreadMessageCounts, setUnreadMessageCounts] = useState<Map<string, number>>(new Map())
 
   const [composerText, setComposerText] = useState('')
   const [composerMentions, setComposerMentions] = useState<ChatMention[]>([])
@@ -101,6 +102,53 @@ export function useChat() {
       })
       .slice(0, 6)
   }, [atMentionQuery, memberList])
+
+  // Calculate unread message counts and sort conversations
+  const sortedConversations = useMemo(() => {
+    const counts = new Map<string, number>()
+
+    conversations.forEach(conv => {
+      let unreadCount = 0
+
+      // For direct conversations, check if there are unread messages
+      if (conv.type === 'direct' && conv.participantIds.includes(user?.id || '')) {
+        // This is a simplified logic - in real implementation, you'd track which messages
+        // have been read by the current user
+        const otherParticipantId = conv.participantIds.find(id => id !== user?.id)
+        if (otherParticipantId && conv.lastMessageAt) {
+          // For now, we'll mark conversations with recent messages as unread
+          // In a real app, you'd have proper read tracking
+          const lastMessageTime = new Date(conv.lastMessageAt)
+          const now = new Date()
+          const hoursDiff = (now.getTime() - lastMessageTime.getTime()) / (1000 * 60 * 60)
+
+          // Mark as unread if message is recent and conversation is not selected
+          if (hoursDiff < 24 && conv.id !== selectedConversationId) {
+            unreadCount = 1
+          }
+        }
+      }
+
+      counts.set(conv.id, unreadCount)
+    })
+
+    setUnreadMessageCounts(counts)
+
+    // Sort conversations: unread first, then by last message time
+    return [...conversations].sort((a, b) => {
+      const aUnread = counts.get(a.id) || 0
+      const bUnread = counts.get(b.id) || 0
+
+      if (aUnread !== bUnread) {
+        return bUnread - aUnread // More unread messages first
+      }
+
+      // If same unread count, sort by last message time
+      const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0
+      const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0
+      return bTime - aTime
+    })
+  }, [conversations, selectedConversationId, user?.id])
 
   // Data fetching
   const refreshBootstrap = useCallback(async () => {
@@ -338,12 +386,14 @@ export function useChat() {
     fileInputRef,
     bootstrap,
     conversations,
+    sortedConversations,
     selectedConversationId,
     messages,
     loadingConversations,
     loadingMessages,
     sending,
     error,
+    unreadMessageCounts,
     composerText,
     composerMentions,
     composerFiles,
