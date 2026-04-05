@@ -1612,7 +1612,7 @@ export default function UploadPage() {
     }
   }
 
-  // Folder download function
+  // Folder download function with polling for prebuilt ZIP
   async function handleDownloadFolder(folderPath: string) {
     try {
       const token = localStorage.getItem('larthaa_auth_token')
@@ -1627,19 +1627,43 @@ export default function UploadPage() {
       }
 
       const normalizedFolderPath = String(folderPath || '').replace(/^\/+|\/+$/g, '')
-
       const downloadUrl = `${baseUrl}/api/download/folder?path=${encodeURIComponent(normalizedFolderPath)}&token=${encodeURIComponent(token)}`
 
-      // Create a temporary link and trigger download
-      const a = document.createElement('a')
-      a.href = downloadUrl
-      a.download = `${folderPath.split('/').pop() || 'folder'}.zip`
-      a.rel = 'noreferrer'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
+      setSuccess('جاري تحضير ملف ZIP للمجلد...')
 
-      setSuccess('بدأ تنزيل المجلد')
+      // Poll for ZIP readiness
+      let attempts = 0
+      const maxAttempts = 30 // 30 seconds max
+
+      while (attempts < maxAttempts) {
+        const response = await fetch(downloadUrl)
+
+        if (response.status === 200) {
+          // ZIP is ready, trigger download
+          const a = document.createElement('a')
+          a.href = downloadUrl
+          a.download = `${folderPath.split('/').pop() || 'folder'}.zip`
+          a.rel = 'noreferrer'
+          document.body.appendChild(a)
+          a.click()
+          document.body.removeChild(a)
+          setSuccess('بدأ تنزيل المجلد')
+          return
+        }
+
+        if (response.status === 202) {
+          // ZIP is being prepared, wait and retry
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          attempts++
+          continue
+        }
+
+        // Other error
+        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }))
+        throw new Error(errorData.message || 'فشل في تحضير المجلد')
+      }
+
+      throw new Error('انتهت مهلة تحضير المجلد. يرجى المحاولة مرة أخرى.')
     } catch (error) {
       console.error('Folder download error:', error)
       setError(`فشل تنزيل المجلد: ${error instanceof Error ? error.message : 'خطأ غير معروف'}`)
