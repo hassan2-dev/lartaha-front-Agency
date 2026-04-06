@@ -19,19 +19,9 @@ export function Header() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 shadow-lg shadow-indigo-500/30">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                className="h-5 w-5 text-white"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-              </svg>
-            </div>
-            <span className="text-2xl font-bold bg-gradient-to-l from-indigo-600 to-indigo-800 bg-clip-text text-transparent">مجلس</span>
+          <div className="flex items-center gap-0.5">
+            <img src="/logo-color.svg" className="w-14 h-14" />
+            <span className="text-xl font-bold bg-linear-to-l from-indigo-600 to-indigo-800 bg-clip-text text-transparent">مجلس</span>
           </div>
 
           {/* Desktop Navigation */}

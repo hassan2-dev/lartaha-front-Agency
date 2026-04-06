@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import {
   Alert,
-  AppBar,
   Box,
   Button,
   Container,
   IconButton,
   ListItem,
   CircularProgress,
-  Toolbar,
   Typography,
   Card,
   Avatar,
@@ -30,10 +28,7 @@ import {
   useTheme,
   alpha,
 } from '@mui/material'
-import LogoutIcon from '@mui/icons-material/Logout'
 import UploadIcon from '@mui/icons-material/Upload'
-import DarkModeIcon from '@mui/icons-material/DarkMode'
-import LightModeIcon from '@mui/icons-material/LightMode'
 import FolderIcon from '@mui/icons-material/Folder'
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile'
 import ImageIcon from '@mui/icons-material/Image'
@@ -51,10 +46,8 @@ import LinkIcon from '@mui/icons-material/Link'
 import CheckIcon from '@mui/icons-material/Check'
 import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder'
 import LockIcon from '@mui/icons-material/Lock'
-import { useNavigate } from 'react-router-dom'
 import UploadDropzone, { type SelectedUploadFile } from '../components/UploadDropzone'
 import { useAuth } from '../contexts/AuthContext'
-import { useThemeMode } from '../contexts/ThemeContext'
 import { API_ENV } from '../config/api'
 import { listUploadedObjects, uploadFilesStreamed, moveFileToTrash, restoreFileFromTrash, listTrashFiles, fetchBulkPrivacySettings } from '../api/uploadApi'
 import { subscribeRealtime } from '../api/realtimeApi'
@@ -321,14 +314,14 @@ function FileItem({
         mb: 1,
         border: '1px solid',
         borderColor: isDark ? 'rgba(255,255,255,0.08)' : theme.palette.divider,
-        backgroundColor: isRestricted 
+        backgroundColor: isRestricted
           ? (isDark ? 'rgba(255,0,0,0.02)' : 'rgba(211, 47, 47, 0.04)')
           : (isDark ? 'rgba(255,255,255,0.02)' : theme.palette.background.paper),
         boxShadow: !isDark ? '0 2px 4px rgba(0,0,0,0.02)' : 'none',
         cursor: hasAccess && url ? 'pointer' : 'default',
         opacity: isRestricted && !hasAccess ? 0.6 : 1,
         '&:hover': {
-          backgroundColor: hasAccess 
+          backgroundColor: hasAccess
             ? (isDark ? 'rgba(255,255,255,0.05)' : alpha(theme.palette.primary.main, 0.04))
             : (isDark ? 'rgba(255,0,0,0.05)' : 'rgba(211, 47, 47, 0.08)'),
         },
@@ -498,14 +491,14 @@ function FileItemGrid({
         height: '100%',
         border: '1px solid',
         borderColor: isDark ? 'rgba(255,255,255,0.08)' : theme.palette.divider,
-        backgroundColor: isRestricted 
+        backgroundColor: isRestricted
           ? (isDark ? 'rgba(211, 47, 47, 0.12)' : 'rgba(211, 47, 47, 0.08)')
           : (isDark ? 'rgba(255,255,255,0.02)' : theme.palette.background.paper),
         boxShadow: !isDark ? '0 2px 8px rgba(0,0,0,0.04)' : 'none',
         cursor: hasAccess && url ? 'pointer' : 'default',
         opacity: isRestricted && !hasAccess ? 0.6 : 1,
         '&:hover': {
-          backgroundColor: hasAccess 
+          backgroundColor: hasAccess
             ? (isDark ? 'rgba(255,255,255,0.05)' : alpha(theme.palette.primary.main, 0.04))
             : (isDark ? 'rgba(211, 47, 47, 0.15)' : 'rgba(211, 47, 47, 0.12)'),
         },
@@ -1215,9 +1208,7 @@ async function handleDownload(key: string, filename: string) {
 }
 
 export default function UploadPage() {
-  const navigate = useNavigate()
-  const { logout, user } = useAuth()
-  const { mode, toggle } = useThemeMode()
+  const { user } = useAuth()
 
   const [selectedFiles, setSelectedFiles] = useState<SelectedUploadFile[]>([])
   // Explorer path under "uploads/". Examples: "" (root), "team1", "team1/sub1"
@@ -1291,37 +1282,6 @@ export default function UploadPage() {
       setHasTriggeredUpload(false)
     }
   }, [canUpload, selectedFiles.length, hasTriggeredUpload])
-
-  // Apply dark scrollbar styles
-  useEffect(() => {
-    if (mode === 'dark') {
-      const style = document.createElement('style')
-      style.textContent = `
-        ::-webkit-scrollbar {
-          width: 8px;
-          height: 8px;
-        }
-        ::-webkit-scrollbar-track {
-          background: rgba(255, 255, 255, 0.05);
-          border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb {
-          background: rgba(255, 255, 255, 0.2);
-          border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-          background: rgba(255, 255, 255, 0.3);
-        }
-        ::-webkit-scrollbar-corner {
-          background: rgba(255, 255, 255, 0.05);
-        }
-      `
-      document.head.appendChild(style)
-      return () => {
-        document.head.removeChild(style)
-      }
-    }
-  }, [mode])
 
   const ROOT_PREFIX = useMemo(() => {
     const workspaceId = user?.workspaceId?.trim()
@@ -2028,47 +1988,6 @@ export default function UploadPage() {
 
   return (
     <Box sx={{ height: '100%' }}>
-      <AppBar
-        position="static"
-        elevation={0}
-        sx={{
-          background: 'transparent',
-          borderBottom: '1px solid rgba(255,255,255,0.08)',
-          color: 'inherit',
-        }}
-      >
-        <Toolbar sx={{ justifyContent: 'space-between' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <Typography variant="h6" sx={{ fontWeight: 800 }}>
-              larthaa Agency
-            </Typography>
-          </Box>
-
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Button
-              variant="text"
-              onClick={() => navigate('/dashboard/tasks')}
-              sx={{ color: 'inherit', borderRadius: 999, px: 2 }}
-            >
-              المهام
-            </Button>
-            <IconButton onClick={toggle} color="inherit" aria-label="تبديل الثيم">
-              {mode === 'dark' ? <LightModeIcon /> : <DarkModeIcon />}
-            </IconButton>
-            <IconButton
-              onClick={() => {
-                logout()
-                navigate('/login', { replace: true })
-              }}
-              color="inherit"
-              aria-label="تسجيل الخروج"
-            >
-              <LogoutIcon />
-            </IconButton>
-          </Box>
-        </Toolbar>
-      </AppBar>
-
       <Container maxWidth="md" sx={{ py: 4 }}>
         <UploadDropzone
           files={selectedFiles}

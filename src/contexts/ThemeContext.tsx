@@ -62,7 +62,7 @@ export function AppThemeProvider({ children }: { children: React.ReactNode }) {
           fontFamily: `'PingAR', 'IBM Plex Sans Arabic', 'Tajawal', 'Arial', sans-serif`,
           fontWeightMedium: 600,
         },
-        shape: { borderRadius: 16 },
+        shape: { borderRadius: 8 },
         components: {
           MuiPaper: {
             styleOverrides: {

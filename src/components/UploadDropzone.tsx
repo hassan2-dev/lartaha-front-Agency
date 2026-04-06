@@ -10,9 +10,7 @@ import {
   List,
   ListItem,
 } from '@mui/material'
-import CloudUploadIcon from '@mui/icons-material/CloudUpload'
-import FolderOpenIcon from '@mui/icons-material/FolderOpen'
-import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile'
+import { CloudUpload, FolderOpen, File } from '@solar-icons/react'
 
 export type SelectedUploadFile = {
   file: File
@@ -184,7 +182,7 @@ export default function UploadDropzone({
       variant="outlined"
       sx={{
         p: 2,
-        borderRadius: 3,
+        borderRadius: 2,
         borderColor: dragOver ? 'primary.main' : 'rgba(255,255,255,0.10)',
         background: (t) =>
           `linear-gradient(135deg, ${t.palette.primary.main}14, transparent 55%)`,
@@ -219,7 +217,9 @@ export default function UploadDropzone({
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
-        <CloudUploadIcon color="primary" />
+        <Box sx={{ color: 'primary.main', display: 'flex' }}>
+          <CloudUpload size={24} />
+        </Box>
         <Box>
           <Typography variant="h6" sx={{ fontWeight: 700 }}>
             اسحب الملفات هنا، أو اختر من جهازك
@@ -255,7 +255,7 @@ export default function UploadDropzone({
           variant="contained"
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
-          startIcon={<InsertDriveFileIcon />}
+          startIcon={<File size={20} />}
           sx={{ borderRadius: 999, gap: 1 }}
         >
           اختر ملفات
@@ -264,7 +264,7 @@ export default function UploadDropzone({
           variant="outlined"
           onClick={() => folderInputRef.current?.click()}
           disabled={uploading}
-          startIcon={<FolderOpenIcon />}
+          startIcon={<FolderOpen size={20} />}
           sx={{ borderRadius: 999, borderColor: 'rgba(255,255,255,0.18)', gap: 1 }}
         >
           اختر مجلد
@@ -281,7 +281,7 @@ export default function UploadDropzone({
         </Alert>
       )}
 
-      {files.length > 0 && (
+      {(files.length > 0 || pendingFolderFiles) && (
         <>
           <Divider sx={{ my: 2 }} />
           <Typography variant="subtitle2" sx={{ mb: 1, opacity: 0.8 }}>
@@ -311,30 +311,32 @@ export default function UploadDropzone({
               </Box>
             </Alert>
           )}
-          <List
-            dense
-            sx={{
-              maxHeight: 220,
-              overflow: 'auto',
-              borderRadius: 2,
-              border: '1px solid rgba(255,255,255,0.08)',
-            }}
-          >
-            {files.slice(0, 80).map((sf) => (
-              <ListItem key={`${sf.relativePath}_${sf.file.size}`} sx={{ py: 0.75 }}>
-                <Typography variant="body2" sx={{ wordBreak: 'break-word', opacity: 0.92 }}>
-                  {sf.relativePath}
-                </Typography>
-              </ListItem>
-            ))}
-            {files.length > 80 && (
-              <ListItem sx={{ py: 0.75 }}>
-                <Typography variant="body2" sx={{ opacity: 0.7 }}>
-                  + {files.length - 80} المزيد…
-                </Typography>
-              </ListItem>
-            )}
-          </List>
+          {files.length > 0 && (
+            <List
+              dense
+              sx={{
+                maxHeight: 220,
+                overflow: 'auto',
+                borderRadius: 2,
+                border: '1px solid rgba(255,255,255,0.08)',
+              }}
+            >
+              {files.slice(0, 80).map((sf) => (
+                <ListItem key={`${sf.relativePath}_${sf.file.size}`} sx={{ py: 0.75 }}>
+                  <Typography variant="body2" sx={{ wordBreak: 'break-word', opacity: 0.92 }}>
+                    {sf.relativePath}
+                  </Typography>
+                </ListItem>
+              ))}
+              {files.length > 80 && (
+                <ListItem sx={{ py: 0.75 }}>
+                  <Typography variant="body2" sx={{ opacity: 0.7 }}>
+                    + {files.length - 80} المزيد…
+                  </Typography>
+                </ListItem>
+              )}
+            </List>
+          )}
         </>
       )}
 

@@ -19,6 +19,8 @@ export const API_ENV = {
   apiBaseUrl: rawApiBaseUrl,
   authLoginPath: import.meta.env.VITE_AUTH_LOGIN_PATH ?? '/api/auth/login',
   authMePath: import.meta.env.VITE_AUTH_ME_PATH ?? '/api/auth/me',
+  authForgotPasswordPath: import.meta.env.VITE_AUTH_FORGOT_PASSWORD_PATH ?? '/api/auth/forgot-password',
+  authResetPasswordPath: import.meta.env.VITE_AUTH_RESET_PASSWORD_PATH ?? '/api/auth/reset-password',
   uploadPath: import.meta.env.VITE_UPLOAD_PATH ?? '/api/upload',
   apiWithCredentials: (import.meta.env.VITE_API_WITH_CREDENTIALS ?? 'false') === 'true',
   r2PublicBaseUrl: import.meta.env.VITE_R2_PUBLIC_BASE_URL ?? '',

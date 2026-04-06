@@ -40,6 +40,16 @@ export async function loginUser(payload: LoginPayload): Promise<LoginResult> {
   return res.data as LoginResult
 }
 
+export async function requestPasswordReset(email: string): Promise<{ message: string }> {
+  const res = await api.post(API_ENV.authForgotPasswordPath, { email })
+  return res.data as { message: string }
+}
+
+export async function confirmPasswordReset(token: string, newPassword: string): Promise<{ message: string }> {
+  const res = await api.post(API_ENV.authResetPasswordPath, { token, newPassword })
+  return res.data as { message: string }
+}
+
 export async function fetchMe(): Promise<{
   id: string
   email: string

@@ -24,15 +24,16 @@ import {
 import { useTheme } from '@mui/material/styles'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { 
-  Person as PersonIcon, 
-  ArrowForward as ArrowForwardIcon,
-  Business as BusinessIcon,
-  CameraAlt as CameraIcon,
-  Save as SaveIcon,
-} from '@mui/icons-material'
+import {
+  User,
+  ArrowRight,
+  Home,
+  Camera,
+  CheckSquare,
+} from '@solar-icons/react'
 import { usePushNotifications } from '../hooks/usePushNotifications'
 import { fetchWorkspace, updateWorkspace } from '../api/workspaceApi'
+import { requestPasswordReset } from '../api/authApi'
 import { API_ENV } from '../config/api'
 // import PushNotificationDebug from '../components/PushNotificationDebug' // Commented out - not used
 
@@ -61,6 +62,9 @@ export default function SettingsPage() {
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [loadingWorkspace, setLoadingWorkspace] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [passwordResetLoading, setPasswordResetLoading] = useState(false)
+  const [passwordResetMessage, setPasswordResetMessage] = useState('')
+  const [passwordResetError, setPasswordResetError] = useState('')
 
   useEffect(() => {
     if (user?.workspaceId && user?.isAdmin) {
@@ -79,6 +83,27 @@ export default function SettingsPage() {
       console.error('Failed to load workspace:', err)
     } finally {
       setLoadingWorkspace(false)
+    }
+  }
+
+  const handlePasswordResetRequest = async () => {
+    if (!user?.email) {
+      setPasswordResetError('لا يوجد بريد إلكتروني مرتبط بالحساب.')
+      return
+    }
+
+    setPasswordResetError('')
+    setPasswordResetMessage('')
+
+    try {
+      setPasswordResetLoading(true)
+      const response = await requestPasswordReset(user.email)
+      setPasswordResetMessage(response.message || 'تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.')
+    } catch (err) {
+      const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      setPasswordResetError(message || 'تعذر إرسال رابط إعادة تعيين كلمة المرور.')
+    } finally {
+      setPasswordResetLoading(false)
     }
   }
 
@@ -121,7 +146,7 @@ export default function SettingsPage() {
       // 2. Save workspace settings if admin and changed
       if (user?.isAdmin && user.workspaceId) {
         let finalLogoUrl = logoPreview
-        
+
         // Upload logo if new one selected
         if (logoFile) {
           const formData = new FormData()
@@ -174,6 +199,18 @@ export default function SettingsPage() {
       {successMessage && (
         <Alert severity="success" sx={{ mb: 3 }}>
           {successMessage}
+        </Alert>
+      )}
+
+      {passwordResetMessage && (
+        <Alert severity="success" sx={{ mb: 3 }}>
+          {passwordResetMessage}
+        </Alert>
+      )}
+
+      {passwordResetError && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {passwordResetError}
         </Alert>
       )}
 
@@ -278,7 +315,7 @@ export default function SettingsPage() {
               src={user?.avatar}
               sx={{ width: 60, height: 60, bgcolor: 'primary.main' }}
             >
-              {user?.name?.charAt(0).toUpperCase() || <PersonIcon />}
+              {user?.name?.charAt(0).toUpperCase() || <User size={24} />}
             </Avatar>
             <Box sx={{ flex: 1 }}>
               <Typography variant="h6" sx={{ fontWeight: 600 }}>
@@ -298,7 +335,7 @@ export default function SettingsPage() {
               }}
               sx={{ bgcolor: 'primary.main', color: 'white', '&:hover': { bgcolor: 'primary.dark' } }}
             >
-              <ArrowForwardIcon />
+              <ArrowRight size={20} />
             </IconButton>
           </Box>
           <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
@@ -310,11 +347,16 @@ export default function SettingsPage() {
           <ListItem sx={{ px: 0 }}>
             <ListItemText
               primary="تغيير كلمة المرور"
-              secondary="تحديث كلمة المرور الخاصة بك"
+              secondary="استلام رابط آمن مؤقت عبر البريد الإلكتروني"
             />
             <ListItemSecondaryAction>
-              <Button variant="outlined" size="small">
-                تغيير
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={handlePasswordResetRequest}
+                disabled={passwordResetLoading}
+              >
+                {passwordResetLoading ? 'جارٍ الإرسال...' : 'إرسال الرابط'}
               </Button>
             </ListItemSecondaryAction>
           </ListItem>
@@ -351,7 +393,7 @@ export default function SettingsPage() {
               width: '100%',
               height: 8,
               backgroundColor: 'rgba(255,255,255,0.1)',
-              borderRadius: 4,
+              borderRadius: 2,
               overflow: 'hidden',
             }}
           >
@@ -374,7 +416,7 @@ export default function SettingsPage() {
       {user?.isAdmin && (
         <Paper sx={{ p: 3, mb: 3 }}>
           <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, display: 'flex', alignItems: 'center', gap: 1 }}>
-            <BusinessIcon />
+            <Home size={24} />
             إعدادات مساحة العمل
           </Typography>
 
@@ -421,7 +463,7 @@ export default function SettingsPage() {
                         '&:hover': { bgcolor: 'primary.main', color: 'white' },
                       }}
                     >
-                      <CameraIcon fontSize="small" />
+                      <Camera size={16} />
                     </IconButton>
                   </label>
                 </Box>
@@ -470,7 +512,7 @@ export default function SettingsPage() {
           variant="contained"
           onClick={handleSaveSettings}
           disabled={saving}
-          startIcon={saving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
+          startIcon={saving ? <CircularProgress size={20} color="inherit" /> : <CheckSquare size={20} />}
           sx={{ borderRadius: 999, px: 4 }}
         >
           {saving ? 'جاري الحفظ...' : 'حفظ الإعدادات'}

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Alert, Avatar, Box, Button, Card, CardContent, Container, TextField, Typography, IconButton, InputAdornment, Fade, CircularProgress } from '@mui/material'
 import { useNavigate, } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { requestPasswordReset } from '../api/authApi'
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined'
 import Visibility from '@mui/icons-material/Visibility'
 import VisibilityOff from '@mui/icons-material/VisibilityOff'
@@ -18,6 +19,9 @@ export default function LoginPage() {
 
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [forgotLoading, setForgotLoading] = useState(false)
+  const [forgotMessage, setForgotMessage] = useState<string | null>(null)
+  const [forgotError, setForgotError] = useState<string | null>(null)
 
   useEffect(() => {
     if (token) navigate('/dashboard', { replace: true })
@@ -48,6 +52,27 @@ export default function LoginPage() {
     }
   }
 
+  async function onForgotPassword() {
+    setForgotMessage(null)
+    setForgotError(null)
+
+    if (!email.trim()) {
+      setForgotError('يرجى إدخال البريد الإلكتروني أولاً.')
+      return
+    }
+
+    try {
+      setForgotLoading(true)
+      const response = await requestPasswordReset(email.trim())
+      setForgotMessage(response.message || 'إذا كان البريد مسجلاً، سيتم إرسال رابط إعادة التعيين.')
+    } catch (err) {
+      const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      setForgotError(message || 'تعذر إرسال رابط إعادة تعيين كلمة المرور.')
+    } finally {
+      setForgotLoading(false)
+    }
+  }
+
   return (
     <Container maxWidth="sm" sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', py: 4 }}>
       <Fade in timeout={600}>
@@ -55,8 +80,8 @@ export default function LoginPage() {
           sx={{
             width: '100%',
             maxWidth: 420,
-            borderRadius: 4,
-            boxShadow: (t) => `0 20px 40px ${t.palette.primary.main}20`,
+            borderRadius: 2,
+            boxShadow: (t) => `0 8px 24px ${t.palette.primary.main}15`,
             overflow: 'hidden',
             transition: 'transform 0.3s ease-in-out',
           }}
@@ -128,6 +153,18 @@ export default function LoginPage() {
                   </Alert>
                 )}
 
+                {forgotMessage && (
+                  <Alert severity="success" sx={{ mb: 2, borderRadius: 2 }}>
+                    {forgotMessage}
+                  </Alert>
+                )}
+
+                {forgotError && (
+                  <Alert severity="warning" sx={{ mb: 2, borderRadius: 2 }}>
+                    {forgotError}
+                  </Alert>
+                )}
+
 
 
 
@@ -142,7 +179,7 @@ export default function LoginPage() {
                     variant="outlined"
                     sx={{
                       '& .MuiOutlinedInput-root': {
-                        borderRadius: 3,
+                        borderRadius: 2,
                         backgroundColor: 'rgba(0, 0, 0, 0.02)',
                         '&:hover': {
                           backgroundColor: 'rgba(0, 0, 0, 0.04)',
@@ -168,7 +205,7 @@ export default function LoginPage() {
                     variant="outlined"
                     sx={{
                       '& .MuiOutlinedInput-root': {
-                        borderRadius: 3,
+                        borderRadius: 2,
                         backgroundColor: 'rgba(0, 0, 0, 0.02)',
                         '&:hover': {
                           backgroundColor: 'rgba(0, 0, 0, 0.04)',
@@ -208,15 +245,15 @@ export default function LoginPage() {
                     sx={{
                       mt: 2,
                       mb: 3,
-                      borderRadius: 3,
+                      borderRadius: 2,
                       py: 1.5,
                       fontSize: '1rem',
                       fontWeight: 600,
                       textTransform: 'none',
-                      boxShadow: (t) => `0 4px 12px ${t.palette.primary.main}30`,
+                      boxShadow: (t) => `0 2px 8px ${t.palette.primary.main}25`,
                       transition: 'all 0.3s ease',
                       '&:hover': {
-                        boxShadow: (t) => `0 6px 20px ${t.palette.primary.main}40`,
+                        boxShadow: (t) => `0 4px 16px ${t.palette.primary.main}30`,
                         transform: 'translateY(-1px)',
                       },
                       '&:disabled': {
@@ -234,6 +271,22 @@ export default function LoginPage() {
                     ) : (
                       'تسجيل الدخول'
                     )}
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="text"
+                    onClick={onForgotPassword}
+                    disabled={forgotLoading}
+                    sx={{
+                      mt: -1,
+                      mb: 2,
+                      textTransform: 'none',
+                      fontWeight: 600,
+                    }}
+                    fullWidth
+                  >
+                    {forgotLoading ? 'جارٍ الإرسال...' : 'نسيت كلمة المرور؟'}
                   </Button>
                 </Box>
 

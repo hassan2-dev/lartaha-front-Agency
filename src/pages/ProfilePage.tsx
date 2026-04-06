@@ -188,7 +188,7 @@ export default function ProfilePage() {
         </Alert>
       )}
 
-      <Paper sx={{ p: 3, borderRadius: 3 }}>
+      <Paper sx={{ p: 3, borderRadius: 2 }}>
         {/* Avatar Section */}
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 4 }}>
           <Box sx={{ position: 'relative' }}>

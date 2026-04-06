@@ -128,8 +128,9 @@ export default function TeamsPage() {
               key={member.id}
               sx={{
                 mb: 2,
+                border: '1px solid rgb(226, 232, 240)',
                 '&:hover': {
-                  borderColor: 'grey.300',
+                  border: '1px solid rgb(203, 213, 225)',
                 },
               }}
             >

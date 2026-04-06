@@ -493,35 +493,23 @@ export default function SignUpPage() {
             <Typography color="text.secondary" sx={{ mb: 4, maxWidth: 400, mx: 'auto' }}>
               تم إعداد مساحة العمل بنجاح. يمكنك الآن دعوة أعضاء الفريق والبدء في التعاون.
             </Typography>
-
-            <Paper
-              sx={{
-                p: 3,
-                bgcolor: alpha(theme.palette.primary.main, 0.05),
-                border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
-                mb: 4,
-                maxWidth: 500,
-                mx: 'auto',
-              }}
-            >
-              <Typography variant="h6" gutterBottom color="primary.main">
-                الخطوات التالية:
+            <Typography variant="h6" sx={{ mb: 3 }}>
+              الخطوات التالية:
+            </Typography>
+            <Box component="ol" sx={{ textAlign: 'right', pr: 2 }}>
+              <Typography component="li" sx={{ mb: 1 }}>
+                إنشاء فرق العمل المختلفة
               </Typography>
-              <Box component="ol" sx={{ textAlign: 'right', pr: 2 }}>
-                <Typography component="li" sx={{ mb: 1 }}>
-                  إنشاء فرق العمل المختلفة
-                </Typography>
-                <Typography component="li" sx={{ mb: 1 }}>
-                  دعوة أعضاء الفريق عبر البريد الإلكتروني
-                </Typography>
-                <Typography component="li" sx={{ mb: 1 }}>
-                  إدارة المهام والملفات المشتركة
-                </Typography>
-                <Typography component="li">
-                  متابعة أنشطة الفريق والتقدم
-                </Typography>
-              </Box>
-            </Paper>
+              <Typography component="li" sx={{ mb: 1 }}>
+                دعوة أعضاء الفريق عبر البريد الإلكتروني
+              </Typography>
+              <Typography component="li" sx={{ mb: 1 }}>
+                إدارة المهام والملفات المشتركة
+              </Typography>
+              <Typography component="li">
+                متابعة أنشطة الفريق والتقدم
+              </Typography>
+            </Box>
 
             <Button
               variant="contained"
@@ -557,7 +545,7 @@ export default function SignUpPage() {
       <Container maxWidth="md">
         <Fade in timeout={600}>
           <Paper
-            elevation={8}
+            elevation={2}
             sx={{
               borderRadius: 4,
               overflow: 'hidden',
@@ -594,7 +582,7 @@ export default function SignUpPage() {
                   background: 'rgba(255, 255, 255, 0.2)',
                   backdropFilter: 'blur(10px)',
                   border: '2px solid rgba(255, 255, 255, 0.3)',
-                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+                  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
                 }}
               >
                 <Business sx={{ fontSize: 40 }} />
@@ -611,7 +599,7 @@ export default function SignUpPage() {
               <Fade in timeout={800}>
                 <Box>
                   {error && (
-                    <Alert severity="error" sx={{ mb: 4, borderRadius: 3, animation: 'shake 0.5s ease-in-out' }}>
+                    <Alert severity="error" sx={{ mb: 4, borderRadius: 2, animation: 'shake 0.5s ease-in-out' }}>
                       {error}
                     </Alert>
                   )}

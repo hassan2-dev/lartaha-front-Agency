@@ -8,7 +8,7 @@ export default function NotFoundPage() {
       <Box
         sx={{
           p: 4,
-          borderRadius: 3,
+          borderRadius: 2,
           background: 'rgba(255,255,255,0.03)',
           border: '1px solid rgba(255,255,255,0.08)',
           textAlign: 'center',

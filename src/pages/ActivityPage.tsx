@@ -17,14 +17,14 @@ import {
   useTheme,
 } from '@mui/material'
 import {
-  Person as PersonIcon,
-  Schedule as TimeIcon,
-  Refresh as RefreshIcon,
-  Work as WorkIcon,
-  Task as TaskIcon,
-  UploadFile as UploadIcon,
-  GroupAdd as GroupAddIcon,
-} from '@mui/icons-material'
+  User,
+  ClockCircle,
+  Refresh,
+  Home,
+  ClipboardText,
+  CloudUpload,
+  UserPlus,
+} from '@solar-icons/react'
 import { fetchActivities, type Activity } from '../api/activitiesApi'
 import { ActivityItemSkeleton, PageHeaderSkeleton } from '../components/SkeletonLoaders'
 
@@ -33,17 +33,17 @@ function getActivityIcon(action: string) {
     case 'created_task':
     case 'updated_task':
     case 'deleted_task':
-      return <TaskIcon />
+      return <ClipboardText size={20} />
     case 'uploaded_files':
     case 'deleted_file':
-      return <UploadIcon />
+      return <CloudUpload size={20} />
     case 'joined_workspace':
     case 'invited_member':
-      return <GroupAddIcon />
+      return <UserPlus size={20} />
     case 'created_workspace':
-      return <WorkIcon />
+      return <Home size={20} />
     default:
-      return <PersonIcon />
+      return <User size={20} />
   }
 }
 
@@ -168,7 +168,7 @@ export default function ActivityPage() {
         </Typography>
         <Button
           variant="outlined"
-          startIcon={<RefreshIcon />}
+          startIcon={<Refresh size={20} />}
           onClick={handleRefresh}
           disabled={loading}
         >
@@ -177,7 +177,7 @@ export default function ActivityPage() {
       </Box>
 
       {error && (
-        <Card sx={{ mb: 3, bgcolor: 'error.light' }}>
+        <Card sx={{ mb: 3, bgcolor: 'error.light', border: '1px solid rgb(226, 232, 240)' }}>
           <CardContent>
             <Typography color="error">{error}</Typography>
           </CardContent>
@@ -187,7 +187,7 @@ export default function ActivityPage() {
       {loading && activities.length === 0 ? (
         <>
           <PageHeaderSkeleton />
-          <Card>
+          <Card sx={{ border: '1px solid rgb(226, 232, 240)' }}>
             <CardContent sx={{ p: 0 }}>
               <ActivityItemSkeleton />
               <ActivityItemSkeleton />
@@ -198,7 +198,7 @@ export default function ActivityPage() {
           </Card>
         </>
       ) : (
-        <Card>
+        <Card sx={{ boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
           <CardContent sx={{ p: 0 }}>
             <List>
               {activities.map((activity, index) => (
@@ -239,7 +239,9 @@ export default function ActivityPage() {
                             {formatActivityDescription(activity)}
                           </Typography>
                           <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'text.secondary' }}>
-                            <TimeIcon sx={{ fontSize: 14 }} />
+                            <Box sx={{ color: 'text.secondary', display: 'flex' }}>
+                              <ClockCircle size={14} />
+                            </Box>
                             <Typography variant="caption" component="span">
                               {formatTimeAgo(activity.createdAt)}
                             </Typography>

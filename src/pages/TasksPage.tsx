@@ -20,7 +20,6 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import {
-  AppBar,
   Box,
   Button,
   Container,
@@ -28,20 +27,13 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  IconButton,
   Paper,
-  Toolbar,
   Typography,
   Fab,
   CircularProgress,
 } from '@mui/material'
-import LogoutIcon from '@mui/icons-material/Logout'
-import ArrowBackIcon from '@mui/icons-material/ArrowBackIosNew'
-import AddIcon from '@mui/icons-material/Add'
-import DeleteIcon from '@mui/icons-material/Delete'
-import { useNavigate } from 'react-router-dom'
+import { AddSquare, TrashBinTrash } from '@solar-icons/react'
 import { useAuth } from '../contexts/AuthContext'
-import { useThemeMode } from '../contexts/ThemeContext'
 import {
   createTask,
   getTasks,
@@ -70,9 +62,7 @@ const STATUS_LABEL: Record<TaskStatus, string> = {
 const STATUS_ORDER: TaskStatus[] = ['todo', 'in_progress', 'done']
 
 export default function TasksPage() {
-  const navigate = useNavigate()
-  const { logout, user } = useAuth()
-  const { toggle, mode } = useThemeMode()
+  const { user } = useAuth()
 
   const [tasks, setTasks] = useState<Task[]>([])
   const [workspaceUsers, setWorkspaceUsers] = useState<User[]>([])
@@ -546,7 +536,7 @@ export default function TasksPage() {
         ref={setNodeRef}
         sx={{
           p: 2,
-          borderRadius: 3,
+          borderRadius: 2,
           flex: '1 1 280px',
           minHeight: 220,
           border: isHighlighted
@@ -582,59 +572,38 @@ export default function TasksPage() {
   }
 
   return (
-    <Box sx={{ height: '100%', position: 'relative' }}>
-      <AppBar
-        position="static"
-        elevation={0}
-        sx={{
-          background: 'transparent',
-          borderBottom: '1px solid rgba(255,255,255,0.08)',
-          color: 'inherit',
-        }}
-      >
-        <Toolbar sx={{ justifyContent: 'space-between' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <IconButton onClick={() => navigate('/')} color="inherit" aria-label="رجوع">
-              <ArrowBackIcon />
-            </IconButton>
-            <Typography variant="h6" sx={{ fontWeight: 800 }}>
-              المهام
-            </Typography>
-            <Button
-              variant="contained"
-              onClick={openCreateModal}
-              startIcon={<AddIcon />}
-              sx={{ ml: 2 }}
-            >
-              مهمة جديدة
-            </Button>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Button variant="text" onClick={toggle} sx={{ borderRadius: 999 }}>
-              {mode === 'dark' ? 'فاتح' : 'داكن'}
-            </Button>
-            <IconButton
-              onClick={() => {
-                logout()
-                navigate('/login', { replace: true })
-              }}
-              color="inherit"
-              aria-label="تسجيل الخروج"
-            >
-              <LogoutIcon />
-            </IconButton>
-          </Box>
-        </Toolbar>
-      </AppBar>
-
-      <Container
-        ref={scrollContainerRef}
-        maxWidth="lg"
-        sx={{ py: 3, maxHeight: 'calc(100vh - 120px)', overflowY: 'auto' }}
-        onScroll={handleScroll}
-      >
-        {isMobile ? (
-          // Mobile view - no drag and drop
+    <Container
+      ref={scrollContainerRef}
+      maxWidth="lg"
+      sx={{ py: 3, maxHeight: 'calc(100vh - 64px)', overflowY: 'auto' }}
+      onScroll={handleScroll}
+    >
+      {isMobile ? (
+        // Mobile view - no drag and drop
+        <Box sx={{ display: 'flex', gap: 2, mt: 2, flexWrap: 'wrap' }}>
+          {loading && tasks.length === 0 ? (
+            <>
+              <ColumnSkeleton />
+              <ColumnSkeleton />
+              <ColumnSkeleton />
+            </>
+          ) : (
+            <>
+              <DroppableColumn s="todo" />
+              <DroppableColumn s="in_progress" />
+              <DroppableColumn s="done" />
+            </>
+          )}
+        </Box>
+      ) : (
+        // Desktop view - with drag and drop
+        <DndContext
+          sensors={sensors}
+          collisionDetection={pointerWithin}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+        >
           <Box sx={{ display: 'flex', gap: 2, mt: 2, flexWrap: 'wrap' }}>
             {loading && tasks.length === 0 ? (
               <>
@@ -650,60 +619,35 @@ export default function TasksPage() {
               </>
             )}
           </Box>
-        ) : (
-          // Desktop view - with drag and drop
-          <DndContext
-            sensors={sensors}
-            collisionDetection={pointerWithin}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
-            onDragEnd={handleDragEnd}
-          >
-            <Box sx={{ display: 'flex', gap: 2, mt: 2, flexWrap: 'wrap' }}>
-              {loading && tasks.length === 0 ? (
-                <>
-                  <ColumnSkeleton />
-                  <ColumnSkeleton />
-                  <ColumnSkeleton />
-                </>
-              ) : (
-                <>
-                  <DroppableColumn s="todo" />
-                  <DroppableColumn s="in_progress" />
-                  <DroppableColumn s="done" />
-                </>
-              )}
-            </Box>
-            <DragOverlay>
-              {activeTask ? (
-                <Box sx={{ transform: 'rotate(2deg)', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
-                  <EnhancedTaskCard
-                    task={activeTask}
-                    onChecklistUpdate={handleChecklistUpdate}
-                    onTaskClick={openEditModal}
-                  />
-                </Box>
-              ) : null}
-            </DragOverlay>
-          </DndContext>
-        )}
+          <DragOverlay>
+            {activeTask ? (
+              <Box sx={{ transform: 'rotate(2deg)', border: '1px solid rgb(226, 232, 240)' }}>
+                <EnhancedTaskCard
+                  task={activeTask}
+                  onChecklistUpdate={handleChecklistUpdate}
+                  onTaskClick={openEditModal}
+                />
+              </Box>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      )}
 
-        {/* Infinite Scroll Loading Indicator */}
-        {isLoadingMore && (
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4, mb: 2 }}>
-            <CircularProgress size={24} />
-            <Typography variant="body2" sx={{ ml: 2, opacity: 0.7 }}>
-              جاري تحميل المزيد من المهام...
-            </Typography>
-          </Box>
-        )}
-
-        {!hasMore && tasks.length > 0 && (
-          <Typography variant="body2" sx={{ textAlign: 'center', opacity: 0.5, mt: 2, mb: 2 }}>
-            تم تحميل جميع المهام
+      {/* Infinite Scroll Loading Indicator */}
+      {isLoadingMore && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4, mb: 2 }}>
+          <CircularProgress size={24} />
+          <Typography variant="body2" sx={{ ml: 2, opacity: 0.7 }}>
+            جاري تحميل المزيد من المهام...
           </Typography>
-        )}
-      </Container>
+        </Box>
+      )}
+
+      {!hasMore && tasks.length > 0 && (
+        <Typography variant="body2" sx={{ textAlign: 'center', opacity: 0.5, mt: 2, mb: 2 }}>
+          تم تحميل جميع المهام
+        </Typography>
+      )}
 
       {/* Floating Action Button */}
       <Fab
@@ -715,15 +659,15 @@ export default function TasksPage() {
           bottom: 24,
           right: 24,
           zIndex: 1000,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          border: '1px solid rgb(226, 232, 240)',
           '&:hover': {
             transform: 'scale(1.05)',
-            boxShadow: '0 6px 20px rgba(0,0,0,0.2)',
+            border: '1px solid rgb(203, 213, 225)',
           },
           transition: 'all 0.2s ease-in-out',
         }}
       >
-        <AddIcon />
+        <AddSquare size={24} />
       </Fab>
 
       {/* Create Task Modal */}
@@ -734,7 +678,7 @@ export default function TasksPage() {
         fullWidth
         PaperProps={{
           sx: {
-            borderRadius: 3,
+            borderRadius: 2,
             bgcolor: 'background.paper',
           }
         }}
@@ -788,7 +732,7 @@ export default function TasksPage() {
         fullWidth
         PaperProps={{
           sx: {
-            borderRadius: 3,
+            borderRadius: 2,
             bgcolor: 'background.paper',
           }
         }}
@@ -834,7 +778,7 @@ export default function TasksPage() {
               color="error"
               variant="outlined"
               disabled={loading}
-              startIcon={<DeleteIcon />}
+              startIcon={<TrashBinTrash size={20} />}
             >
               {loading ? <CircularProgress size={20} color="inherit" /> : 'حذف المهمة'}
             </Button>
@@ -848,17 +792,19 @@ export default function TasksPage() {
       </Dialog>
 
       {/* Toast Notification */}
-      {showToast && error && (
-        <Toast
-          message={error}
-          type="error"
-          onClose={() => {
-            setShowToast(false)
-            setError(null)
-          }}
-        />
-      )}
-    </Box>
+      {
+        showToast && error && (
+          <Toast
+            message={error}
+            type="error"
+            onClose={() => {
+              setShowToast(false)
+              setError(null)
+            }}
+          />
+        )
+      }
+    </Container>
   )
 }
 

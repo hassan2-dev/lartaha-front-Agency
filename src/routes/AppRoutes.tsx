@@ -2,6 +2,7 @@ import { Route, Routes, Navigate } from 'react-router-dom'
 import LoginPage from '../pages/LoginPage'
 import SignUpPage from '../pages/SignUpPage'
 import RegisterPage from '../pages/RegisterPage'
+import ResetPasswordPage from '../pages/ResetPasswordPage'
 import HomePage from '../pages/HomePage'
 import UploadPage from '../pages/UploadPage'
 import TasksPage from '../pages/TasksPage'
@@ -22,6 +23,7 @@ export default function AppRoutes() {
       {/* Public Routes */}
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/signup" element={<SignUpPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/invite/:token?" element={<RegisterPage />} />
@@ -35,6 +37,7 @@ export default function AppRoutes() {
               <Routes>
                 <Route path="" element={<HomePage />} />
                 <Route path="upload" element={<UploadPage />} />
+                <Route path="files" element={<Navigate to="/dashboard/upload" replace />} />
                 <Route path="tasks" element={<TasksPage />} />
                 <Route path="chat" element={<ChatPage />} />
                 <Route path="teams" element={<AdminRoute><TeamsPage /></AdminRoute>} />

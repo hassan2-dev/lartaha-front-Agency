@@ -33,21 +33,13 @@ export function Footer() {
             {/* Brand */}
             <div className="col-span-2">
               <div className="flex items-center gap-3 mb-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 shadow-lg shadow-indigo-500/30">
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    className="h-5 w-5 text-white"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-                  </svg>
+                <div className="flex p-0.5 items-center justify-center rounded-xl bg-indigo-600 shadow-lg shadow-indigo-500/30">
+                  <img src="/logo-white.svg" className="h-10 w-10" />
                 </div>
-                <span className="text-2xl font-bold bg-gradient-to-l from-indigo-600 to-indigo-800 bg-clip-text text-transparent">مجلس</span>
+                <span className="text-2xl font-bold bg-linear-to-l from-indigo-600 to-indigo-800 bg-clip-text text-transparent">مجلس</span>
               </div>
               <p className="text-sm text-muted-foreground max-w-xs leading-relaxed">
-                منصة مساحة العمل المتكاملة المصممة لفرق الشرق الأوسط 
+                منصة مساحة العمل المتكاملة المصممة لفرق الشرق الأوسط
                 للتعاون والتواصل وتحقيق المزيد معاً.
               </p>
               {/* Social Links */}

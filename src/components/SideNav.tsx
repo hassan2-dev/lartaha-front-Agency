@@ -13,21 +13,26 @@ import {
   useMediaQuery,
   Avatar,
   Tooltip,
+  AppBar,
+  Toolbar,
 } from '@mui/material'
 import {
-  Menu as MenuIcon,
-  Home as HomeIcon,
-  UploadFile as UploadIcon,
-  Task as TaskIcon,
-  Chat as ChatIcon,
-  People as TeamsIcon,
-  History as ActivityIcon,
-  Settings as SettingsIcon,
-  Business as BusinessIcon,
-  Logout as LogoutIcon,
-} from '@mui/icons-material'
+  Home,
+  CloudUpload,
+  ClipboardText,
+  ChatRound,
+  User,
+  ClockCircle,
+  Settings,
+  Home as BusinessIcon,
+  Logout,
+  MenuDots,
+  Sun,
+  Moon,
+} from '@solar-icons/react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useThemeMode } from '../contexts/ThemeContext'
 
 const drawerWidth = 280
 
@@ -38,14 +43,22 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { text: 'الرئيسية', icon: <HomeIcon />, path: '/dashboard' },
-  { text: 'رفع الملفات', icon: <UploadIcon />, path: '/dashboard/upload' },
-  { text: 'المهام', icon: <TaskIcon />, path: '/dashboard/tasks' },
-  { text: 'الدردشة', icon: <ChatIcon />, path: '/dashboard/chat' },
-  { text: 'الفرق', icon: <TeamsIcon />, path: '/dashboard/teams' },
-  { text: 'الأنشطة', icon: <ActivityIcon />, path: '/dashboard/activity' },
-  { text: 'الإعدادات', icon: <SettingsIcon />, path: '/dashboard/settings' },
+  { text: 'الرئيسية', icon: <Home size={24} />, path: '/dashboard' },
+  { text: 'رفع الملفات', icon: <CloudUpload size={24} />, path: '/dashboard/upload' },
+  { text: 'المهام', icon: <ClipboardText size={24} />, path: '/dashboard/tasks' },
+  { text: 'الدردشة', icon: <ChatRound size={24} />, path: '/dashboard/chat' },
+  { text: 'الفرق', icon: <User size={24} />, path: '/dashboard/teams' },
+  { text: 'الأنشطة', icon: <ClockCircle size={24} />, path: '/dashboard/activity' },
+  { text: 'الإعدادات', icon: <Settings size={24} />, path: '/dashboard/settings' },
 ]
+
+function getPageTitle(pathname: string): string {
+  const item = navItems.find(item =>
+    item.path === pathname ||
+    (item.path === '/dashboard' && pathname === '/dashboard/')
+  )
+  return item?.text || 'لوحة التحكم'
+}
 
 interface SideNavProps {
   children: React.ReactNode
@@ -58,7 +71,8 @@ export default function SideNav({ children, title = 'larthaa Agency' }: SideNavP
   const [mobileOpen, setMobileOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
-  const { user, logout } = useAuth()
+  const { logout, user } = useAuth()
+  const { mode, toggle } = useThemeMode()
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen)
@@ -68,21 +82,21 @@ export default function SideNav({ children, title = 'larthaa Agency' }: SideNavP
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Header with Styled Logo */}
       <Box sx={{ p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <Box 
-          sx={{ 
-            width: 48, 
-            height: 48, 
-            borderRadius: 1.5, 
-            background: user?.workspaceLogo 
-              ? 'transparent' 
+        <Box
+          sx={{
+            width: 48,
+            height: 48,
+            borderRadius: 1.5,
+            background: user?.workspaceLogo
+              ? 'transparent'
               : 'linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             mb: 2,
-            boxShadow: user?.workspaceLogo 
-              ? '0 4px 12px rgba(0,0,0,0.1)' 
-              : '0 8px 16px rgba(124, 58, 237, 0.2)',
+            boxShadow: user?.workspaceLogo
+              ? '0 2px 8px rgba(0,0,0,0.06)'
+              : '0 4px 12px rgba(124, 58, 237, 0.15)',
             transform: user?.workspaceLogo ? 'none' : 'rotate(-4deg)',
             color: '#fff',
             fontWeight: 900,
@@ -93,22 +107,22 @@ export default function SideNav({ children, title = 'larthaa Agency' }: SideNavP
           }}
         >
           {user?.workspaceLogo ? (
-            <Box 
-              component="img" 
-              src={user.workspaceLogo} 
-              sx={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+            <Box
+              component="img"
+              src={user.workspaceLogo}
+              sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
             />
           ) : (
-            <BusinessIcon sx={{ fontSize: '1.8rem' }} />
+            <BusinessIcon size={28} />
           )}
         </Box>
-        <Typography 
-          variant="h6" 
-          sx={{ 
-            fontWeight: 900, 
+        <Typography
+          variant="h6"
+          sx={{
+            fontWeight: 900,
             letterSpacing: '-0.5px',
-            background: theme.palette.mode === 'dark' 
-              ? 'linear-gradient(135deg, #fff 0%, #a78bfa 100%)' 
+            background: theme.palette.mode === 'dark'
+              ? 'linear-gradient(135deg, #fff 0%, #a78bfa 100%)'
               : 'linear-gradient(135deg, #0f172a 0%, #6d28d9 100%)',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
@@ -141,7 +155,7 @@ export default function SideNav({ children, title = 'larthaa Agency' }: SideNavP
                   }}
                   selected={isActive}
                   sx={{
-                    borderRadius: 3,
+                    borderRadius: 2,
                     py: 1.2,
                     px: 2,
                     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -154,7 +168,7 @@ export default function SideNav({ children, title = 'larthaa Agency' }: SideNavP
                     '&.Mui-selected': {
                       background: 'linear-gradient(90deg, #a78bfa 0%, #7c3aed 100%)',
                       color: '#fff',
-                      boxShadow: '0 4px 12px rgba(124, 58, 237, 0.35)',
+                      boxShadow: '0 2px 8px rgba(124, 58, 237, 0.25)',
                       '&:hover': {
                         background: 'linear-gradient(90deg, #c4b5fd 0%, #8b5cf6 100%)',
                       },
@@ -198,13 +212,13 @@ export default function SideNav({ children, title = 'larthaa Agency' }: SideNavP
       {/* Footer - Refined Profile Card */}
       <Box sx={{ p: 2, mt: 'auto' }}>
         {user && (
-          <Box 
-            sx={{ 
-              mb: 2, 
-              p: 2, 
-              borderRadius: 4, 
-              display: 'flex', 
-              alignItems: 'center', 
+          <Box
+            sx={{
+              mb: 2,
+              p: 2,
+              borderRadius: 4,
+              display: 'flex',
+              alignItems: 'center',
               gap: 2,
               backgroundColor: 'rgba(255,255,255,0.03)',
               border: '1px solid rgba(255,255,255,0.06)',
@@ -216,15 +230,15 @@ export default function SideNav({ children, title = 'larthaa Agency' }: SideNavP
               }
             }}
           >
-            <Avatar 
-              src={user.avatar} 
-              alt={user.name} 
-              sx={{ 
-                width: 42, 
-                height: 42, 
+            <Avatar
+              src={user.avatar}
+              alt={user.name}
+              sx={{
+                width: 42,
+                height: 42,
                 border: '2.5px solid',
                 borderColor: 'primary.main',
-                boxShadow: '0 4px 10px rgba(0,0,0,0.3)'
+                boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
               }}
             >
               {user.name?.charAt(0)}
@@ -238,20 +252,20 @@ export default function SideNav({ children, title = 'larthaa Agency' }: SideNavP
               </Typography>
             </Box>
             <Tooltip title="تسجيل الخروج">
-              <IconButton 
-                size="small" 
-                onClick={logout} 
-                sx={{ 
+              <IconButton
+                size="small"
+                onClick={logout}
+                sx={{
                   color: 'error.light',
                   backdropFilter: 'blur(4px)',
                   backgroundColor: 'rgba(211, 47, 47, 0.05)',
-                  '&:hover': { 
+                  '&:hover': {
                     backgroundColor: 'rgba(211, 47, 47, 0.15)',
                     transform: 'rotate(15deg)'
                   }
                 }}
               >
-                <LogoutIcon fontSize="small" />
+                <Logout size={20} />
               </IconButton>
             </Tooltip>
           </Box>
@@ -266,19 +280,6 @@ export default function SideNav({ children, title = 'larthaa Agency' }: SideNavP
 
   return (
     <Box sx={{ display: 'flex', height: '100vh', direction: 'rtl' }}>
-      {/* Mobile Menu Button */}
-      {isMobile && (
-        <IconButton
-          color="inherit"
-          aria-label="open drawer"
-          edge="start"
-          onClick={handleDrawerToggle}
-          sx={{ position: 'fixed', top: 16, right: 16, zIndex: 1300, backgroundColor: 'background.paper' }}
-        >
-          <MenuIcon />
-        </IconButton>
-      )}
-
       {/* Desktop Drawer */}
       {!isMobile && (
         <Drawer
@@ -333,6 +334,55 @@ export default function SideNav({ children, title = 'larthaa Agency' }: SideNavP
           backgroundColor: 'background.default',
         }}
       >
+        {/* Top Navigation Bar */}
+        <AppBar
+          position="sticky"
+          elevation={0}
+          sx={{
+            background: 'transparent',
+            borderBottom: '1px solid rgba(255,255,255,0.08)',
+            color: 'inherit',
+          }}
+        >
+          <Toolbar sx={{ justifyContent: 'space-between' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              {isMobile && (
+                <IconButton
+                  color="inherit"
+                  aria-label="open drawer"
+                  edge="start"
+                  onClick={handleDrawerToggle}
+                >
+                  <MenuDots size={20} />
+                </IconButton>
+              )}
+              <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                {getPageTitle(location.pathname)}
+              </Typography>
+            </Box>
+
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <IconButton
+                onClick={toggle}
+                color="inherit"
+                aria-label="تبديل الثيم"
+              >
+                {mode === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+              </IconButton>
+              <IconButton
+                onClick={() => {
+                  logout()
+                  navigate('/login', { replace: true })
+                }}
+                color="inherit"
+                aria-label="تسجيل الخروج"
+              >
+                <Logout size={20} />
+              </IconButton>
+            </Box>
+          </Toolbar>
+        </AppBar>
+
         {children}
       </Box>
     </Box>

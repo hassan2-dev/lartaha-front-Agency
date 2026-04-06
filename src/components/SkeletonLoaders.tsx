@@ -29,7 +29,7 @@ export function ColumnSkeleton() {
     <Paper
       sx={{
         p: 2,
-        borderRadius: 3,
+        borderRadius: 2,
         flex: '1 1 280px',
         minHeight: 220,
         border: '1px solid rgba(255,255,255,0.08)',
@@ -119,6 +119,7 @@ export function FileItemGridSkeleton() {
       sx={{
         display: 'flex',
         flexDirection: 'column',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
         height: '100%',
         border: '1px solid rgba(255,255,255,0.08)',
         bgcolor: 'rgba(255,255,255,0.02)',
@@ -173,6 +174,7 @@ export function FolderItemGridSkeleton() {
       sx={{
         display: 'flex',
         flexDirection: 'column',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
         height: '100%',
         border: '1px solid rgba(255,255,255,0.08)',
         bgcolor: 'rgba(255,255,255,0.02)',
@@ -212,7 +214,7 @@ export function ActivityItemSkeleton() {
 // Team member card skeleton
 export function TeamMemberSkeleton() {
   return (
-    <Card sx={{ mb: 2 }}>
+    <Card sx={{ mb: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
       <CardContent>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>

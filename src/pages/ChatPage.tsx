@@ -34,7 +34,7 @@ function ChatPageContent() {
           display: 'grid',
           gridTemplateColumns: { xs: '1fr', md: '320px 1fr' },
           minHeight: 'calc(100vh - 170px)',
-          borderRadius: 3,
+          borderRadius: 2,
           overflow: 'hidden',
         }}
       >

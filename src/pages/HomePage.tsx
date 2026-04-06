@@ -18,14 +18,13 @@ import {
 } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
 import {
-  UploadFile as UploadIcon,
-  Task as TaskIcon,
-  AddTask as AddTaskIcon,
-  CloudUpload as CloudUploadIcon,
-  Timeline as TimelineIcon,
-  FolderOpen as FolderIcon,
-  Bolt as BoltIcon,
-} from '@mui/icons-material'
+  CloudUpload,
+  ClipboardText,
+  AddSquare,
+  ClockCircle,
+  FolderOpen,
+  Bolt,
+} from '@solar-icons/react'
 import { createTask, getTasks, type Task } from '../api/tasksApi'
 import { listUploadedObjects, uploadFiles } from '../api/uploadApi'
 
@@ -205,7 +204,7 @@ export default function HomePage() {
     {
       title: 'مهمة جديدة',
       description: 'أضف مهمة بسرعة وحدد الأولوية والمسؤول',
-      icon: <AddTaskIcon sx={{ fontSize: 34 }} />,
+      icon: <AddSquare size={34} />,
       action: openCreateTaskDialog,
       color: 'primary.main',
       disabled: creatingTask,
@@ -213,7 +212,7 @@ export default function HomePage() {
     {
       title: 'رفع ملف',
       description: 'ارفع ملفات المشروع مباشرة إلى المساحة المشتركة',
-      icon: <CloudUploadIcon sx={{ fontSize: 40 }} />,
+      icon: <CloudUpload size={40} />,
       action: openFilePicker,
       color: 'info.main',
       disabled: uploading,
@@ -221,14 +220,14 @@ export default function HomePage() {
     {
       title: 'متابعة المهام',
       description: 'راجع حالة التنفيذ والمهام المتأخرة',
-      icon: <TaskIcon sx={{ fontSize: 40 }} />,
+      icon: <ClipboardText size={40} />,
       action: () => navigate('/dashboard/tasks'),
       color: 'success.main',
     },
     {
       title: 'عرض الأنشطة',
       description: 'اطلع على أحدث التحديثات وحركة الفريق',
-      icon: <TimelineIcon sx={{ fontSize: 40 }} />,
+      icon: <ClockCircle size={40} />,
       action: () => navigate('/dashboard/activity'),
       color: 'warning.main',
       disabled: false,
@@ -281,7 +280,7 @@ export default function HomePage() {
           <Button
             variant="contained"
             size="large"
-            startIcon={<AddTaskIcon />}
+            startIcon={<AddSquare />}
             onClick={openCreateTaskDialog}
             sx={{ borderRadius: 999, px: 3.5, gap: 1 }}
             disabled={creatingTask}
@@ -291,7 +290,7 @@ export default function HomePage() {
           <Button
             variant="outlined"
             size="large"
-            startIcon={<UploadIcon />}
+            startIcon={<CloudUpload />}
             onClick={openFilePicker}
             sx={{ borderRadius: 999, px: 3.5, gap: 1 }}
             disabled={uploading}
@@ -325,8 +324,8 @@ export default function HomePage() {
             <Card
               key={item.title}
               sx={{
-                borderRadius: 3,
-                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: 2,
+                border: '1px solid rgb(226, 232, 240)',
                 backgroundColor: 'rgba(255,255,255,0.02)',
                 height: '100%',
               }}
@@ -349,7 +348,9 @@ export default function HomePage() {
 
       <Box sx={{ mb: 4 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2.5 }}>
-          <BoltIcon sx={{ color: 'warning.main' }} />
+          <Box sx={{ color: 'warning.main', display: 'flex' }}>
+            <Bolt size={24} />
+          </Box>
           <Typography variant="h6" sx={{ fontWeight: 700 }}>
             إجراءات سريعة
           </Typography>
@@ -367,8 +368,8 @@ export default function HomePage() {
               key={action.title}
               onClick={action.disabled ? undefined : action.action}
               sx={{
-                borderRadius: 3,
-                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: 2,
+                border: '1px solid rgb(226, 232, 240)',
                 backgroundColor: 'rgba(255,255,255,0.02)',
                 cursor: 'pointer',
                 opacity: action.disabled ? 0.65 : 1,
@@ -376,7 +377,7 @@ export default function HomePage() {
                 '&:hover': {
                   transform: 'translateY(-2px)',
                   backgroundColor: 'rgba(255,255,255,0.05)',
-                  boxShadow: '0 10px 24px rgba(0,0,0,0.16)',
+                  border: '1px solid rgb(203, 213, 225)',
                 },
               }}
             >
@@ -412,13 +413,15 @@ export default function HomePage() {
       <Paper
         sx={{
           p: { xs: 2.5, md: 3 },
-          borderRadius: 3,
+          borderRadius: 2,
           border: '1px solid rgba(255,255,255,0.12)',
           backgroundColor: 'rgba(255,255,255,0.02)',
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-          <FolderIcon sx={{ color: 'info.main' }} />
+          <Box sx={{ color: 'info.main', display: 'flex' }}>
+            <FolderOpen size={24} />
+          </Box>
           <Typography variant="h6" sx={{ fontWeight: 700 }}>
             لمحة إنتاجية اليوم
           </Typography>
