@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import {
-  Alert,
   Box,
   Button,
   Container,
@@ -53,6 +52,7 @@ import { listUploadedObjects, uploadFilesStreamed, moveFileToTrash, restoreFileF
 import { subscribeRealtime } from '../api/realtimeApi'
 import { api } from '../api/http'
 import { FileItemSkeleton, FileItemGridSkeleton, FolderItemSkeleton, FolderItemGridSkeleton } from '../components/SkeletonLoaders'
+import Toast from '../components/Toast'
 
 function fmtBytes(bytes: number | undefined) {
   if (!bytes || !Number.isFinite(bytes) || bytes <= 0) return ''
@@ -66,8 +66,19 @@ function isHiddenChatUploadPath(pathOrKey: string) {
   const normalizedPath = String(pathOrKey || '').replace(/^\/+|\/+$/g, '')
   if (!normalizedPath) return false
   if (normalizedPath.includes('/.chat-files/')) return true
+
   const pathParts = normalizedPath.split('/').filter(Boolean)
-  return pathParts.includes('chat')
+  if (pathParts[0] === 'upload') return true
+  if (pathParts[0] === 'chat') return true
+  return pathParts.length >= 2 && pathParts[1] === 'chat'
+}
+
+function isHiddenChatRootFolder(folderPath: string, currentPath: string) {
+  const normalizedFolderPath = String(folderPath || '').replace(/^\/+|\/+$/g, '')
+  if (!normalizedFolderPath) return false
+  if (currentPath) return false
+  if (normalizedFolderPath === 'upload') return true
+  return /^[A-Za-z0-9_-]{10}$/.test(normalizedFolderPath)
 }
 
 function buildVideoThumbnailKeyFromFileKey(fileKey: string) {
@@ -1241,6 +1252,8 @@ export default function UploadPage() {
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [showToast, setShowToast] = useState(false)
+  const [toastType, setToastType] = useState<'error' | 'success' | 'info'>('error')
   const [loadingExplorer, setLoadingExplorer] = useState(false)
   const [showTrash, setShowTrash] = useState(false)
   const [trashFiles, setTrashFiles] = useState<Array<any>>([])
@@ -1271,6 +1284,20 @@ export default function UploadPage() {
   const sortOrder = 'asc' // Fixed sort order since setSortOrder is unused
 
   const canUpload = useMemo(() => selectedFiles.length > 0 && !uploading, [selectedFiles, uploading])
+
+  // Helper function to show toast notifications
+  const showToastNotification = useCallback((message: string, type: 'error' | 'success' | 'info' = 'error') => {
+    setError(message)
+    setToastType(type)
+    setShowToast(true)
+  }, [])
+
+  // Helper function to close toast
+  const closeToast = useCallback(() => {
+    setShowToast(false)
+    setError(null)
+    setSuccess(null)
+  }, [])
 
   // Filtered and sorted files
   const filteredAndSortedFiles = useMemo(() => {
@@ -1307,7 +1334,7 @@ export default function UploadPage() {
     setTotalBytes(0)
 
     if (selectedFiles.length === 0) {
-      setError('يرجى اختيار ملفات أو مجلد للرفع.')
+      showToastNotification('يرجى اختيار ملفات أو مجلد للرفع.', 'error')
       return
     }
 
@@ -1376,7 +1403,7 @@ export default function UploadPage() {
       const uploaded = res.uploaded ?? []
 
       const count = uploaded.length
-      setSuccess(`تم الرفع بنجاح. عدد الملفات: ${count}`)
+      showToastNotification(`تم الرفع بنجاح. عدد الملفات: ${count}`, 'success')
       setSelectedFiles([])
       // Keep selected destination so user can keep uploading.
 
@@ -1391,9 +1418,9 @@ export default function UploadPage() {
 
       // Handle specific folder conflict error
       if (err.response?.status === 409) {
-        setError('مجلد بهذا الاسم موجود بالفعل. يرجى استخدام اسم مختلف.')
+        showToastNotification('مجلد بهذا الاسم موجود بالفعل. يرجى استخدام اسم مختلف.', 'error')
       } else {
-        setError(`فشل الرفع: ${backendMsg ?? err.message ?? 'خطأ غير معروف'}`)
+        showToastNotification(`فشل الرفع: ${backendMsg ?? err.message ?? 'خطأ غير معروف'}`, 'error')
       }
     } finally {
       setUploading(false)
@@ -1417,11 +1444,11 @@ export default function UploadPage() {
     setDeletingFiles(prev => new Set(prev).add(key))
     try {
       await moveFileToTrash(key)
-      setSuccess('تم نقل الملف إلى سلة المهملات بنجاح')
+      showToastNotification('تم نقل الملف إلى سلة المهملات بنجاح', 'success')
       await fetchExplorer()
     } catch (e: unknown) {
       const err = e as { message?: string; response?: { data?: { message?: string } } }
-      setError(`فشل حذف الملف: ${err.response?.data?.message || err.message || 'خطأ غير معروف'}`)
+      showToastNotification(`فشل حذف الملف: ${err.response?.data?.message || err.message || 'خطأ غير معروف'}`, 'error')
     } finally {
       setDeletingFiles(prev => {
         const next = new Set(prev)
@@ -1438,12 +1465,12 @@ export default function UploadPage() {
 
     try {
       await restoreFileFromTrash(key)
-      setSuccess('تم استعادة الملف بنجاح')
+      showToastNotification('تم استعادة الملف بنجاح', 'success')
       await fetchTrashFiles()
       await fetchExplorer()
     } catch (e: unknown) {
       const err = e as { message?: string; response?: { data?: { message?: string } } }
-      setError(`فشل استعادة الملف: ${err.response?.data?.message || err.message || 'خطأ غير معروف'}`)
+      showToastNotification(`فشل استعادة الملف: ${err.response?.data?.message || err.message || 'خطأ غير معروف'}`, 'error')
     }
   }
 
@@ -1454,7 +1481,7 @@ export default function UploadPage() {
       setTrashFiles(res.files || [])
     } catch (e: unknown) {
       const err = e as { message?: string; response?: { data?: { message?: string } } }
-      setError(`فشل جلب ملفات المهملات: ${err.response?.data?.message || err.message || 'خطأ غير معروف'}`)
+      showToastNotification(`فشل جلب ملفات المهملات: ${err.response?.data?.message || err.message || 'خطأ غير معروف'}`, 'error')
     } finally {
       setLoadingTrash(false)
     }
@@ -1484,34 +1511,34 @@ export default function UploadPage() {
 
     // Client-side validation
     if (!trimmedName) {
-      setError('يرجى إدخال اسم المجلد')
+      showToastNotification('يرجى إدخال اسم المجلد', 'error')
       return
     }
 
     // Check for invalid characters
     const invalidChars = /[<>:"/\\|?*]/
     if (invalidChars.test(trimmedName)) {
-      setError('اسم المجلد يحتوي على أحرف غير صالحة: < > : " / \\ | ? *')
+      showToastNotification('اسم المجلد يحتوي على أحرف غير صالحة: < > : " / \\ | ? *', 'error')
       return
     }
 
     // Check for names that start or end with dots or spaces
     if (trimmedName.startsWith('.') || trimmedName.startsWith(' ') ||
       trimmedName.endsWith('.') || trimmedName.endsWith(' ')) {
-      setError('اسم المجلد لا يمكن أن يبدأ أو ينتهي بنقطة أو مسافة')
+      showToastNotification('اسم المجلد لا يمكن أن يبدأ أو ينتهي بنقطة أو مسافة', 'error')
       return
     }
 
     // Check for reserved names
     const reservedNames = ['CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9', 'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9']
     if (reservedNames.includes(trimmedName.toUpperCase())) {
-      setError('اسم المجلد محجوز. يرجى استخدام اسم مختلف.')
+      showToastNotification('اسم المجلد محجوز. يرجى استخدام اسم مختلف.', 'error')
       return
     }
 
     // Check length
     if (trimmedName.length > 255) {
-      setError('اسم المجلد طويل جداً. الحد الأقصى هو 255 حرفًا.')
+      showToastNotification('اسم المجلد طويل جداً. الحد الأقصى هو 255 حرفًا.', 'error')
       return
     }
 
@@ -1522,7 +1549,7 @@ export default function UploadPage() {
     })
 
     if (existingFolders.includes(trimmedName)) {
-      setError('مجلد بهذا الاسم موجود بالفعل في هذا الموقع')
+      showToastNotification('مجلد بهذا الاسم موجود بالفعل في هذا الموقع', 'error')
       return
     }
 
@@ -1549,20 +1576,20 @@ export default function UploadPage() {
 
       if (!response.ok) {
         if (response.status === 409) {
-          setError('مجلد بهذا الاسم موجود بالفعل في هذا الموقع')
+          showToastNotification('مجلد بهذا الاسم موجود بالفعل في هذا الموقع', 'error')
         } else {
-          setError(data.message || 'فشل إنشاء المجلد')
+          showToastNotification(data.message || 'فشل إنشاء المجلد', 'error')
         }
         return
       }
 
-      setSuccess('تم إنشاء المجلد بنجاح')
+      showToastNotification('تم إنشاء المجلد بنجاح', 'success')
       setNewFolderName('')
       setShowCreateFolderModal(false)
       await fetchExplorer()
     } catch (e: unknown) {
       const err = e as { message?: string }
-      setError(`فشل إنشاء المجلد: ${err.message || 'خطأ غير معروف'}`)
+      showToastNotification(`فشل إنشاء المجلد: ${err.message || 'خطأ غير معروف'}`, 'error')
     } finally {
       setCreatingFolder(false)
     }
@@ -1594,11 +1621,11 @@ export default function UploadPage() {
         throw new Error('Failed to delete folder')
       }
 
-      setSuccess('تم حذف المجلد بنجاح')
+      showToastNotification('تم حذف المجلد بنجاح', 'success')
       await fetchExplorer()
     } catch (e: unknown) {
       const err = e as { message?: string }
-      setError(`فشل حذف المجلد: ${err.message || 'خطأ غير معروف'}`)
+      showToastNotification(`فشل حذف المجلد: ${err.message || 'خطأ غير معروف'}`, 'error')
     } finally {
       setDeletingFolders(prev => {
         const next = new Set(prev)
@@ -1625,7 +1652,7 @@ export default function UploadPage() {
       const normalizedFolderPath = String(folderPath || '').replace(/^\/+|\/+$/g, '')
       const downloadUrl = `${baseUrl}/api/download/folder?path=${encodeURIComponent(normalizedFolderPath)}&token=${encodeURIComponent(token)}`
 
-      setSuccess('جاري تحضير ملف ZIP للمجلد...')
+      showToastNotification('جاري تحضير ملف ZIP للمجلد...', 'info')
 
       // Poll for ZIP readiness
       let attempts = 0
@@ -1643,7 +1670,7 @@ export default function UploadPage() {
           document.body.appendChild(a)
           a.click()
           document.body.removeChild(a)
-          setSuccess('بدأ تنزيل المجلد')
+          showToastNotification('بدأ تنزيل المجلد', 'success')
           return
         }
 
@@ -1662,7 +1689,7 @@ export default function UploadPage() {
       throw new Error('انتهت مهلة تحضير المجلد. يرجى المحاولة مرة أخرى.')
     } catch (error) {
       console.error('Folder download error:', error)
-      setError(`فشل تنزيل المجلد: ${error instanceof Error ? error.message : 'خطأ غير معروف'}`)
+      showToastNotification(`فشل تنزيل المجلد: ${error instanceof Error ? error.message : 'خطأ غير معروف'}`, 'error')
     }
   }
 
@@ -1724,13 +1751,13 @@ export default function UploadPage() {
         }
       }))
 
-      setSuccess('تم حفظ إعدادات الخصوصية')
+      showToastNotification('تم حفظ إعدادات الخصوصية', 'success')
       setShowPrivacyModal(false)
       setSelectedFileForPrivacy(null)
       setSelectedMembers([])
     } catch (e: unknown) {
       const err = e as { message?: string }
-      setError(`فشل حفظ الإعدادات: ${err.message || 'خطأ غير معروف'}`)
+      showToastNotification(`فشل حفظ الإعدادات: ${err.message || 'خطأ غير معروف'}`, 'error')
     }
   }
 
@@ -1899,6 +1926,7 @@ export default function UploadPage() {
           return folderName !== 'workspace-assets'
             && folderName !== 'workspace-logo'
             && !isHiddenChatUploadPath(folder)
+            && !isHiddenChatRootFolder(folder, currentPath)
         })
         setFoldersHere(filteredFolders)
         setFilesHere(visibleObjects)
@@ -1930,7 +1958,7 @@ export default function UploadPage() {
       }
     } catch (e: unknown) {
       const err = e as { message?: string; response?: { data?: { message?: string } } }
-      setError(err.response?.data?.message ?? err.message ?? 'فشل جلب الملفات')
+      showToastNotification(err.response?.data?.message ?? err.message ?? 'فشل جلب الملفات', 'error')
     } finally {
       if (reset) {
         setLoadingExplorer(false)
@@ -1938,7 +1966,7 @@ export default function UploadPage() {
         setIsLoadingMoreFiles(false)
       }
     }
-  }, [explorerPrefix])
+  }, [currentPath, explorerPrefix])
 
   const loadMoreFiles = useCallback(async () => {
     if (!hasMoreFiles || isLoadingMoreFiles || loadingExplorer) return
@@ -2093,12 +2121,6 @@ export default function UploadPage() {
 
 
         </Box>
-
-        {success && (
-          <Alert severity="success" sx={{ mt: 2 }}>
-            {success}
-          </Alert>
-        )}
 
         <Box sx={{ mt: 3 }}>
           <Box sx={{ display: 'flex', gap: 0, flexWrap: 'wrap', alignItems: 'center', mb: 2 }}>
@@ -2460,17 +2482,6 @@ export default function UploadPage() {
               </Typography>
             )}
 
-            {success && !uploading && (
-              <Alert severity="success" sx={{ mt: 2 }}>
-                {success}
-              </Alert>
-            )}
-
-            {error && !uploading && (
-              <Alert severity="error" sx={{ mt: 2 }}>
-                {error}
-              </Alert>
-            )}
           </Box>
         </DialogContent>
       </Dialog>
@@ -2512,11 +2523,6 @@ export default function UploadPage() {
               }
             }}
           />
-          {error && !error.includes('اسم المجلد') && (
-            <Alert severity="error" sx={{ mt: 1 }}>
-              {error}
-            </Alert>
-          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setShowCreateFolderModal(false)} disabled={creatingFolder}>
@@ -2594,6 +2600,15 @@ export default function UploadPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Toast Notification */}
+      {showToast && (error || success) && (
+        <Toast
+          message={error || success || ''}
+          type={toastType}
+          onClose={closeToast}
+        />
+      )}
     </Box>
   )
 }
