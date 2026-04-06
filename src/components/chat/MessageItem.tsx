@@ -1,27 +1,74 @@
 import { linkifyText, extractLinks, getFileUrl, isImageAttachment } from '../../utils/chatUtils'
 import type { ChatMessage, ChatMention, ChatUser } from '../../api/chatApi'
+import {
+  Box,
+  Typography,
+  Avatar,
+  Chip,
+  Tooltip,
+  Paper,
+  Stack,
+  Card,
+  CardContent
+} from '@mui/material'
+import {
+  Check,
+  DoneAll,
+  AttachFile,
+  Person
+} from '@mui/icons-material'
+import { styled } from '@mui/material/styles'
 
-interface TooltipProps {
-  children: React.ReactNode
-  content: React.ReactNode
-  className?: string
-}
+// Styled components for modern chat bubble
+const ChatBubble = styled(Paper, {
+  shouldForwardProp: (prop) => prop !== 'isMine'
+})<{ isMine: boolean }>(({ theme, isMine }) => ({
+  padding: theme.spacing(2),
+  borderRadius: 16,
+  maxWidth: '78%',
+  minWidth: 160,
+  background: isMine
+    ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+    : theme.palette.mode === 'dark'
+      ? theme.palette.grey[800]
+      : theme.palette.grey[100],
+  color: isMine
+    ? theme.palette.common.white
+    : theme.palette.text.primary,
+  border: isMine
+    ? 'none'
+    : `1px solid ${theme.palette.divider}`,
+  boxShadow: theme.shadows[2],
+  transition: 'all 0.2s ease-in-out',
+  '&:hover': {
+    transform: 'translateY(-1px)',
+    boxShadow: theme.shadows[4],
+  }
+}))
 
-function Tooltip({ children, content, className = '' }: TooltipProps) {
-  return (
-    <div className={`group relative inline-block ${className}`}>
-      {children}
-      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block z-50">
-        <div className="bg-gray-900 text-white text-sm rounded-lg shadow-lg p-2 min-w-[220px] cursor-pointer">
-          {content}
-        </div>
-        <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1">
-          <div className="border-4 border-transparent border-t-gray-900"></div>
-        </div>
-      </div>
-    </div>
-  )
-}
+const MessageTime = styled(Typography)(({ theme }) => ({
+  fontSize: '0.75rem',
+  opacity: 0.7,
+  marginTop: theme.spacing(0.5),
+}))
+
+const AttachmentCard = styled(Card)(({ theme }) => ({
+  marginTop: theme.spacing(1),
+  backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  border: `1px solid ${theme.palette.divider}`,
+  '&:hover': {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  }
+}))
+
+const MentionChip = styled(Chip)(({ theme }) => ({
+  margin: theme.spacing(0.5),
+  backgroundColor: theme.palette.primary.main,
+  color: theme.palette.primary.contrastText,
+  '&:hover': {
+    backgroundColor: theme.palette.primary.dark,
+  }
+}))
 
 interface MessageItemProps {
   message: ChatMessage
@@ -54,61 +101,21 @@ function getReadStatusInfo(
   if (totalCount === 0) return null
 
   return (
-    <div className="flex items-center gap-1">
+    <Stack direction="row" spacing={0.5}>
       {readCount === 0 ? (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="opacity-50">
-          <path
-            d="M18 7L8 17L3 12"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <Check sx={{ fontSize: 16, opacity: 0.5 }} />
       ) : readCount === totalCount ? (
-        <div className="flex items-center">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M18 7L8 17L3 12"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="-ml-2">
-            <path
-              d="M18 7L8 17L3 12"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </div>
+        <>
+          <DoneAll sx={{ fontSize: 16 }} />
+          <DoneAll sx={{ fontSize: 16, ml: -1 }} />
+        </>
       ) : (
-        <div className="flex items-center">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M18 7L8 17L3 12"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="-ml-2 opacity-50">
-            <path
-              d="M18 7L8 17L3 12"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </div>
+        <>
+          <DoneAll sx={{ fontSize: 16 }} />
+          <DoneAll sx={{ fontSize: 16, ml: -1, opacity: 0.5 }} />
+        </>
       )}
-    </div>
+    </Stack>
   )
 }
 
@@ -126,64 +133,75 @@ export default function MessageItem({
   const linkPreviews = extractLinks(message.text || '')
 
   return (
-    <div className={`flex ${isMine ? 'justify-start' : 'justify-end'}`}>
-      <div
-        className={`max-w-[78%] min-w-40 p-4 rounded-lg ${isMine
-          ? 'bg-slate-700 text-white'
-          : 'bg-slate-800 text-slate-100 border border-slate-600'
-          }`}
-      >
-        {isGeneralDiscussionSelected && <div className="flex items-center gap-1.5 mb-2 translate-x-1">
-          <div className="relative w-7 h-7 rounded-full bg-slate-600 flex items-center justify-center text font-medium overflow-hidden">
-            {sender?.avatar ? (
-              <img
-                src={sender.avatar}
-                alt={sender.name || 'User'}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <span className='translate-y-0.5 text-sm'>{(sender?.name || 'U').charAt(0).toUpperCase()}</span>
-            )}
-          </div>
-
-          <span className="text-xs opacity-85 font-bold">
-            {sender?.name?.split(' ')[0] || 'مستخدم'}
-          </span>
-        </div>}
+    <Box
+      sx={{
+        display: 'flex',
+        justifyContent: isMine ? 'flex-start' : 'flex-end',
+        mb: 1
+      }}
+    >
+      <ChatBubble isMine={isMine}>
+        {isGeneralDiscussionSelected && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+            <Avatar
+              src={sender?.avatar || undefined}
+              sx={{ width: 28, height: 28 }}
+            >
+              {sender?.name ? sender.name.charAt(0).toUpperCase() : 'U'}
+            </Avatar>
+            <Typography variant="caption" sx={{ fontWeight: 'bold', opacity: 0.85 }}>
+              {sender?.name?.split(' ')[0] || 'مستخدم'}
+            </Typography>
+          </Box>
+        )}
 
         {message.text && (
-          <div className="text-sm wrap-break-word mt-2.5 mb-0.5">
+          <Typography
+            variant="body2"
+            sx={{
+              wordBreak: 'break-word',
+              mb: 0.5,
+              lineHeight: 1.4
+            }}
+          >
             {linkifyText(message.text)}
-          </div>
+          </Typography>
         )}
 
         {linkPreviews.length > 0 && (
-          <div className="space-y-3 mt-4">
+          <Stack spacing={1.5} sx={{ mt: 2 }}>
             {linkPreviews.map((link) => (
-              <a
+              <Box
                 key={`${message.id}_${link}`}
+                component="a"
                 href={link}
                 target="_blank"
                 rel="noreferrer"
-                className={`block p-4 no-underline rounded-lg ${isMine
-                  ? 'bg-white/18'
-                  : 'bg-white/4'
-                  }`}
+                sx={{ textDecoration: 'none' }}
               >
-                <div className="text-xs opacity-90 block mb-1">
-                  رابط
-                </div>
-                <div className={`text-sm wrap-break-word ${isMine ? 'text-inherit' : 'text-slate-300'
-                  }`}>
-                  {link}
-                </div>
-              </a>
+                <AttachmentCard>
+                  <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                    <Typography variant="caption" sx={{ opacity: 0.9, display: 'block', mb: 0.5 }}>
+                      رابط
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        wordBreak: 'break-word',
+                        color: isMine ? 'inherit' : 'text.secondary'
+                      }}
+                    >
+                      {link}
+                    </Typography>
+                  </CardContent>
+                </AttachmentCard>
+              </Box>
             ))}
-          </div>
+          </Stack>
         )}
 
         {Array.isArray(message.mentions) && message.mentions.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-4">
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 2 }}>
             {message.mentions.map((mention, idx) => {
               const key = `${message.id}_${mention.type}_${mention.id}_${idx}`
 
@@ -195,130 +213,157 @@ export default function MessageItem({
                 return (
                   <Tooltip
                     key={key}
-                    content={
-                      <div
-                        onClick={(event: React.MouseEvent) => {
+                    title={
+                      <Box
+                        onClick={(event) => {
                           event.stopPropagation()
                           onOpenDirectConversation(mention.id)
                         }}
-                        className="min-w-[220px] p-4 rounded-lg cursor-pointer flex items-center gap-4"
+                        sx={{
+                          p: 2,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 2,
+                          minWidth: 220
+                        }}
                       >
-                        <div className="relative w-[34px] h-[34px] rounded-full bg-gray-600 flex items-center justify-center text-sm font-medium overflow-hidden">
+                        <Avatar sx={{ width: 34, height: 34 }}>
                           {member?.avatar ? (
                             <img
                               src={member.avatar}
                               alt={member?.name || mention.label || 'User'}
-                              className="w-full h-full object-cover"
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                             />
                           ) : (
-                            <span>{(member?.name || mention.label || 'U').charAt(0).toUpperCase()}</span>
+                            <Person />
                           )}
-                        </div>
-                        <div>
-                          <div className="text-sm font-bold">
+                        </Avatar>
+                        <Box>
+                          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
                             {member?.name || mention.label}
-                          </div>
-                          <div className="text-xs opacity-85 block">
+                          </Typography>
+                          <Typography variant="caption" sx={{ opacity: 0.85, display: 'block' }}>
                             {memberPosition}
-                          </div>
-                          <div className="text-xs opacity-85 block">
+                          </Typography>
+                          <Typography variant="caption" sx={{ opacity: 0.85, display: 'block' }}>
                             {memberStatusText}
-                          </div>
-                        </div>
-                      </div>
+                          </Typography>
+                        </Box>
+                      </Box>
                     }
                   >
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-slate-600 text-white">
-                      @ {mention.label}
-                    </span>
+                    <MentionChip
+                      label={`@${mention.label}`}
+                      size="small"
+                      clickable
+                    />
                   </Tooltip>
                 )
               }
 
               const href = getMentionHref(mention)
               return (
-                <span
+                <MentionChip
                   key={key}
-                  className={`inline-flex items-center px-2 py-1 rounded-full text-xs bg-slate-600 text-white ${href ? 'cursor-pointer hover:bg-slate-500' : ''
-                    }`}
+                  label={`${mention.type === 'task' ? '#' : '📎'} ${mention.label}`}
+                  size="small"
+                  clickable={!!href}
                   onClick={href ? () => window.open(href, '_blank', 'noopener,noreferrer') : undefined}
-                >
-                  {mention.type === 'task' ? '#' : '📎'} {mention.label}
-                </span>
+                />
               )
             })}
-          </div>
+          </Box>
         )}
 
         {Array.isArray(message.attachments) && message.attachments.length > 0 && (
-          <div className="space-y-2 mt-4">
+          <Stack spacing={1} sx={{ mt: 2 }}>
             {message.attachments.map((attachment, idx) => {
               const attachmentUrl = attachment.url || getFileUrl(attachment.key)
 
               if (!attachmentUrl) {
                 return (
-                  <span
+                  <Chip
                     key={`${message.id}_attachment_${idx}`}
-                    className="inline-flex items-center px-2 py-1 rounded-full text-xs border border-gray-600 text-gray-300"
-                  >
-                    📎 {attachment.name}
-                  </span>
+                    icon={<AttachFile />}
+                    label={attachment.name}
+                    size="small"
+                    variant="outlined"
+                  />
                 )
               }
 
               return (
-                <div key={`${message.id}_attachment_${idx}`} className="space-y-2">
+                <Box key={`${message.id}_attachment_${idx}`}>
                   {isImageAttachment(attachment) && (
-                    <a
+                    <Box
+                      component="a"
                       href={attachmentUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="block w-full max-w-[260px] rounded-lg overflow-hidden border border-gray-700"
+                      sx={{
+                        display: 'block',
+                        width: '100%',
+                        maxWidth: 260,
+                        borderRadius: 2,
+                        overflow: 'hidden',
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        textDecoration: 'none',
+                        mb: 1
+                      }}
                     >
                       <img
                         src={attachmentUrl}
                         alt={attachment.name}
-                        className="w-full h-auto block"
+                        style={{ width: '100%', height: 'auto', display: 'block' }}
                       />
-                    </a>
+                    </Box>
                   )}
-                  <a
+                  <Chip
+                    icon={<AttachFile />}
+                    label={attachment.name}
+                    size="small"
+                    variant="outlined"
+                    clickable
+                    component="a"
                     href={attachmentUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center px-3 py-2 rounded-lg text-xs border border-gray-600 text-gray-300 hover:bg-gray-700 hover:border-gray-500 justify-start"
-                  >
-                    📎 {attachment.name}
-                  </a>
-                </div>
+                    sx={{
+                      '&:hover': {
+                        backgroundColor: 'action.hover',
+                      }
+                    }}
+                  />
+                </Box>
               )
             })}
-          </div>
+          </Stack>
         )}
-        <div className='flex items-center gap-1.5 opacity-80'>
-          <span className="text-xs opacity-75 mt-2 block">
+
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1, opacity: 0.8 }}>
+          <MessageTime variant="caption">
             {new Date(message.createdAt).toLocaleString('ar-SA', {
               day: '2-digit',
               month: '2-digit',
             })}
-          </span>
+          </MessageTime>
 
-          <span className="text-xs opacity-75 mt-2 block">
+          <MessageTime variant="caption">
             {new Date(message.createdAt).toLocaleString('ar-SA', {
               hour: '2-digit',
               minute: '2-digit',
             })}
-          </span>
+          </MessageTime>
 
           {isMine && currentUserId && conversationParticipantIds.length > 1 && (
-            <div className="flex items-center gap-1 mt-2">
+            <Box sx={{ mt: 0.5 }}>
               {getReadStatusInfo(message, currentUserId, conversationParticipantIds)}
-            </div>
+            </Box>
           )}
-        </div>
-
-
-      </div>
-    </div>
+        </Box>
+      </ChatBubble>
+    </Box>
   )
 }

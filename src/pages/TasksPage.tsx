@@ -540,10 +540,10 @@ export default function TasksPage() {
           flex: '1 1 280px',
           minHeight: 220,
           border: isHighlighted
-            ? '2px solid #42a5f5'
-            : '1px solid rgba(255,255,255,0.08)',
+            ? '2px solid #1976d2'
+            : '1px solid rgba(25, 118, 210, 0.12)',
           bgcolor: isHighlighted
-            ? 'rgba(66,165,245,0.08)'
+            ? 'rgba(25, 118, 210, 0.08)'
             : 'background.paper',
           transition: 'all 0.15s ease-in-out',
         }}
@@ -621,7 +621,7 @@ export default function TasksPage() {
           </Box>
           <DragOverlay>
             {activeTask ? (
-              <Box sx={{ transform: 'rotate(2deg)', border: '1px solid rgb(226, 232, 240)' }}>
+              <Box sx={{ transform: 'rotate(2deg)', border: '1px solid rgba(25, 118, 210, 0.2)' }}>
                 <EnhancedTaskCard
                   task={activeTask}
                   onChecklistUpdate={handleChecklistUpdate}
@@ -659,10 +659,11 @@ export default function TasksPage() {
           bottom: 24,
           right: 24,
           zIndex: 1000,
-          border: '1px solid rgb(226, 232, 240)',
+          border: '1px solid rgba(25, 118, 210, 0.2)',
           '&:hover': {
             transform: 'scale(1.05)',
-            border: '1px solid rgb(203, 213, 225)',
+            border: '1px solid rgba(25, 118, 210, 0.4)',
+            boxShadow: '0 6px 20px rgba(25, 118, 210, 0.3)',
           },
           transition: 'all 0.2s ease-in-out',
         }}

@@ -261,10 +261,11 @@ export default function HomePage() {
           p: { xs: 3, md: 4 },
           mb: 4,
           borderRadius: 4,
-          border: '1px solid rgba(255,255,255,0.14)',
+          border: '1px solid rgba(25, 118, 210, 0.12)',
           background:
             'radial-gradient(circle at 15% 10%, rgba(25,118,210,0.2), transparent 45%), radial-gradient(circle at 85% 0%, rgba(46,125,50,0.2), transparent 40%), rgba(255,255,255,0.02)',
           backdropFilter: 'blur(6px)',
+          boxShadow: 'none',
         }}
       >
 
@@ -325,9 +326,10 @@ export default function HomePage() {
               key={item.title}
               sx={{
                 borderRadius: 2,
-                border: '1px solid rgb(226, 232, 240)',
+                border: '1px solid rgba(25, 118, 210, 0.12)',
                 backgroundColor: 'rgba(255,255,255,0.02)',
                 height: '100%',
+                boxShadow: 'none',
               }}
             >
               <CardContent sx={{ p: 2.5 }}>
@@ -369,15 +371,16 @@ export default function HomePage() {
               onClick={action.disabled ? undefined : action.action}
               sx={{
                 borderRadius: 2,
-                border: '1px solid rgb(226, 232, 240)',
+                border: '1px solid rgba(25, 118, 210, 0.12)',
                 backgroundColor: 'rgba(255,255,255,0.02)',
                 cursor: 'pointer',
                 opacity: action.disabled ? 0.65 : 1,
                 transition: 'all 0.2s ease',
+                boxShadow: 'none',
                 '&:hover': {
                   transform: 'translateY(-2px)',
                   backgroundColor: 'rgba(255,255,255,0.05)',
-                  border: '1px solid rgb(203, 213, 225)',
+                  border: '1px solid rgba(25, 118, 210, 0.25)',
                 },
               }}
             >
@@ -414,8 +417,9 @@ export default function HomePage() {
         sx={{
           p: { xs: 2.5, md: 3 },
           borderRadius: 2,
-          border: '1px solid rgba(255,255,255,0.12)',
+          border: '1px solid rgba(25, 118, 210, 0.12)',
           backgroundColor: 'rgba(255,255,255,0.02)',
+          boxShadow: 'none',
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>

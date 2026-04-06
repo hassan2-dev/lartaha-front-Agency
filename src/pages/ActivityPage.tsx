@@ -168,16 +168,17 @@ export default function ActivityPage() {
         </Typography>
         <Button
           variant="outlined"
-          startIcon={<Refresh size={20} />}
+          endIcon={<Refresh size={20} />}
           onClick={handleRefresh}
           disabled={loading}
+          sx={{ gap: 1 }}
         >
           تحديث
         </Button>
       </Box>
 
       {error && (
-        <Card sx={{ mb: 3, bgcolor: 'error.light', border: '1px solid rgb(226, 232, 240)' }}>
+        <Card sx={{ mb: 3, bgcolor: 'error.light', border: '1px solid rgba(211, 47, 47, 0.2)' }}>
           <CardContent>
             <Typography color="error">{error}</Typography>
           </CardContent>
@@ -187,7 +188,7 @@ export default function ActivityPage() {
       {loading && activities.length === 0 ? (
         <>
           <PageHeaderSkeleton />
-          <Card sx={{ border: '1px solid rgb(226, 232, 240)' }}>
+          <Card sx={{ border: '1px solid rgba(25, 118, 210, 0.12)' }}>
             <CardContent sx={{ p: 0 }}>
               <ActivityItemSkeleton />
               <ActivityItemSkeleton />

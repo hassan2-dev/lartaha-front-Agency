@@ -7,7 +7,7 @@ export function TaskCardSkeleton() {
       sx={{
         p: 2,
         borderRadius: 2,
-        border: '1px solid rgba(255,255,255,0.08)',
+        border: '1px solid rgba(25, 118, 210, 0.12)',
         bgcolor: 'background.paper',
         mb: 2,
       }}
@@ -32,7 +32,7 @@ export function ColumnSkeleton() {
         borderRadius: 2,
         flex: '1 1 280px',
         minHeight: 220,
-        border: '1px solid rgba(255,255,255,0.08)',
+        border: '1px solid rgba(25, 118, 210, 0.12)',
         bgcolor: 'background.paper',
       }}
     >
@@ -94,7 +94,7 @@ export function FileItemSkeleton() {
         gap: 2,
         borderRadius: 2,
         mb: 1,
-        border: '1px solid rgba(255,255,255,0.08)',
+        border: '1px solid rgba(25, 118, 210, 0.12)',
         bgcolor: 'rgba(255,255,255,0.02)',
       }}
     >
@@ -121,7 +121,7 @@ export function FileItemGridSkeleton() {
         flexDirection: 'column',
         boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
         height: '100%',
-        border: '1px solid rgba(255,255,255,0.08)',
+        border: '1px solid rgba(25, 118, 210, 0.12)',
         bgcolor: 'rgba(255,255,255,0.02)',
       }}
     >
@@ -153,7 +153,7 @@ export function FolderItemSkeleton() {
         gap: 2,
         borderRadius: 2,
         mb: 1,
-        border: '1px solid rgba(255,255,255,0.08)',
+        border: '1px solid rgba(25, 118, 210, 0.12)',
         bgcolor: 'rgba(255,255,255,0.02)',
       }}
     >
@@ -176,7 +176,7 @@ export function FolderItemGridSkeleton() {
         flexDirection: 'column',
         boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
         height: '100%',
-        border: '1px solid rgba(255,255,255,0.08)',
+        border: '1px solid rgba(25, 118, 210, 0.12)',
         bgcolor: 'rgba(255,255,255,0.02)',
       }}
     >

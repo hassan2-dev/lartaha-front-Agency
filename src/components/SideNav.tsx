@@ -339,9 +339,10 @@ export default function SideNav({ children, title = 'larthaa Agency' }: SideNavP
           position="sticky"
           elevation={0}
           sx={{
-            background: 'transparent',
-            borderBottom: '1px solid rgba(255,255,255,0.08)',
+            backgroundColor: theme.palette.background.paper,
+            borderBottom: '1px solid rgba(25, 118, 210, 0.12)',
             color: 'inherit',
+            backdropFilter: 'blur(8px)',
           }}
         >
           <Toolbar sx={{ justifyContent: 'space-between' }}>

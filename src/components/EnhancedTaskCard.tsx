@@ -95,14 +95,15 @@ export default function EnhancedTaskCard({
         p: 2,
         borderRadius: 2,
         background: 'rgba(255,255,255,0.02)',
-        border: task.parentId ? '1px solid rgba(25, 118, 210, 0.3)' : '1px solid rgb(226, 232, 240)',
+        border: task.parentId ? '1px solid rgba(25, 118, 210, 0.3)' : '1px solid rgba(25, 118, 210, 0.15)',
         transition: 'all 0.2s ease-in-out',
         cursor: 'pointer',
         opacity: hasAccess ? 1 : 0.6,
         '&:hover': {
           background: 'rgba(255,255,255,0.04)',
           transform: 'translateY(-2px)',
-          border: task.parentId ? '1px solid rgba(25, 118, 210, 0.5)' : '1px solid rgb(203, 213, 225)',
+          border: task.parentId ? '1px solid rgba(25, 118, 210, 0.5)' : '1px solid rgba(25, 118, 210, 0.25)',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
         },
       }}
     >
