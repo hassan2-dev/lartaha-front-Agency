@@ -90,6 +90,7 @@ export default function EnhancedTaskCard({
 
   return (
     <Paper
+      elevation={0}
       onClick={handleCardClick}
       sx={{
         p: 2,
@@ -103,7 +104,6 @@ export default function EnhancedTaskCard({
           background: 'rgba(255,255,255,0.04)',
           transform: 'translateY(-2px)',
           border: task.parentId ? '1px solid rgba(25, 118, 210, 0.5)' : '1px solid rgba(25, 118, 210, 0.25)',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
         },
       }}
     >

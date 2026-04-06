@@ -24,25 +24,33 @@ const ChatBubble = styled(Paper, {
   shouldForwardProp: (prop) => prop !== 'isMine'
 })<{ isMine: boolean }>(({ theme, isMine }) => ({
   padding: theme.spacing(2),
-  borderRadius: 16,
+  borderRadius: 18,
   maxWidth: '78%',
   minWidth: 160,
   background: isMine
-    ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+    ? theme.palette.mode === 'dark'
+      ? 'linear-gradient(135deg, #4a5568 0%, #2d3748 100%)'
+      : 'linear-gradient(135deg, #e2e8f0 0%, #cbd5e0 100%)'
     : theme.palette.mode === 'dark'
       ? theme.palette.grey[800]
-      : theme.palette.grey[100],
+      : theme.palette.common.white,
   color: isMine
-    ? theme.palette.common.white
+    ? theme.palette.mode === 'dark'
+      ? theme.palette.common.white
+      : theme.palette.text.primary
     : theme.palette.text.primary,
   border: isMine
     ? 'none'
     : `1px solid ${theme.palette.divider}`,
-  boxShadow: theme.shadows[2],
+  boxShadow: isMine
+    ? '0 1px 2px rgba(0, 0, 0, 0.1)'
+    : theme.shadows[1],
   transition: 'all 0.2s ease-in-out',
   '&:hover': {
     transform: 'translateY(-1px)',
-    boxShadow: theme.shadows[4],
+    boxShadow: isMine
+      ? '0 2px 4px rgba(0, 0, 0, 0.15)'
+      : theme.shadows[2],
   }
 }))
 

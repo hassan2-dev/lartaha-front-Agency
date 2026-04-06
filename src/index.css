@@ -303,4 +303,47 @@
   .delay-500 {
     animation-delay: 0.5s;
   }
+
+  /* Custom Scrollbar Styling */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.8 0.02 264);
+    border-radius: 4px;
+    transition: background 0.2s ease;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.7 0.03 264);
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* Dark mode scrollbar */
+  .dark ::-webkit-scrollbar-thumb {
+    background: oklch(0.3 0.02 264);
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.4 0.03 264);
+  }
+
+  /* Firefox scrollbar */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: oklch(0.8 0.02 264) transparent;
+  }
+
+  .dark * {
+    scrollbar-color: oklch(0.3 0.02 264) transparent;
+  }
 }

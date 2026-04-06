@@ -65,7 +65,7 @@ interface SideNavProps {
   title?: string
 }
 
-export default function SideNav({ children, title = 'larthaa Agency' }: SideNavProps) {
+export default function SideNav({ children, title = 'Larthaa Agency' }: SideNavProps) {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -97,7 +97,6 @@ export default function SideNav({ children, title = 'larthaa Agency' }: SideNavP
             boxShadow: user?.workspaceLogo
               ? '0 2px 8px rgba(0,0,0,0.06)'
               : '0 4px 12px rgba(124, 58, 237, 0.15)',
-            transform: user?.workspaceLogo ? 'none' : 'rotate(-4deg)',
             color: '#fff',
             fontWeight: 900,
             fontSize: '1.5rem',
@@ -106,15 +105,11 @@ export default function SideNav({ children, title = 'larthaa Agency' }: SideNavP
             borderColor: 'primary.main',
           }}
         >
-          {user?.workspaceLogo ? (
-            <Box
-              component="img"
-              src={user.workspaceLogo}
-              sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            />
-          ) : (
-            <BusinessIcon size={28} />
-          )}
+          <Box
+            component="img"
+            src={user?.workspaceLogo || '/logo-white.svg'}
+            sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
         </Box>
         <Typography
           variant="h6"

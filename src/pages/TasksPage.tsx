@@ -533,6 +533,7 @@ export default function TasksPage() {
 
     return (
       <Paper
+        elevation={0}
         ref={setNodeRef}
         sx={{
           p: 2,
@@ -663,7 +664,6 @@ export default function TasksPage() {
           '&:hover': {
             transform: 'scale(1.05)',
             border: '1px solid rgba(25, 118, 210, 0.4)',
-            boxShadow: '0 6px 20px rgba(25, 118, 210, 0.3)',
           },
           transition: 'all 0.2s ease-in-out',
         }}

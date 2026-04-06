@@ -62,6 +62,14 @@ function fmtBytes(bytes: number | undefined) {
   return `${value.toFixed(value >= 10 || idx === 0 ? 0 : 1)} ${units[idx]}`
 }
 
+function isHiddenChatUploadPath(pathOrKey: string) {
+  const normalizedPath = String(pathOrKey || '').replace(/^\/+|\/+$/g, '')
+  if (!normalizedPath) return false
+  if (normalizedPath.includes('/.chat-files/')) return true
+  const pathParts = normalizedPath.split('/').filter(Boolean)
+  return pathParts.includes('chat')
+}
+
 function buildVideoThumbnailKeyFromFileKey(fileKey: string) {
   const safeKey = String(fileKey || '').replace(/^\/+/, '')
   if (!safeKey) return ''
@@ -1882,17 +1890,20 @@ export default function UploadPage() {
       const limit = 50
       const continuationToken = reset ? undefined : (continuationTokenOverride || undefined)
       const res = await listUploadedObjects(explorerPrefix, limit, true, continuationToken)
+      const visibleObjects = (res.objects ?? []).filter((obj) => !isHiddenChatUploadPath(obj.key))
 
       if (reset) {
         // Filter out system folders like workspace-assets and workspace-logo
         const filteredFolders = (res.folders ?? []).filter(folder => {
           const folderName = folder.split('/').filter(Boolean).pop()
-          return folderName !== 'workspace-assets' && folderName !== 'workspace-logo'
+          return folderName !== 'workspace-assets'
+            && folderName !== 'workspace-logo'
+            && !isHiddenChatUploadPath(folder)
         })
         setFoldersHere(filteredFolders)
-        setFilesHere(res.objects ?? [])
+        setFilesHere(visibleObjects)
       } else {
-        setFilesHere(prev => [...prev, ...(res.objects ?? [])])
+        setFilesHere(prev => [...prev, ...visibleObjects])
       }
 
       setHasMoreFiles(res.pagination?.hasMore ?? false)
@@ -1905,7 +1916,7 @@ export default function UploadPage() {
 
       // Fetch privacy settings for all files (only on reset or first load)
       if (reset || (!continuationToken && res.objects)) {
-        const fileKeys = (res.objects ?? []).map(obj => obj.key)
+        const fileKeys = visibleObjects.map(obj => obj.key)
         if (fileKeys.length > 0) {
           try {
             const privacyRes = await fetchBulkPrivacySettings(fileKeys)

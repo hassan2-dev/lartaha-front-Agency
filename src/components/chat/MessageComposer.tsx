@@ -21,6 +21,7 @@ import {
 import EmojiPicker from './EmojiPicker'
 import MentionDialog from './MentionDialog'
 import { useChatContext } from '../../contexts/ChatContext'
+import { Plain2 } from '@solar-icons/react'
 
 export default function MessageComposer() {
   const {
@@ -136,7 +137,7 @@ export default function MessageComposer() {
           إرفاق ملف
         </Button>
         <Box sx={{ flex: 1 }} />
-        <Button variant="contained" endIcon={<SendIcon />} disabled={sending} onClick={handleSend}>
+        <Button sx={{ gap: 1 }} variant="contained" startIcon={<Plain2 weight='BoldDuotone' />} disabled={sending} onClick={handleSend}>
           {sending ? 'إرسال...' : 'إرسال'}
         </Button>
       </Box>
