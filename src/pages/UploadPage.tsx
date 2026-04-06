@@ -27,6 +27,8 @@ import {
   ListItemText,
   ListItemIcon,
   TextField,
+  useTheme,
+  alpha,
 } from '@mui/material'
 import LogoutIcon from '@mui/icons-material/Logout'
 import UploadIcon from '@mui/icons-material/Upload'
@@ -303,6 +305,8 @@ function FileItem({
   const hasAccess = canAccessFile(obj.key)
   const privacySettings = filePrivacySettings[obj.key]
   const isRestricted = privacySettings?.restricted
+  const theme = useTheme()
+  const isDark = theme.palette.mode === 'dark'
 
   return (
     <ListItem
@@ -315,12 +319,18 @@ function FileItem({
         gap: 2,
         borderRadius: 2,
         mb: 1,
-        border: '1px solid rgba(255,255,255,0.08)',
-        backgroundColor: isRestricted ? 'rgba(255,0,0,0.02)' : 'rgba(255,255,255,0.02)',
+        border: '1px solid',
+        borderColor: isDark ? 'rgba(255,255,255,0.08)' : theme.palette.divider,
+        backgroundColor: isRestricted 
+          ? (isDark ? 'rgba(255,0,0,0.02)' : 'rgba(211, 47, 47, 0.04)')
+          : (isDark ? 'rgba(255,255,255,0.02)' : theme.palette.background.paper),
+        boxShadow: !isDark ? '0 2px 4px rgba(0,0,0,0.02)' : 'none',
         cursor: hasAccess && url ? 'pointer' : 'default',
         opacity: isRestricted && !hasAccess ? 0.6 : 1,
         '&:hover': {
-          backgroundColor: hasAccess ? 'rgba(255,255,255,0.05)' : 'rgba(255,0,0,0.05)',
+          backgroundColor: hasAccess 
+            ? (isDark ? 'rgba(255,255,255,0.05)' : alpha(theme.palette.primary.main, 0.04))
+            : (isDark ? 'rgba(255,0,0,0.05)' : 'rgba(211, 47, 47, 0.08)'),
         },
       }}
     >
@@ -476,6 +486,8 @@ function FileItemGrid({
   const hasAccess = canAccessFile(obj.key)
   const privacySettings = filePrivacySettings[obj.key]
   const isRestricted = privacySettings?.restricted
+  const theme = useTheme()
+  const isDark = theme.palette.mode === 'dark'
 
   return (
     <Card
@@ -484,12 +496,18 @@ function FileItemGrid({
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
-        border: '1px solid rgba(255,255,255,0.08)',
-        backgroundColor: isRestricted ? 'rgba(255,0,0,0.02)' : 'rgba(255,255,255,0.02)',
+        border: '1px solid',
+        borderColor: isDark ? 'rgba(255,255,255,0.08)' : theme.palette.divider,
+        backgroundColor: isRestricted 
+          ? (isDark ? 'rgba(211, 47, 47, 0.12)' : 'rgba(211, 47, 47, 0.08)')
+          : (isDark ? 'rgba(255,255,255,0.02)' : theme.palette.background.paper),
+        boxShadow: !isDark ? '0 2px 8px rgba(0,0,0,0.04)' : 'none',
         cursor: hasAccess && url ? 'pointer' : 'default',
         opacity: isRestricted && !hasAccess ? 0.6 : 1,
         '&:hover': {
-          backgroundColor: hasAccess ? 'rgba(255,255,255,0.05)' : 'rgba(255,0,0,0.05)',
+          backgroundColor: hasAccess 
+            ? (isDark ? 'rgba(255,255,255,0.05)' : alpha(theme.palette.primary.main, 0.04))
+            : (isDark ? 'rgba(211, 47, 47, 0.15)' : 'rgba(211, 47, 47, 0.12)'),
         },
       }}
     >
@@ -542,8 +560,8 @@ function FileItemGrid({
               sx={{
                 width: 48,
                 height: 48,
-                backgroundColor: isRestricted ? 'rgba(255,0,0,0.1)' : 'rgba(255,255,255,0.1)',
-                color: 'inherit',
+                backgroundColor: isRestricted ? 'rgba(211, 47, 47, 0.1)' : 'rgba(0,0,0,0.05)',
+                color: isRestricted ? 'error.main' : 'text.secondary',
               }}
             >
               {isRestricted ? <LockIcon /> : getFileIcon(fileType)}
@@ -638,6 +656,8 @@ function TrashFileItem({
   file: any
   onRestore: (key: string) => void
 }) {
+  const theme = useTheme()
+  const isDark = theme.palette.mode === 'dark'
   const filename = file.filename
   const fileType = getFileType(filename)
   const deletedDate = file.deletedAt ? new Date(file.deletedAt).toLocaleDateString('ar-SA') : ''
@@ -672,10 +692,11 @@ function TrashFileItem({
         gap: 2,
         borderRadius: 2,
         mb: 1,
-        border: '1px solid rgba(255,255,255,0.08)',
-        backgroundColor: 'rgba(255,0,0,0.02)',
+        border: '1px solid',
+        borderColor: isDark ? 'rgba(255,255,255,0.08)' : theme.palette.divider,
+        backgroundColor: isDark ? 'rgba(211, 47, 47, 0.12)' : 'rgba(211, 47, 47, 0.08)',
         '&:hover': {
-          backgroundColor: 'rgba(255,0,0,0.05)',
+          backgroundColor: isDark ? 'rgba(211, 47, 47, 0.15)' : 'rgba(211, 47, 47, 0.12)',
         },
       }}
     >
@@ -695,8 +716,8 @@ function TrashFileItem({
           sx={{
             width: 48,
             height: 48,
-            backgroundColor: 'rgba(255,0,0,0.1)',
-            color: 'inherit',
+            backgroundColor: isDark ? 'rgba(211, 47, 47, 0.12)' : 'rgba(211, 47, 47, 0.08)',
+            color: 'error.main',
           }}
         >
           {getFileIcon(fileType)}
@@ -869,6 +890,8 @@ function FolderItem({
   onDownload: (folderPath: string) => void
   isDeleting?: boolean
 }) {
+  const theme = useTheme()
+  const isDark = theme.palette.mode === 'dark'
   const name = folderPath.split('/').filter(Boolean).pop() || folderPath
 
   return (
@@ -878,11 +901,12 @@ function FolderItem({
         px: 2,
         borderRadius: 2,
         mb: 1,
-        border: '1px solid rgba(255,255,255,0.08)',
-        backgroundColor: 'rgba(255,255,255,0.02)',
+        border: '1px solid',
+        borderColor: isDark ? 'rgba(255,255,255,0.08)' : theme.palette.divider,
+        backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : theme.palette.background.paper,
         cursor: 'pointer',
         '&:hover': {
-          backgroundColor: 'rgba(255,255,255,0.05)',
+          backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : alpha(theme.palette.primary.main, 0.04),
         },
       }}
     >
@@ -963,6 +987,8 @@ function FolderItemGrid({
   onDownload: (folderPath: string) => void
   isDeleting?: boolean
 }) {
+  const theme = useTheme()
+  const isDark = theme.palette.mode === 'dark'
   const name = folderPath.split('/').filter(Boolean).pop() || folderPath
 
   return (
@@ -971,11 +997,13 @@ function FolderItemGrid({
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
-        border: '1px solid rgba(255,255,255,0.08)',
-        backgroundColor: 'rgba(255,255,255,0.02)',
+        border: '1px solid',
+        borderColor: isDark ? 'rgba(255,255,255,0.08)' : theme.palette.divider,
+        backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : theme.palette.background.paper,
+        boxShadow: !isDark ? '0 2px 8px rgba(0,0,0,0.04)' : 'none',
         cursor: 'pointer',
         '&:hover': {
-          backgroundColor: 'rgba(255,255,255,0.05)',
+          backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : alpha(theme.palette.primary.main, 0.04),
         },
       }}
     >
@@ -1896,7 +1924,12 @@ export default function UploadPage() {
       const res = await listUploadedObjects(explorerPrefix, limit, true, continuationToken)
 
       if (reset) {
-        setFoldersHere(res.folders ?? [])
+        // Filter out system folders like workspace-assets and workspace-logo
+        const filteredFolders = (res.folders ?? []).filter(folder => {
+          const folderName = folder.split('/').filter(Boolean).pop()
+          return folderName !== 'workspace-assets' && folderName !== 'workspace-logo'
+        })
+        setFoldersHere(filteredFolders)
         setFilesHere(res.objects ?? [])
       } else {
         setFilesHere(prev => [...prev, ...(res.objects ?? [])])

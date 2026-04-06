@@ -32,6 +32,7 @@ import {
   VisibilityOff,
 } from '@mui/icons-material'
 import { api } from '../api/http'
+import { API_ENV } from '../config/api'
 import { useAuth } from '../contexts/AuthContext'
 
 interface AdminData {
@@ -142,7 +143,9 @@ export default function SignUpPage() {
           logoUrl = uploadResponse.data.uploaded?.[0]?.key || ''
           // Convert R2 key to URL if needed
           if (logoUrl) {
-            logoUrl = `https://pub-526610db23bc44bd9de0268203a6a676.r2.dev/${logoUrl}`
+            const baseUrl = (API_ENV.r2PublicBaseUrl || '').replace(/\/+$/, '')
+            const safeKey = logoUrl.replace(/^\/+/, '')
+            logoUrl = `${baseUrl}/${safeKey}`
           }
         } catch (uploadError) {
           console.error('Upload failed:', uploadError)

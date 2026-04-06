@@ -16,6 +16,8 @@ export type LoginResult = {
     name: string
     isAdmin: boolean
     workspaceId?: string
+    workspaceName?: string
+    workspaceLogo?: string
   }
   data?: {
     token?: string
@@ -27,6 +29,8 @@ export type LoginResult = {
       name: string
       isAdmin: boolean
       workspaceId?: string
+      workspaceName?: string
+      workspaceLogo?: string
     }
   }
 }
@@ -47,6 +51,7 @@ export async function fetchMe(): Promise<{
   isAdmin: boolean
   workspaceId?: string
   workspaceName?: string
+  workspaceLogo?: string
 }> {
   console.log('🌐 Making GET request to:', API_ENV.authMePath)
   const res = await api.get(API_ENV.authMePath)

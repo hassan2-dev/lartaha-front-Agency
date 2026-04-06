@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Box,
   Container,
@@ -19,12 +19,21 @@ import {
   Alert,
   Avatar,
   IconButton,
+  CircularProgress,
 } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Person as PersonIcon, ArrowForward as ArrowForwardIcon } from '@mui/icons-material'
+import { 
+  Person as PersonIcon, 
+  ArrowForward as ArrowForwardIcon,
+  Business as BusinessIcon,
+  CameraAlt as CameraIcon,
+  Save as SaveIcon,
+} from '@mui/icons-material'
 import { usePushNotifications } from '../hooks/usePushNotifications'
+import { fetchWorkspace, updateWorkspace } from '../api/workspaceApi'
+import { API_ENV } from '../config/api'
 // import PushNotificationDebug from '../components/PushNotificationDebug' // Commented out - not used
 
 export default function SettingsPage() {
@@ -45,6 +54,49 @@ export default function SettingsPage() {
   const [language, setLanguage] = useState('ar')
   const [maxFileSize, setMaxFileSize] = useState('100')
 
+  // Workspace settings state
+  const [workspaceName, setWorkspaceName] = useState('')
+  const [industry, setIndustry] = useState('')
+  const [logoPreview, setLogoPreview] = useState('')
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [loadingWorkspace, setLoadingWorkspace] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (user?.workspaceId && user?.isAdmin) {
+      loadWorkspaceDetails(user.workspaceId)
+    }
+  }, [user])
+
+  const loadWorkspaceDetails = async (id: string) => {
+    try {
+      setLoadingWorkspace(true)
+      const data = await fetchWorkspace(id)
+      setWorkspaceName(data.name || '')
+      setIndustry(data.industry || '')
+      setLogoPreview(data.logo || '')
+    } catch (err) {
+      console.error('Failed to load workspace:', err)
+    } finally {
+      setLoadingWorkspace(false)
+    }
+  }
+
+  const handleLogoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      if (!file.type.startsWith('image/')) return
+      if (file.size > 5 * 1024 * 1024) return
+
+      setLogoFile(file)
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setLogoPreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
   const handlePushToggle = async () => {
     if (isSubscribed) {
       const success = await unsubscribe()
@@ -60,10 +112,57 @@ export default function SettingsPage() {
     setTimeout(() => setSuccessMessage(''), 3000)
   }
 
-  const handleSaveSettings = () => {
-    // In a real app, this would save to backend/localStorage
-    setSuccessMessage('تم حفظ الإعدادات بنجاح')
-    setTimeout(() => setSuccessMessage(''), 3000)
+  const handleSaveSettings = async () => {
+    setSaving(true)
+    try {
+      // 1. Save personal settings (mock)
+      console.log('Saving individual settings:', { darkMode, autoUpload, language, maxFileSize })
+
+      // 2. Save workspace settings if admin and changed
+      if (user?.isAdmin && user.workspaceId) {
+        let finalLogoUrl = logoPreview
+        
+        // Upload logo if new one selected
+        if (logoFile) {
+          const formData = new FormData()
+          formData.append('files', logoFile)
+          formData.append('batchName', 'workspace-assets')
+
+          const uploadRes = await fetch(API_ENV.uploadPath, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('larthaa_auth_token')}`,
+            },
+            body: formData,
+          })
+
+          if (uploadRes.ok) {
+            const uploadData = await uploadRes.json()
+            if (uploadData.uploaded && uploadData.uploaded[0]) {
+              const baseUrl = (API_ENV.r2PublicBaseUrl || '').replace(/\/+$/, '')
+              const safeKey = uploadData.uploaded[0].key.replace(/^\/+/, '')
+              finalLogoUrl = `${baseUrl}/${safeKey}`
+            }
+          }
+        }
+
+        await updateWorkspace(user.workspaceId, {
+          name: workspaceName.trim(),
+          industry: industry.trim(),
+          logo: finalLogoUrl,
+        })
+      }
+
+      setSuccessMessage('تم حفظ الإعدادات بنجاح')
+      // Reload the page to reflect all changes across the app after a short delay
+      setTimeout(() => {
+        window.location.reload()
+      }, 1500)
+    } catch (err) {
+      console.error('Save failed:', err)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -271,14 +370,110 @@ export default function SettingsPage() {
         </Button>
       </Paper>
 
+      {/* Workspace Settings (Admin Only) */}
+      {user?.isAdmin && (
+        <Paper sx={{ p: 3, mb: 3 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <BusinessIcon />
+            إعدادات مساحة العمل
+          </Typography>
+
+          {loadingWorkspace ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+              <CircularProgress size={24} />
+            </Box>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {/* Logo Section */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                <Box sx={{ position: 'relative' }}>
+                  <Avatar
+                    src={logoPreview}
+                    variant="rounded"
+                    sx={{
+                      width: 80,
+                      height: 80,
+                      bgcolor: 'primary.main',
+                      fontSize: '2rem',
+                      borderRadius: 2,
+                    }}
+                  >
+                    {workspaceName.charAt(0).toUpperCase()}
+                  </Avatar>
+                  <input
+                    accept="image/*"
+                    id="workspace-logo-upload"
+                    type="file"
+                    hidden
+                    onChange={handleLogoChange}
+                  />
+                  <label htmlFor="workspace-logo-upload">
+                    <IconButton
+                      component="span"
+                      size="small"
+                      sx={{
+                        position: 'absolute',
+                        bottom: -8,
+                        right: -8,
+                        bgcolor: 'background.paper',
+                        border: '1px solid',
+                        borderColor: 'primary.main',
+                        '&:hover': { bgcolor: 'primary.main', color: 'white' },
+                      }}
+                    >
+                      <CameraIcon fontSize="small" />
+                    </IconButton>
+                  </label>
+                </Box>
+                <Box>
+                  <Typography variant="subtitle2">شعار مساحة العمل</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    يظهر في القائمة الجانبية والتقارير
+                  </Typography>
+                </Box>
+              </Box>
+
+              <Divider />
+
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <TextField
+                  fullWidth
+                  label="اسم مساحة العمل"
+                  value={workspaceName}
+                  onChange={(e) => setWorkspaceName(e.target.value)}
+                  placeholder="مثلاً: شركة لارتـهـا"
+                />
+
+                <FormControl fullWidth>
+                  <InputLabel>المجال</InputLabel>
+                  <Select
+                    value={industry}
+                    label="المجال"
+                    onChange={(e) => setIndustry(e.target.value)}
+                  >
+                    <MenuItem value="technology">التكنولوجيا والبرمجيات</MenuItem>
+                    <MenuItem value="marketing">التسويق والإعلام</MenuItem>
+                    <MenuItem value="creative">التصميم والإبداع</MenuItem>
+                    <MenuItem value="business">الأعمال والخدمات</MenuItem>
+                    <MenuItem value="other">أخرى</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
+            </Box>
+          )}
+        </Paper>
+      )}
+
       {/* Save Button */}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 4 }}>
         <Button
           variant="contained"
           onClick={handleSaveSettings}
+          disabled={saving}
+          startIcon={saving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
           sx={{ borderRadius: 999, px: 4 }}
         >
-          حفظ الإعدادات
+          {saving ? 'جاري الحفظ...' : 'حفظ الإعدادات'}
         </Button>
       </Box>
     </Container>

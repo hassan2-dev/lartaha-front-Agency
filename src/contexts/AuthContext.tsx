@@ -16,6 +16,7 @@ type AuthContextValue = {
     isAdmin: boolean
     workspaceId?: string
     workspaceName?: string
+    workspaceLogo?: string
   } | null
   loading: boolean
   error: string | null
@@ -50,6 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAdmin: boolean
     workspaceId?: string
     workspaceName?: string
+    workspaceLogo?: string
   } | null>(null)
   const [loading, setLoading] = useState(true) // Start with true for initial auth check
   const [error, setError] = useState<string | null>(null)
