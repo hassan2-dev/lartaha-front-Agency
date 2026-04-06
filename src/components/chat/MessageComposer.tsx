@@ -15,7 +15,6 @@ import {
 import {
   AttachFile as AttachFileIcon,
   EmojiEmotions as EmojiIcon,
-  Send as SendIcon,
   Tag as TagIcon,
 } from '@mui/icons-material'
 import EmojiPicker from './EmojiPicker'

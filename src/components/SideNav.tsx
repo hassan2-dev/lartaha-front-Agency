@@ -24,7 +24,6 @@ import {
   User,
   ClockCircle,
   Settings,
-  Home as BusinessIcon,
   Logout,
   MenuDots,
   Sun,
