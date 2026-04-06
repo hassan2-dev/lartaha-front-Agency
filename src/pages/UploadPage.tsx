@@ -1250,10 +1250,9 @@ export default function UploadPage() {
   const [currentUploadTotalFiles, setCurrentUploadTotalFiles] = useState(0)
   const [currentUploadFilePath, setCurrentUploadFilePath] = useState('')
   const [showUploadModal, setShowUploadModal] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
   const [showToast, setShowToast] = useState(false)
   const [toastType, setToastType] = useState<'error' | 'success' | 'info'>('error')
+  const [toastMessage, setToastMessage] = useState('')
   const [loadingExplorer, setLoadingExplorer] = useState(false)
   const [showTrash, setShowTrash] = useState(false)
   const [trashFiles, setTrashFiles] = useState<Array<any>>([])
@@ -1287,7 +1286,7 @@ export default function UploadPage() {
 
   // Helper function to show toast notifications
   const showToastNotification = useCallback((message: string, type: 'error' | 'success' | 'info' = 'error') => {
-    setError(message)
+    setToastMessage(message)
     setToastType(type)
     setShowToast(true)
   }, [])
@@ -1295,8 +1294,7 @@ export default function UploadPage() {
   // Helper function to close toast
   const closeToast = useCallback(() => {
     setShowToast(false)
-    setError(null)
-    setSuccess(null)
+    setToastMessage('')
   }, [])
 
   // Filtered and sorted files
@@ -1326,9 +1324,10 @@ export default function UploadPage() {
     ? `${ROOT_PREFIX}/${currentPath.trim()}`
     : ROOT_PREFIX
 
+  const [folderNameError, setFolderNameError] = useState<string | null>(null)
+
   async function handleUpload() {
-    setError(null)
-    setSuccess(null)
+    setFolderNameError(null)
     setUploadSpeed(0)
     setBytesUploaded(0)
     setTotalBytes(0)
@@ -1554,7 +1553,7 @@ export default function UploadPage() {
     }
 
     setCreatingFolder(true)
-    setError(null)
+    setFolderNameError(null)
 
     try {
       const folderPath = currentPath ? `${currentPath}/${trimmedName}` : trimmedName
@@ -1601,7 +1600,7 @@ export default function UploadPage() {
       return
     }
 
-    setError(null)
+    setFolderNameError(null)
     setDeletingFolders(prev => new Set(prev).add(folderPath))
     try {
       const token = localStorage.getItem('larthaa_auth_token')
@@ -2032,7 +2031,6 @@ export default function UploadPage() {
           files={selectedFiles}
           onFilesChange={setSelectedFiles}
           uploading={uploading}
-          error={error}
         />
 
         <Box sx={{ mt: 2 }}>
@@ -2510,8 +2508,8 @@ export default function UploadPage() {
             value={newFolderName}
             onChange={(e) => setNewFolderName(e.target.value)}
             disabled={creatingFolder}
-            error={!!error && error.includes('اسم المجلد')}
-            helperText={error && error.includes('اسم المجلد') ? error : 'أدخل اسمًا فريدًا للمجلد (الأحرف المسموحة: أ-ب، 0-9، _، -)'}
+            error={!!folderNameError}
+            helperText={folderNameError || 'أدخل اسمًا فريدًا للمجلد (الأحرف المسموحة: أ-ب، 0-9، _، -)'}
             inputProps={{
               maxLength: 255,
               style: { direction: 'ltr' }
@@ -2601,10 +2599,9 @@ export default function UploadPage() {
         </DialogActions>
       </Dialog>
 
-      {/* Toast Notification */}
-      {showToast && (error || success) && (
+      {showToast && (
         <Toast
-          message={error || success || ''}
+          message={toastMessage}
           type={toastType}
           onClose={closeToast}
         />

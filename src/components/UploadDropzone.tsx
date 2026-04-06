@@ -47,12 +47,12 @@ export default function UploadDropzone({
   files,
   onFilesChange,
   uploading,
-  error,
+  error = null,
 }: {
   files: SelectedUploadFile[]
   onFilesChange: (next: SelectedUploadFile[]) => void
   uploading: boolean
-  error: string | null
+  error?: string | null
 }) {
   const [dragOver, setDragOver] = useState(false)
   const [pendingFolderFiles, setPendingFolderFiles] = useState<SelectedUploadFile[] | null>(null)
