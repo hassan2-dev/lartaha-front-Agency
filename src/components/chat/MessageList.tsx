@@ -4,7 +4,7 @@ import {
   Divider,
   Button,
 } from '@mui/material'
-import { Forum as ForumIcon, VideoCall as VideoCallIcon } from '@mui/icons-material'
+import { Forum as ForumIcon } from '@mui/icons-material'
 import { MessageSkeleton } from '../SkeletonLoaders'
 import MessageItem from './MessageItem'
 import { useChatContext } from '../../contexts/ChatContext'

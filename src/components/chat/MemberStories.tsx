@@ -11,7 +11,6 @@ export default function MemberStories() {
     usersById,
     openDirectConversation,
     openGeneralDiscussion,
-    selectedConversationId,
     isGeneralDiscussionSelected,
     selectedConversation
   } = useChatContext()

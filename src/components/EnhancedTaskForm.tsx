@@ -13,8 +13,6 @@ import {
   List,
   ListItem,
   ListItemText,
-  Checkbox,
-  FormControlLabel,
 } from '@mui/material'
 import {
   Delete as DeleteIcon,
@@ -70,10 +68,8 @@ export default function EnhancedTaskForm({
   priority,
   dueDate,
   selectedAssignees,
-  checklistItems,
   links,
   workspaceUsers,
-  newChecklistItem,
   newLink,
   onTitleChange,
   onDescriptionChange,
@@ -81,11 +77,7 @@ export default function EnhancedTaskForm({
   onPriorityChange,
   onDueDateChange,
   onAssigneesChange,
-  onChecklistItemsChange,
-  onNewChecklistItemChange,
   onNewLinkChange,
-  onAddChecklistItem,
-  onRemoveChecklistItem,
   onAddLink,
   onRemoveLink,
 }: EnhancedTaskFormProps) {
@@ -96,11 +88,6 @@ export default function EnhancedTaskForm({
     onAssigneesChange(newAssignees)
   }
 
-  const handleChecklistItemToggle = (index: number) => {
-    const updatedItems = [...checklistItems]
-    updatedItems[index].completed = !updatedItems[index].completed
-    onChecklistItemsChange(updatedItems)
-  }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
