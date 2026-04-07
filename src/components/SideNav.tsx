@@ -25,13 +25,13 @@ import {
   ClockCircle,
   Settings,
   Logout,
-  MenuDots,
   Sun,
   Moon,
 } from '@solar-icons/react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useThemeMode } from '../contexts/ThemeContext'
+import BottomNav from './BottomNav'
 
 const drawerWidth = 280
 
@@ -43,7 +43,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { text: 'الرئيسية', icon: <Home size={24} />, path: '/dashboard' },
-  { text: 'رفع الملفات', icon: <CloudUpload size={24} />, path: '/dashboard/upload' },
+  { text: 'الملفات', icon: <CloudUpload size={24} />, path: '/dashboard/upload' },
   { text: 'المهام', icon: <ClipboardText size={24} />, path: '/dashboard/tasks' },
   { text: 'الدردشة', icon: <ChatRound size={24} />, path: '/dashboard/chat' },
   { text: 'الفرق', icon: <User size={24} />, path: '/dashboard/teams' },
@@ -67,15 +67,10 @@ interface SideNavProps {
 export default function SideNav({ children, title = 'Larthaa Agency' }: SideNavProps) {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
-  const [mobileOpen, setMobileOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
   const { logout, user } = useAuth()
   const { mode, toggle } = useThemeMode()
-
-  const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen)
-  }
 
   const drawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -145,7 +140,6 @@ export default function SideNav({ children, title = 'Larthaa Agency' }: SideNavP
                 <ListItemButton
                   onClick={() => {
                     navigate(item.path)
-                    if (isMobile) setMobileOpen(false)
                   }}
                   selected={isActive}
                   sx={{
@@ -274,49 +268,32 @@ export default function SideNav({ children, title = 'Larthaa Agency' }: SideNavP
 
   return (
     <Box sx={{ display: 'flex', height: '100vh', direction: 'rtl' }}>
-      {/* Desktop Drawer */}
-      {!isMobile && (
-        <Drawer
-          variant="permanent"
-          anchor="right"
-          sx={{
-            width: drawerWidth,
-            flexShrink: 0,
-            '& .MuiDrawer-paper': {
-              width: drawerWidth,
-              boxSizing: 'border-box',
-              borderLeft: '1px solid',
-              borderColor: 'divider',
-              backgroundColor: 'background.default',
-              boxShadow: 'none',
-            },
-          }}
-        >
-          {drawer}
-        </Drawer>
-      )}
-
-      {/* Mobile Drawer */}
-      <Drawer
-        variant="temporary"
-        anchor="right"
-        open={mobileOpen}
-        onClose={handleDrawerToggle}
-        ModalProps={{
-          keepMounted: true, // Better open performance on mobile.
-        }}
-        sx={{
-          display: { xs: 'block', md: 'none' },
-          '& .MuiDrawer-paper': {
-            boxSizing: 'border-box',
-            width: drawerWidth,
-            backgroundColor: 'background.default',
-            boxShadow: 'none',
-          },
-        }}
+      {/* Desktop Drawer - Hidden on mobile */}
+      <Box
+        component="nav"
+        sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}
       >
-        {drawer}
-      </Drawer>
+        {!isMobile && (
+          <Drawer
+            variant="permanent"
+            anchor="right"
+            sx={{
+              width: drawerWidth,
+              flexShrink: 0,
+              '& .MuiDrawer-paper': {
+                width: drawerWidth,
+                boxSizing: 'border-box',
+                borderLeft: '1px solid',
+                borderColor: 'divider',
+                backgroundColor: 'background.default',
+                boxShadow: 'none',
+              },
+            }}
+          >
+            {drawer}
+          </Drawer>
+        )}
+      </Box>
 
       {/* Main Content */}
       <Box
@@ -326,6 +303,7 @@ export default function SideNav({ children, title = 'Larthaa Agency' }: SideNavP
           width: { md: `calc(100% - ${drawerWidth}px)` },
           overflow: 'auto',
           backgroundColor: 'background.default',
+          paddingBottom: { xs: '80px', md: 0 }, // Add padding for larger bottom nav on mobile
         }}
       >
         {/* Top Navigation Bar */}
@@ -340,21 +318,9 @@ export default function SideNav({ children, title = 'Larthaa Agency' }: SideNavP
           }}
         >
           <Toolbar sx={{ justifyContent: 'space-between' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              {isMobile && (
-                <IconButton
-                  color="inherit"
-                  aria-label="open drawer"
-                  edge="start"
-                  onClick={handleDrawerToggle}
-                >
-                  <MenuDots size={20} />
-                </IconButton>
-              )}
-              <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                {getPageTitle(location.pathname)}
-              </Typography>
-            </Box>
+            <Typography variant="h6" sx={{ fontWeight: 800 }}>
+              {getPageTitle(location.pathname)}
+            </Typography>
 
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <IconButton
@@ -380,6 +346,9 @@ export default function SideNav({ children, title = 'Larthaa Agency' }: SideNavP
 
         {children}
       </Box>
+
+      {/* Bottom Navigation for Mobile */}
+      <BottomNav />
     </Box>
   )
 }

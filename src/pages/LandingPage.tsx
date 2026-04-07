@@ -68,21 +68,11 @@ function AnimatedSection({
 }
 
 export default function LandingPage() {
-  const testAnimation = () => {
-    document.querySelectorAll('.animate-on-scroll').forEach(el => {
-      el.classList.add('is-visible')
-    })
-  }
+
 
   return (
     <SmoothScrollProvider>
       <div className="min-h-screen bg-background" dir="rtl" lang="ar">
-        <button
-          onClick={testAnimation}
-          className="fixed top-4 right-4 z-50 bg-primary text-primary-foreground px-4 py-2 rounded"
-        >
-          Test Animations
-        </button>
         <Header />
         <main>
           <Hero />
@@ -116,9 +106,7 @@ export default function LandingPage() {
           <AnimatedSection animation="fade-in-up" delay={200}>
             <FAQ />
           </AnimatedSection>
-          <AnimatedSection animation="slide-in-left" delay={100}>
-            <Newsletter />
-          </AnimatedSection>
+
           <AnimatedSection animation="scale-in" delay={200}>
             <CTA />
           </AnimatedSection>

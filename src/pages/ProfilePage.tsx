@@ -13,11 +13,11 @@ import {
 } from '@mui/material'
 import {
   CameraAlt as CameraIcon,
-  Save as SaveIcon,
   ArrowBack as ArrowBackIcon,
 } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { CheckCircle } from '@solar-icons/react'
 
 export default function ProfilePage() {
   const navigate = useNavigate()
@@ -171,7 +171,7 @@ export default function ProfilePage() {
         <IconButton onClick={() => navigate('/')} sx={{ mr: 2 }}>
           <ArrowBackIcon />
         </IconButton>
-        <Typography variant="h4" sx={{ fontWeight: 800 }}>
+        <Typography variant="h5" sx={{ fontWeight: 800 }}>
           الملف الشخصي
         </Typography>
       </Box>
@@ -298,7 +298,8 @@ export default function ProfilePage() {
             variant="contained"
             onClick={handleSave}
             disabled={loading || !name.trim()}
-            startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
+            endIcon={loading ? <CircularProgress size={20} color="inherit" /> : <CheckCircle />}
+            sx={{ gap: 0.5 }}
           >
             {loading ? 'جاري الحفظ...' : 'حفظ التغييرات'}
           </Button>
