@@ -8,6 +8,7 @@ import LiveKitMeetingDialog from '../components/chat/LiveKitMeetingDialog'
 import ConversationList from '../components/chat/ConversationList'
 import MessageList from '../components/chat/MessageList'
 import MessageComposer from '../components/chat/MessageComposer'
+import MemberStories from '../components/chat/MemberStories'
 import { ChatProvider, useChatContext } from '../contexts/ChatContext'
 
 function ChatPageContent() {
@@ -29,6 +30,8 @@ function ChatPageContent() {
         </Alert>
       )}
 
+      <MemberStories />
+
       <Paper
         sx={{
           display: 'grid',
@@ -38,7 +41,9 @@ function ChatPageContent() {
           overflow: 'hidden',
         }}
       >
-        <ConversationList />
+        <Box sx={{ display: { xs: 'none', md: 'block' } }}>
+          <ConversationList />
+        </Box>
 
         <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <MessageList />

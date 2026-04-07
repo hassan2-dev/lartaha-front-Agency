@@ -86,6 +86,41 @@ export function useChat() {
     [bootstrap.users, user?.id]
   )
 
+  // Sort members by recent message and track unread messages
+  const sortedMemberList = useMemo(() => {
+    return memberList.map(member => {
+      // Find the direct conversation with this member
+      const directConversation = conversations.find(conv =>
+        conv.type === 'direct' &&
+        conv.participantIds.includes(member.id) &&
+        conv.participantIds.includes(user?.id || '')
+      )
+
+      // Check if there are unread messages
+      let hasUnread = false
+      let lastMessageTime = directConversation?.lastMessageAt ? new Date(directConversation.lastMessageAt).getTime() : 0
+
+      if (directConversation && directConversation.id !== selectedConversationId) {
+        const lastMessageTime = new Date(directConversation.lastMessageAt || 0)
+        const now = new Date()
+        const hoursDiff = (now.getTime() - lastMessageTime.getTime()) / (1000 * 60 * 60)
+        hasUnread = hoursDiff < 24
+      }
+
+      return {
+        ...member,
+        hasUnread,
+        lastMessageTime
+      }
+    }).sort((a, b) => {
+      // Sort by unread status first, then by last message time
+      if (a.hasUnread !== b.hasUnread) {
+        return b.hasUnread ? 1 : -1
+      }
+      return b.lastMessageTime - a.lastMessageTime
+    })
+  }, [memberList, conversations, selectedConversationId, user?.id])
+
   const atMentionQuery = useMemo(() => {
     const match = composerText.match(/(?:^|\s)@([^\s@]{0,30})$/)
     if (!match) return null
@@ -408,6 +443,7 @@ export function useChat() {
     selectedConversation,
     isGeneralDiscussionSelected,
     memberList,
+    sortedMemberList,
     atMentionQuery,
     memberMentionSuggestions,
 

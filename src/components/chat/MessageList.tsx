@@ -8,6 +8,7 @@ import { Forum as ForumIcon, VideoCall as VideoCallIcon } from '@mui/icons-mater
 import { MessageSkeleton } from '../SkeletonLoaders'
 import MessageItem from './MessageItem'
 import { useChatContext } from '../../contexts/ChatContext'
+import { VideocameraAdd } from '@solar-icons/react'
 
 export default function MessageList() {
   const {
@@ -47,8 +48,8 @@ export default function MessageList() {
         </Box>
 
         {isGeneralDiscussionSelected && (
-          <Button variant="contained" startIcon={<VideoCallIcon />} onClick={openGeneralMeeting}>
-            اجتماع مباشر
+          <Button sx={{ px: 0 }} variant="contained" endIcon={<VideocameraAdd size={24} />} onClick={openGeneralMeeting}>
+            <span className='hidden sm:inline me-3'>اجتماع مباشر</span>
           </Button>
         )}
       </Box>

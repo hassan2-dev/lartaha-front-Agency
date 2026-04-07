@@ -240,7 +240,7 @@ export default function EnhancedTaskForm({
       </Box>
 
       {/* Checklist */}
-      <Box>
+      {/* <Box>
         <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
           قائمة التحقق
         </Typography>
@@ -290,7 +290,7 @@ export default function EnhancedTaskForm({
             ))}
           </List>
         )}
-      </Box>
+      </Box> */}
 
       {/* Links */}
       <Box>

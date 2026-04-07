@@ -2111,7 +2111,9 @@ export default function UploadPage() {
                 endIcon={<CreateNewFolderIcon />}
                 sx={{ borderRadius: 999, gap: 1, }}
               >
-                إنشاء مجلد
+                <span className='hidden md:inline'>
+                  إنشاء مجلد
+                </span>
               </Button>
             </Box>
           </Box>

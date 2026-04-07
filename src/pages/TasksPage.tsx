@@ -108,12 +108,15 @@ export default function TasksPage() {
         distance: 10, // Further increased distance for desktop
       },
     }),
-    useSensor(TouchSensor, {
-      activationConstraint: {
-        delay: 500, // Increased to 500ms delay before drag starts on touch devices
-        tolerance: 5, // Reduced tolerance to be more precise
-      },
-    }),
+    // Only include TouchSensor on non-mobile devices to block dragging on mobile
+    ...(isMobile ? [] : [
+      useSensor(TouchSensor, {
+        activationConstraint: {
+          delay: 500, // Increased to 500ms delay before drag starts on touch devices
+          tolerance: 5, // Reduced tolerance to be more precise
+        },
+      })
+    ]),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
@@ -655,10 +658,11 @@ export default function TasksPage() {
         color="primary"
         aria-label="add task"
         onClick={openCreateModal}
+        className='left-8 bottom-24 md:left-16 md:bottom-10'
         sx={{
           position: 'fixed',
-          bottom: 24,
-          right: 24,
+          // bottom: 80,
+          // left: 16,
           zIndex: 1000,
           border: '1px solid rgba(25, 118, 210, 0.2)',
           '&:hover': {
