@@ -26,6 +26,7 @@ import {
   TextField,
   useTheme,
   alpha,
+  Alert,
 } from '@mui/material'
 import UploadIcon from '@mui/icons-material/Upload'
 import FolderIcon from '@mui/icons-material/Folder'
@@ -1242,6 +1243,8 @@ export default function UploadPage() {
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
 
   const [uploading, setUploading] = useState(false)
+  const [uploadFailed, setUploadFailed] = useState(false)
+  const [completedUploadedFiles, setCompletedUploadedFiles] = useState<Set<string>>(new Set())
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadSpeed, setUploadSpeed] = useState(0)
   const [bytesUploaded, setBytesUploaded] = useState(0)
@@ -1377,9 +1380,13 @@ export default function UploadPage() {
         }
       }
 
-      const res = await uploadFilesStreamed(selectedFiles, {
+      // Filter out already completed files before uploading
+      const filesToUpload = selectedFiles.filter(sf => !completedUploadedFiles.has(sf.file.name))
+
+      const res = await uploadFilesStreamed(filesToUpload, {
         batchName: explorerPrefix,
         ...(rootFolderName ? { folderName: rootFolderName } : {}),
+        skipFiles: completedUploadedFiles,
         onUploadProgress: ({
           progressPercent,
           bytesUploaded: uploaded,
@@ -1401,14 +1408,21 @@ export default function UploadPage() {
 
       const uploaded = res.uploaded ?? []
 
+      // Track uploaded files for resume
+      uploaded.forEach(item => {
+        setCompletedUploadedFiles(prev => new Set(prev).add(item.key))
+      })
+
       const count = uploaded.length
       showToastNotification(`تم الرفع بنجاح. عدد الملفات: ${count}`, 'success')
       setSelectedFiles([])
+      setCompletedUploadedFiles(new Set())
       // Keep selected destination so user can keep uploading.
 
       // Refresh explorer after upload.
       void fetchExplorer()
     } catch (e: unknown) {
+      setUploadFailed(true)
       const err = e as {
         message?: string
         response?: { data?: { message?: string; error?: string }; status?: number }
@@ -2473,6 +2487,37 @@ export default function UploadPage() {
                 <Typography variant="body2" sx={{ opacity: 0.75 }}>
                   جاري رفع الملف {currentUploadFileIndex || 1} من {currentUploadTotalFiles || selectedFiles.length}...
                 </Typography>
+              </Box>
+            )}
+
+            {uploadFailed && !uploading && (
+              <Box sx={{ mb: 2, mt: 1 }}>
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  فشل عملية الرفع. يمكنك استعادة الرفع من النقطة التي توقفت عندها.
+                </Alert>
+                <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
+                  <Button
+                    variant="contained"
+                    onClick={() => {
+                      setUploadFailed(false)
+                      void handleUpload()
+                    }}
+                    startIcon={<RestoreIcon />}
+                  >
+                    استعادة الرفع
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    onClick={() => {
+                      setShowUploadModal(false)
+                      setSelectedFiles([])
+                      setCompletedUploadedFiles(new Set())
+                      setUploadFailed(false)
+                    }}
+                  >
+                    إلغاء
+                  </Button>
+                </Box>
               </Box>
             )}
 

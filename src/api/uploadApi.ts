@@ -193,10 +193,11 @@ export async function uploadFilesStreamed(
   options: {
     batchName: string
     folderName?: string
+    skipFiles?: Set<string>
     onUploadProgress?: (progress: StreamUploadProgress) => void
   },
 ): Promise<UploadResult> {
-  const { batchName, folderName, onUploadProgress } = options
+  const { batchName, folderName, skipFiles = new Set(), onUploadProgress } = options
   const totalFiles = files.length
   const totalBytes = files.reduce((sum, item) => sum + item.file.size, 0)
 
@@ -274,6 +275,13 @@ export async function uploadFilesStreamed(
   try {
     for (let index = 0; index < files.length; index += 1) {
       const item = files[index]
+
+      // Skip already uploaded files when resuming
+      if (skipFiles.has(item.relativePath)) {
+        completedBytes += item.file.size
+        continue
+      }
+
       const uploadId = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
       activeUploadId = uploadId
       activeFile = item
@@ -384,4 +392,101 @@ export async function fetchBulkPrivacySettings(fileKeys: string[]): Promise<Bulk
   }
   const res = await api.post('/api/files/privacy/bulk', { fileKeys })
   return res.data as BulkPrivacyResult
+}
+
+// ========== Encrypted Upload API ==========
+
+export type UploadUrlResult = {
+  ok?: boolean
+  uploadId?: string
+  key?: string
+  url?: string
+  r2Endpoint?: string
+  r2Bucket?: string
+  r2PublicUrl?: string
+}
+
+export type ConfirmUploadResult = {
+  ok?: boolean
+  message?: string
+  file?: {
+    id: string
+    originalKey: string
+    filename: string
+    size: number
+    mimeType: string
+    encryptionEnabled: boolean
+    encryptionIv?: string
+    encryptionSalt?: string
+  }
+}
+
+export type UploadProgressResult = {
+  ok?: boolean
+  status?: string
+  bytesUploaded?: number
+  totalBytes?: number
+  progressPercent?: number
+  error?: string
+}
+
+export type DownloadUrlResult = {
+  ok?: boolean
+  url?: string
+  filename?: string
+  mimeType?: string
+  size?: number
+  encryptionEnabled?: boolean
+  encryptionIv?: string
+  encryptionSalt?: string
+}
+
+/**
+ * Request a pre-signed URL for direct R2 upload
+ */
+export async function requestUploadUrl(params: {
+  filename: string
+  mimeType?: string
+  size?: number
+  encryptionEnabled?: boolean
+  encryptionIv?: string
+  encryptionSalt?: string
+}): Promise<UploadUrlResult> {
+  const res = await api.post('/api/upload/url', params)
+  return res.data as UploadUrlResult
+}
+
+/**
+ * Confirm upload completion and save file metadata
+ */
+export async function confirmUpload(params: {
+  uploadId: string
+  key: string
+  filename: string
+  mimeType?: string
+  size?: number
+  encryptionEnabled?: boolean
+  encryptionIv?: string
+  encryptionSalt?: string
+  folderName?: string
+  batchName?: string
+}): Promise<ConfirmUploadResult> {
+  const res = await api.post('/api/upload/confirm', params)
+  return res.data as ConfirmUploadResult
+}
+
+/**
+ * Get upload progress for a specific upload
+ */
+export async function getUploadProgress(uploadId: string): Promise<UploadProgressResult> {
+  const res = await api.get(`/api/upload/progress/${uploadId}`)
+  return res.data as UploadProgressResult
+}
+
+/**
+ * Get file download URL (for encrypted files, returns R2 URL for client-side decryption)
+ */
+export async function getDownloadUrl(fileId: string): Promise<DownloadUrlResult> {
+  const res = await api.get(`/api/upload/download/${fileId}`)
+  return res.data as DownloadUrlResult
 }
