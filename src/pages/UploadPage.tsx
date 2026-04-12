@@ -3,32 +3,29 @@ import {
   Box,
   Button,
   Container,
-  IconButton,
-  ListItem,
-  CircularProgress,
   Typography,
-  Card,
-  Avatar,
   Tooltip,
+  CircularProgress,
+  MenuItem,
+  IconButton,
+  List,
+  ListItem,
+  ListItemText,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  LinearProgress,
-  Checkbox,
-  List,
-  ListItemText,
-  ListItemIcon,
   TextField,
+  Avatar,
   useTheme,
   alpha,
-  Alert,
+  Card,
+  FormControl,
+  InputLabel,
+  Select,
+  ListItemIcon,
+  Checkbox,
 } from '@mui/material'
-import UploadIcon from '@mui/icons-material/Upload'
 import FolderIcon from '@mui/icons-material/Folder'
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile'
 import ImageIcon from '@mui/icons-material/Image'
@@ -45,11 +42,14 @@ import DownloadIcon from '@mui/icons-material/Download'
 import LinkIcon from '@mui/icons-material/Link'
 import CheckIcon from '@mui/icons-material/Check'
 import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder'
+import SelectAllIcon from '@mui/icons-material/SelectAll'
 import LockIcon from '@mui/icons-material/Lock'
-import UploadDropzone, { type SelectedUploadFile } from '../components/UploadDropzone'
+import EncryptedUploadDropzone, { type SelectedUploadFile } from '../components/EncryptedUploadDropzone'
+import EncryptedFileViewer from '../components/EncryptedFileViewer'
+import { getWorkspaceEncryptionKey } from '../api/workspaceApi'
 import { useAuth } from '../contexts/AuthContext'
 import { API_ENV } from '../config/api'
-import { listUploadedObjects, uploadFilesStreamed, moveFileToTrash, restoreFileFromTrash, listTrashFiles, fetchBulkPrivacySettings } from '../api/uploadApi'
+import { listUploadedObjects, uploadFilesStreamed, moveFileToTrash, restoreFileFromTrash, listTrashFiles, fetchBulkPrivacySettings, bulkMoveToTrash, bulkRestoreFromTrash } from '../api/uploadApi'
 import { subscribeRealtime } from '../api/realtimeApi'
 import { api } from '../api/http'
 import { FileItemSkeleton, FileItemGridSkeleton, FolderItemSkeleton, FolderItemGridSkeleton } from '../components/SkeletonLoaders'
@@ -149,17 +149,49 @@ function filenameFromKey(key: string) {
 }
 
 // Thumbnail preview component for images
-function ImageThumbnail({ url, filename, fileKey, size = 60 }: { url: string; filename: string; fileKey: string; size?: number }) {
+// Uses thumbnailKey for non-encrypted thumbnails, or shows lock for encrypted files without thumbnail
+function ImageThumbnail({ 
+  url, 
+  filename, 
+  size = 60,
+  encryptionEnabled,
+  thumbnailKey,
+}: { 
+  url: string; 
+  filename: string; 
+  size?: number
+  encryptionEnabled?: boolean
+  thumbnailKey?: string | null
+}) {
   const [imgError, setImgError] = useState(false)
-  const [imgUrl, setImgUrl] = useState(url)
+  
+  // Determine which URL to use:
+  // 1. If thumbnailKey is available (non-encrypted thumbnail), use it directly
+  // 2. If no thumbnailKey but file is encrypted, show lock icon
+  // 3. Otherwise use the main file URL
+  const displayUrl = (() => {
+    if (thumbnailKey) {
+      // Non-encrypted thumbnail available - use R2 URL directly
+      const publicBase = API_ENV.r2PublicBaseUrl?.trim() || ''
+      const safeKey = thumbnailKey.startsWith('/') ? thumbnailKey.slice(1) : thumbnailKey
+      if (publicBase) {
+        const base = publicBase.endsWith('/') ? publicBase.slice(0, -1) : publicBase
+        return `${base}/${safeKey}`
+      } else {
+        const base = API_ENV.apiBaseUrl?.trim() || ''
+        const normalized = base.endsWith('/') ? base.slice(0, -1) : base
+        return `${normalized}/api/image/${encodeURIComponent(safeKey)}`
+      }
+    }
+    // No thumbnail - use main URL
+    return url
+  })()
 
-  // If public URL fails, try the image proxy API as fallback
+  // Show lock if encrypted without thumbnail
+  const showLock = encryptionEnabled && !thumbnailKey
+
   const handleImageError = () => {
-    if (!imgError && fileKey) {
-      // Try using image proxy API as image source with the full key
-      const baseUrl = API_ENV.apiBaseUrl?.trim() || ''
-      const proxyUrl = `${baseUrl}/api/image/${encodeURIComponent(fileKey)}`
-      setImgUrl(proxyUrl)
+    if (!imgError) {
       setImgError(true)
     }
   }
@@ -177,50 +209,57 @@ function ImageThumbnail({ url, filename, fileKey, size = 60 }: { url: string; fi
         justifyContent: 'center',
       }}
     >
-      <img
-        src={imgUrl}
-        alt={filename}
-        style={{
-          width: '100%',
-          height: '100%',
-          objectFit: 'cover',
-        }}
-        onError={handleImageError}
-      />
+      {showLock ? (
+        <LockIcon sx={{ fontSize: size * 0.5, color: 'text.secondary' }} />
+      ) : (
+        <img
+          src={displayUrl}
+          alt={filename}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+          }}
+          onError={handleImageError}
+        />
+      )}
     </Box>
   )
 }
 
 // Video thumbnail component with play icon overlay
-function VideoThumbnail({ url, thumbnailKey, size = 60 }: { url: string; thumbnailKey?: string | null; size?: number }) {
-  const [thumbnailError, setThumbnailError] = useState(!url)
-  const [imgUrl, setImgUrl] = useState(url)
-
-  useEffect(() => {
-    const baseUrl = API_ENV.apiBaseUrl?.trim() || ''
-    const fallbackUrl = thumbnailKey && baseUrl
-      ? `${baseUrl}/api/image/${encodeURIComponent(thumbnailKey)}`
-      : ''
-    const nextUrl = url || fallbackUrl
-
-    setImgUrl(nextUrl)
-    setThumbnailError(!nextUrl)
-  }, [url, thumbnailKey])
-
-  const handleThumbnailError = () => {
-    const baseUrl = API_ENV.apiBaseUrl?.trim() || ''
-    const fallbackUrl = thumbnailKey && baseUrl
-      ? `${baseUrl}/api/image/${encodeURIComponent(thumbnailKey)}`
-      : ''
-
-    if (fallbackUrl && imgUrl !== fallbackUrl) {
-      setImgUrl(fallbackUrl)
-      setThumbnailError(false)
-      return
+// Uses thumbnailKey for non-encrypted thumbnails
+function VideoThumbnail({ 
+  url, 
+  thumbnailKey, 
+  size = 60,
+}: { 
+  url: string; 
+  thumbnailKey?: string | null; 
+  size?: number
+}) {
+  // Determine which URL to use:
+  // 1. If thumbnailKey is available (non-encrypted thumbnail), use it directly
+  // 2. Otherwise use the main file URL
+  const displayUrl = (() => {
+    if (thumbnailKey) {
+      // Non-encrypted thumbnail available - use R2 URL directly
+      const publicBase = API_ENV.r2PublicBaseUrl?.trim() || ''
+      const safeKey = thumbnailKey.startsWith('/') ? thumbnailKey.slice(1) : thumbnailKey
+      if (publicBase) {
+        const base = publicBase.endsWith('/') ? publicBase.slice(0, -1) : publicBase
+        return `${base}/${safeKey}`
+      } else {
+        const base = API_ENV.apiBaseUrl?.trim() || ''
+        const normalized = base.endsWith('/') ? base.slice(0, -1) : base
+        return `${normalized}/api/image/${encodeURIComponent(safeKey)}`
+      }
     }
+    // No thumbnail - use main URL
+    return url
+  })()
 
-    setThumbnailError(true)
-  }
+  const showPlayIcon = !!displayUrl
 
   return (
     <Box
@@ -236,16 +275,15 @@ function VideoThumbnail({ url, thumbnailKey, size = 60 }: { url: string; thumbna
         position: 'relative',
       }}
     >
-      {!thumbnailError && imgUrl ? (
+      {showPlayIcon ? (
         <img
-          src={imgUrl}
+          src={displayUrl}
           alt="Video thumbnail"
           style={{
             width: '100%',
             height: '100%',
             objectFit: 'cover',
           }}
-          onError={handleThumbnailError}
         />
       ) : (
         <Avatar
@@ -295,20 +333,26 @@ function FileItem({
   thumbnailUrl,
   onDelete,
   onPreview,
+  onDownload,
   onPrivacyToggle,
   filePrivacySettings,
   canAccessFile,
-  isDeleting
+  isDeleting,
+  selected,
+  onToggleSelect
 }: {
-  obj: { key: string; size?: number; thumbnailKey?: string | null }
+  obj: { key: string; size?: number; thumbnailKey?: string | null; encryptionEnabled?: boolean; fileId?: string }
   url: string
   thumbnailUrl?: string
   onDelete: (key: string) => void
   onPreview: (key: string, url: string) => void
+  onDownload: (key: string, filename: string) => void
   onPrivacyToggle: (key: string, filename: string) => void
   filePrivacySettings: Record<string, { restricted: boolean; allowedMembers: string[]; canAccess?: boolean }>
   canAccessFile: (key: string) => boolean
   isDeleting?: boolean
+  selected?: boolean
+  onToggleSelect?: (key: string) => void
 }) {
   const filename = filenameFromKey(obj.key)
   const fileType = getFileType(filename)
@@ -333,7 +377,7 @@ function FileItem({
         borderRadius: 2,
         mb: 1,
         border: '1px solid',
-        borderColor: isDark ? 'rgba(255,255,255,0.08)' : theme.palette.divider,
+        borderColor: selected ? 'primary.main' : (isDark ? 'rgba(255,255,255,0.08)' : theme.palette.divider),
         backgroundColor: isRestricted
           ? (isDark ? 'rgba(255,0,0,0.02)' : 'rgba(211, 47, 47, 0.04)')
           : (isDark ? 'rgba(255,255,255,0.02)' : theme.palette.background.paper),
@@ -347,10 +391,20 @@ function FileItem({
         },
       }}
     >
+      {onToggleSelect && (
+        <Checkbox
+          checked={!!selected}
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggleSelect(obj.key)
+          }}
+          sx={{ p: 0, mr: 1 }}
+        />
+      )}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
         {isImage && url && hasAccess ? (
           <Box sx={{ position: 'relative' }}>
-            <ImageThumbnail url={url} filename={filename} fileKey={obj.key} />
+            <ImageThumbnail url={url} filename={filename} encryptionEnabled={obj.encryptionEnabled} thumbnailKey={obj.thumbnailKey} />
             <ThumbnailTypeBadge fileType={fileType} size={14} />
             {isRestricted && !hasAccess && (
               <Box sx={{
@@ -440,7 +494,7 @@ function FileItem({
               variant="text"
               onClick={(e) => {
                 e.stopPropagation()
-                void handleDownload(obj.key, filename)
+                onDownload(obj.key, filename)
               }}
               disabled={!hasAccess}
               sx={{ borderRadius: 999, minWidth: 'auto', p: 1 }}
@@ -476,20 +530,26 @@ function FileItemGrid({
   thumbnailUrl,
   onDelete,
   onPreview,
+  onDownload,
   onPrivacyToggle,
   filePrivacySettings,
   canAccessFile,
-  isDeleting
+  isDeleting,
+  selected,
+  onToggleSelect
 }: {
-  obj: { key: string; size?: number; thumbnailKey?: string | null }
+  obj: { key: string; size?: number; thumbnailKey?: string | null; encryptionEnabled?: boolean }
   url: string
   thumbnailUrl?: string
   onDelete: (key: string) => void
   onPreview: (key: string, url: string) => void
+  onDownload: (key: string, filename: string) => void
   onPrivacyToggle: (key: string, filename: string) => void
   filePrivacySettings: Record<string, { restricted: boolean; allowedMembers: string[]; canAccess?: boolean }>
   canAccessFile: (key: string) => boolean
   isDeleting?: boolean
+  selected?: boolean
+  onToggleSelect?: (key: string) => void
 }) {
   const filename = filenameFromKey(obj.key)
   const fileType = getFileType(filename)
@@ -510,7 +570,7 @@ function FileItemGrid({
         flexDirection: 'column',
         height: '100%',
         border: '1px solid',
-        borderColor: isDark ? 'rgba(255,255,255,0.08)' : theme.palette.divider,
+        borderColor: selected ? 'primary.main' : (isDark ? 'rgba(255,255,255,0.08)' : theme.palette.divider),
         backgroundColor: isRestricted
           ? (isDark ? 'rgba(211, 47, 47, 0.12)' : 'rgba(211, 47, 47, 0.08)')
           : (isDark ? 'rgba(255,255,255,0.02)' : theme.palette.background.paper),
@@ -524,11 +584,23 @@ function FileItemGrid({
         },
       }}
     >
+      {onToggleSelect && (
+        <Box sx={{ position: 'absolute', top: 8, left: 8, zIndex: 1 }}>
+          <Checkbox
+            checked={!!selected}
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleSelect(obj.key)
+            }}
+            sx={{ p: 0 }}
+          />
+        </Box>
+      )}
       <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', minHeight: 120, position: 'relative' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
           {isImage && url && hasAccess ? (
             <Box sx={{ position: 'relative' }}>
-              <ImageThumbnail url={url} filename={filename} fileKey={obj.key} size={60} />
+              <ImageThumbnail url={url} filename={filename} size={60} encryptionEnabled={obj.encryptionEnabled} thumbnailKey={obj.thumbnailKey} />
               <ThumbnailTypeBadge fileType={fileType} size={14} />
               {isRestricted && !hasAccess && (
                 <Box sx={{
@@ -632,7 +704,7 @@ function FileItemGrid({
               variant="text"
               onClick={(e) => {
                 e.stopPropagation()
-                void handleDownload(obj.key, filename)
+                onDownload(obj.key, filename)
               }}
               disabled={!hasAccess}
               sx={{ borderRadius: 999, minWidth: 'auto', p: 1 }}
@@ -664,10 +736,14 @@ function FileItemGrid({
 // Trash file item component
 function TrashFileItem({
   file,
-  onRestore
+  onRestore,
+  selected,
+  onToggleSelect
 }: {
   file: any
   onRestore: (key: string) => void
+  selected?: boolean
+  onToggleSelect?: (key: string) => void
 }) {
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
@@ -706,17 +782,27 @@ function TrashFileItem({
         borderRadius: 2,
         mb: 1,
         border: '1px solid',
-        borderColor: isDark ? 'rgba(255,255,255,0.08)' : theme.palette.divider,
+        borderColor: selected ? 'primary.main' : (isDark ? 'rgba(255,255,255,0.08)' : theme.palette.divider),
         backgroundColor: isDark ? 'rgba(211, 47, 47, 0.12)' : 'rgba(211, 47, 47, 0.08)',
         '&:hover': {
           backgroundColor: isDark ? 'rgba(211, 47, 47, 0.15)' : 'rgba(211, 47, 47, 0.12)',
         },
       }}
     >
+      {onToggleSelect && (
+        <Checkbox
+          checked={!!selected}
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggleSelect(file.originalKey)
+          }}
+          sx={{ p: 0, mr: 1 }}
+        />
+      )}
       {/* Thumbnail or icon */}
       {isImage && thumbnailUrl ? (
         <Box sx={{ position: 'relative' }}>
-          <ImageThumbnail url={thumbnailUrl} filename={filename} fileKey={file.originalKey} />
+          <ImageThumbnail url={thumbnailUrl} filename={filename} />
           <ThumbnailTypeBadge fileType={fileType} size={14} />
         </Box>
       ) : isVideo && thumbnailUrl ? (
@@ -1186,20 +1272,7 @@ async function handleDownload(key: string, filename: string) {
     const token = localStorage.getItem('larthaa_auth_token')
 
     if (!base) {
-      // Fallback to public URL if no API base URL
-      const publicBase = API_ENV.r2PublicBaseUrl?.trim() || ''
-      if (publicBase) {
-        const safeKey = key.startsWith('/') ? key.slice(1) : key
-        const publicUrl = `${publicBase.endsWith('/') ? publicBase.slice(0, -1) : publicBase}/${safeKey}`
-        const a = document.createElement('a')
-        a.href = publicUrl
-        a.download = filename
-        a.rel = 'noreferrer'
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-      }
-      return
+      throw new Error('Missing API base URL')
     }
 
     if (!token) {
@@ -1217,13 +1290,6 @@ async function handleDownload(key: string, filename: string) {
     document.body.removeChild(a)
   } catch (error) {
     console.error('Download error:', error)
-    // Fallback to public URL
-    const publicBase = API_ENV.r2PublicBaseUrl?.trim() || ''
-    if (publicBase) {
-      const safeKey = key.startsWith('/') ? key.slice(1) : key
-      const publicUrl = `${publicBase.endsWith('/') ? publicBase.slice(0, -1) : publicBase}/${safeKey}`
-      window.open(publicUrl, '_blank')
-    }
   }
 }
 
@@ -1231,10 +1297,11 @@ export default function UploadPage() {
   const { user } = useAuth()
 
   const [selectedFiles, setSelectedFiles] = useState<SelectedUploadFile[]>([])
+  const [encryptionPassword, setEncryptionPassword] = useState<string>('')
   // Explorer path under "uploads/". Examples: "" (root), "team1", "team1/sub1"
   const [currentPath, setCurrentPath] = useState('')
   const [foldersHere, setFoldersHere] = useState<string[]>([])
-  const [filesHere, setFilesHere] = useState<Array<{ key: string; size?: number; lastModified?: string; createdAt?: string; updatedAt?: string; thumbnailKey?: string | null }>>([])
+  const [filesHere, setFilesHere] = useState<Array<{ key: string; size?: number; lastModified?: string; createdAt?: string; updatedAt?: string; thumbnailKey?: string | null; fileId?: string; mimeType?: string; encryptionEnabled?: boolean; encryptionIv?: string; encryptionSalt?: string }>>([])
   const [hasMoreFiles, setHasMoreFiles] = useState(true)
   const [nextContinuationToken, setNextContinuationToken] = useState<string | null>(null)
   const [isLoadingMoreFiles, setIsLoadingMoreFiles] = useState(false)
@@ -1243,16 +1310,7 @@ export default function UploadPage() {
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
 
   const [uploading, setUploading] = useState(false)
-  const [uploadFailed, setUploadFailed] = useState(false)
   const [completedUploadedFiles, setCompletedUploadedFiles] = useState<Set<string>>(new Set())
-  const [uploadProgress, setUploadProgress] = useState(0)
-  const [uploadSpeed, setUploadSpeed] = useState(0)
-  const [bytesUploaded, setBytesUploaded] = useState(0)
-  const [totalBytes, setTotalBytes] = useState(0)
-  const [currentUploadFileIndex, setCurrentUploadFileIndex] = useState(0)
-  const [currentUploadTotalFiles, setCurrentUploadTotalFiles] = useState(0)
-  const [currentUploadFilePath, setCurrentUploadFilePath] = useState('')
-  const [showUploadModal, setShowUploadModal] = useState(false)
   const [showToast, setShowToast] = useState(false)
   const [toastType, setToastType] = useState<'error' | 'success' | 'info'>('error')
   const [toastMessage, setToastMessage] = useState('')
@@ -1262,6 +1320,8 @@ export default function UploadPage() {
   const [loadingTrash, setLoadingTrash] = useState(false)
   const [previewModalOpen, setPreviewModalOpen] = useState(false)
   const [previewFile, setPreviewFile] = useState<{ key: string; url: string; filename: string; type: string } | null>(null)
+  const [encryptedViewerOpen, setEncryptedViewerOpen] = useState(false)
+  const [encryptedViewerFile, setEncryptedViewerFile] = useState<{ fileId: string; filename: string; mimeType?: string; size?: number; encryptionEnabled?: boolean; encryptionIv?: string; encryptionSalt?: string } | null>(null)
 
   // Folder creation state
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false)
@@ -1284,6 +1344,10 @@ export default function UploadPage() {
   const [fileFilter, setFileFilter] = useState<'all' | 'images' | 'videos' | 'documents'>('all')
   const [sortBy, setSortBy] = useState<'name' | 'date' | 'size'>('date')
   const sortOrder = 'asc' // Fixed sort order since setSortOrder is unused
+
+  // Bulk selection state
+  const [selectedForBulk, setSelectedForBulk] = useState<Set<string>>(new Set())
+  const [bulkLoading, setBulkLoading] = useState(false)
 
   const canUpload = useMemo(() => selectedFiles.length > 0 && !uploading, [selectedFiles, uploading])
 
@@ -1319,6 +1383,26 @@ export default function UploadPage() {
     }
   }, [canUpload, selectedFiles.length, hasTriggeredUpload])
 
+  useEffect(() => {
+    const loadWorkspaceKey = async () => {
+      try {
+        const res = await getWorkspaceEncryptionKey()
+        if (res.ok && res.key) {
+          // Convert Node.js base64 to standard base64 for browser compatibility
+          const standardBase64 = res.key
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=+$/, '')
+          setEncryptionPassword(standardBase64)
+        }
+      } catch (error) {
+        console.error('Failed to load workspace encryption key', error)
+      }
+    }
+
+    void loadWorkspaceKey()
+  }, [])
+
   const ROOT_PREFIX = useMemo(() => {
     const workspaceId = user?.workspaceId?.trim()
     return workspaceId ? `uploads/${workspaceId}` : 'uploads'
@@ -1331,9 +1415,6 @@ export default function UploadPage() {
 
   async function handleUpload() {
     setFolderNameError(null)
-    setUploadSpeed(0)
-    setBytesUploaded(0)
-    setTotalBytes(0)
 
     if (selectedFiles.length === 0) {
       showToastNotification('يرجى اختيار ملفات أو مجلد للرفع.', 'error')
@@ -1356,17 +1437,7 @@ export default function UploadPage() {
       }
     }
 
-    // Calculate total upload size
-    const totalUploadSize = selectedFiles.reduce((sum, sf) => sum + sf.file.size, 0)
-    setTotalBytes(totalUploadSize)
-
-    // Show upload modal
-    setShowUploadModal(true)
     setUploading(true)
-    setUploadProgress(0)
-    setCurrentUploadFileIndex(0)
-    setCurrentUploadTotalFiles(selectedFiles.length)
-    setCurrentUploadFilePath('')
 
     try {
       const hasFolderStructure = selectedFiles.some(sf => sf.relativePath.includes('/'))
@@ -1381,29 +1452,29 @@ export default function UploadPage() {
       }
 
       // Filter out already completed files before uploading
-      const filesToUpload = selectedFiles.filter(sf => !completedUploadedFiles.has(sf.file.name))
+      const filesToUpload = selectedFiles
+        .filter(sf => !completedUploadedFiles.has(sf.file.name))
+        .map(sf => {
+          const encryptionResult = sf.encryptionResult
+          // For simple encryption (small files), encryptionResult has encryptedData, iv, salt
+          // For chunked encryption (large files), encryptionResult has encryptedChunks, iv, salt
+          const hasEncryption = !!encryptionResult
+          const iv = encryptionResult?.iv
+          const salt = encryptionResult?.salt
+          return {
+            file: sf.uploadFile ?? sf.file,
+            relativePath: sf.relativePath,
+            encryptionEnabled: hasEncryption,
+            encryptionIv: iv,
+            encryptionSalt: salt,
+          }
+        })
 
       const res = await uploadFilesStreamed(filesToUpload, {
         batchName: explorerPrefix,
         ...(rootFolderName ? { folderName: rootFolderName } : {}),
         skipFiles: completedUploadedFiles,
-        onUploadProgress: ({
-          progressPercent,
-          bytesUploaded: uploaded,
-          totalBytes: total,
-          uploadSpeed: speed,
-          currentFileIndex,
-          totalFiles,
-          currentFilePath,
-        }) => {
-          setUploadProgress(progressPercent)
-          setBytesUploaded(uploaded)
-          setTotalBytes(total)
-          setUploadSpeed(speed)
-          setCurrentUploadFileIndex(currentFileIndex)
-          setCurrentUploadTotalFiles(totalFiles)
-          setCurrentUploadFilePath(currentFilePath)
-        }
+        onUploadProgress: () => {}
       })
 
       const uploaded = res.uploaded ?? []
@@ -1422,7 +1493,6 @@ export default function UploadPage() {
       // Refresh explorer after upload.
       void fetchExplorer()
     } catch (e: unknown) {
-      setUploadFailed(true)
       const err = e as {
         message?: string
         response?: { data?: { message?: string; error?: string }; status?: number }
@@ -1437,15 +1507,7 @@ export default function UploadPage() {
       }
     } finally {
       setUploading(false)
-      setUploadSpeed(0)
-      setCurrentUploadFileIndex(0)
-      setCurrentUploadTotalFiles(0)
-      setCurrentUploadFilePath('')
       setHasTriggeredUpload(false) // Reset for next upload
-      // Keep modal open for a moment to show success/error, then close
-      setTimeout(() => {
-        setShowUploadModal(false)
-      }, 2000)
     }
   }
 
@@ -1487,6 +1549,94 @@ export default function UploadPage() {
     }
   }
 
+  // Bulk selection handlers
+  function toggleFileSelection(key: string) {
+    setSelectedForBulk(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+      }
+      return next
+    })
+  }
+
+  function selectAllFiles() {
+    const allKeys = filteredAndSortedFiles.map(f => f.key)
+    setSelectedForBulk(new Set(allKeys))
+  }
+
+  function clearSelection() {
+    setSelectedForBulk(new Set())
+  }
+
+  async function handleBulkDelete() {
+    if (selectedForBulk.size === 0) return
+    if (!confirm(`هل أنت متأكد من حذف ${selectedForBulk.size} ملفات؟ سيتم نقلها إلى سلة المهملات.`)) {
+      return
+    }
+
+    setBulkLoading(true)
+    try {
+      const keys = Array.from(selectedForBulk)
+      await bulkMoveToTrash(keys)
+      showToastNotification(`تم نقل ${keys.length} ملفات إلى سلة المهملات`, 'success')
+      setSelectedForBulk(new Set())
+      await fetchExplorer()
+    } catch (e: unknown) {
+      const err = e as { message?: string; response?: { data?: { message?: string } } }
+      showToastNotification(`فشل حذف الملفات: ${err.response?.data?.message || err.message || 'خطأ غير معروف'}`, 'error')
+    } finally {
+      setBulkLoading(false)
+    }
+  }
+
+  async function handleBulkDownload() {
+    if (selectedForBulk.size === 0) return
+
+    const keys = Array.from(selectedForBulk)
+    showToastNotification(`جاري تنزيل ${keys.length} ملفات...`, 'info')
+    
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i]
+      const filename = filenameFromKey(key)
+      try {
+        await handleDownload(key, filename)
+        // Add small delay between downloads to prevent browser blocking
+        if (i < keys.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500))
+        }
+      } catch (error) {
+        console.error(`Failed to download ${filename}:`, error)
+      }
+    }
+    
+    showToastNotification(`تم بدء تنزيل ${keys.length} ملفات`, 'success')
+  }
+
+  async function handleBulkRestore() {
+    if (selectedForBulk.size === 0) return
+    if (!confirm(`هل أنت متأكد من استعادة ${selectedForBulk.size} ملفات؟`)) {
+      return
+    }
+
+    setBulkLoading(true)
+    try {
+      const keys = Array.from(selectedForBulk)
+      await bulkRestoreFromTrash(keys)
+      showToastNotification(`تم استعادة ${keys.length} ملفات بنجاح`, 'success')
+      setSelectedForBulk(new Set())
+      await fetchTrashFiles()
+      await fetchExplorer()
+    } catch (e: unknown) {
+      const err = e as { message?: string; response?: { data?: { message?: string } } }
+      showToastNotification(`فشل استعادة الملفات: ${err.response?.data?.message || err.message || 'خطأ غير معروف'}`, 'error')
+    } finally {
+      setBulkLoading(false)
+    }
+  }
+
   const fetchTrashFiles = useCallback(async () => {
     setLoadingTrash(true)
     try {
@@ -1509,6 +1659,22 @@ export default function UploadPage() {
   function handlePreview(key: string, url: string) {
     const filename = filenameFromKey(key)
     const fileType = getFileType(filename)
+
+    const fileMeta = filesHere.find(file => file.key === key)
+    if (fileMeta?.encryptionEnabled && fileMeta.fileId && fileMeta.encryptionIv && fileMeta.encryptionSalt) {
+      setEncryptedViewerFile({
+        fileId: fileMeta.fileId,
+        filename,
+        mimeType: fileMeta.mimeType,
+        size: fileMeta.size,
+        encryptionEnabled: fileMeta.encryptionEnabled,
+        encryptionIv: fileMeta.encryptionIv,
+        encryptionSalt: fileMeta.encryptionSalt,
+      })
+      setEncryptedViewerOpen(true)
+      return
+    }
+
     setPreviewFile({ key, url, filename, type: fileType })
     setPreviewModalOpen(true)
   }
@@ -1516,6 +1682,30 @@ export default function UploadPage() {
   function handleClosePreview() {
     setPreviewModalOpen(false)
     setPreviewFile(null)
+  }
+
+  function handleCloseEncryptedViewer() {
+    setEncryptedViewerOpen(false)
+    setEncryptedViewerFile(null)
+  }
+
+  function handleDownloadFile(key: string, filename: string) {
+    const fileMeta = filesHere.find(file => file.key === key)
+    if (fileMeta?.encryptionEnabled && fileMeta.fileId && fileMeta.encryptionIv && fileMeta.encryptionSalt) {
+      setEncryptedViewerFile({
+        fileId: fileMeta.fileId,
+        filename,
+        mimeType: fileMeta.mimeType,
+        size: fileMeta.size,
+        encryptionEnabled: fileMeta.encryptionEnabled,
+        encryptionIv: fileMeta.encryptionIv,
+        encryptionSalt: fileMeta.encryptionSalt,
+      })
+      setEncryptedViewerOpen(true)
+      return
+    }
+
+    void handleDownload(key, filename)
   }
 
   // Folder creation functions
@@ -2019,12 +2209,17 @@ export default function UploadPage() {
     return unsubscribe
   }, [fetchExplorer, fetchTrashFiles, showTrash])
 
-  const publicBase = API_ENV.r2PublicBaseUrl?.trim() ?? ''
   function keyToPublicUrl(key: string) {
-    if (!publicBase) return ''
-    const base = publicBase.endsWith('/') ? publicBase.slice(0, -1) : publicBase
+    const publicBase = API_ENV.r2PublicBaseUrl?.trim() || ''
     const safeKey = key.startsWith('/') ? key.slice(1) : key
-    return `${base}/${safeKey}`
+    if (publicBase) {
+      const base = publicBase.endsWith('/') ? publicBase.slice(0, -1) : publicBase
+      return `${base}/${safeKey}`
+    }
+    const base = API_ENV.apiBaseUrl?.trim() || ''
+    if (!base) return ''
+    const normalized = base.endsWith('/') ? base.slice(0, -1) : base
+    return `${normalized}/api/image/${encodeURIComponent(safeKey)}`
   }
 
   const breadcrumbs = useMemo(() => {
@@ -2041,10 +2236,13 @@ export default function UploadPage() {
   return (
     <Box sx={{ height: '100%' }}>
       <Container maxWidth="md" sx={{ py: 4 }}>
-        <UploadDropzone
+        <EncryptedUploadDropzone
           files={selectedFiles}
           onFilesChange={setSelectedFiles}
           uploading={uploading}
+          encryptionPassword={encryptionPassword}
+          onEncryptionPasswordRequest={() => {}}
+          onUploadProgress={() => {}}
         />
 
         <Box sx={{ mt: 2 }}>
@@ -2132,7 +2330,81 @@ export default function UploadPage() {
             </Box>
           </Box>
 
-
+          {/* Bulk Action Toolbar */}
+          {selectedForBulk.size > 0 && (
+            <Box sx={{ 
+              mt: 2, 
+              p: 2, 
+              borderRadius: 2, 
+              bgcolor: 'primary.50',
+              border: '1px solid',
+              borderColor: 'primary.main',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              flexWrap: 'wrap'
+            }}>
+              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                {selectedForBulk.size} عنصر محدد
+              </Typography>
+              <Box sx={{ flex: 1 }} />
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={clearSelection}
+                sx={{ borderRadius: 999 }}
+              >
+                إلغاء التحديد
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<SelectAllIcon />}
+                onClick={selectAllFiles}
+                sx={{ borderRadius: 999 }}
+              >
+                تحديد الكل
+              </Button>
+              {!showTrash && (
+                <>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    startIcon={<DownloadIcon />}
+                    onClick={handleBulkDownload}
+                    disabled={bulkLoading}
+                    sx={{ borderRadius: 999 }}
+                  >
+                    تنزيل ({selectedForBulk.size})
+                  </Button>
+                  <Button
+                    variant="contained"
+                    color="error"
+                    size="small"
+                    startIcon={<DeleteIcon />}
+                    onClick={handleBulkDelete}
+                    disabled={bulkLoading}
+                    sx={{ borderRadius: 999 }}
+                  >
+                    حذف ({selectedForBulk.size})
+                  </Button>
+                </>
+              )}
+              {showTrash && (
+                <Button
+                  variant="contained"
+                  color="success"
+                  size="small"
+                  startIcon={<RestoreIcon />}
+                  onClick={handleBulkRestore}
+                  disabled={bulkLoading}
+                  sx={{ borderRadius: 999 }}
+                >
+                  استعادة ({selectedForBulk.size})
+                </Button>
+              )}
+            </Box>
+          )}
 
         </Box>
 
@@ -2188,6 +2460,8 @@ export default function UploadPage() {
                     key={file.id}
                     file={file}
                     onRestore={handleRestore}
+                    selected={selectedForBulk.has(file.originalKey)}
+                    onToggleSelect={toggleFileSelection}
                   />
                 ))}
               </Box>
@@ -2344,10 +2618,13 @@ export default function UploadPage() {
                                     thumbnailUrl={thumbnailUrl}
                                     onDelete={handleDelete}
                                     onPreview={handlePreview}
+                                    onDownload={handleDownloadFile}
                                     onPrivacyToggle={openPrivacyModal}
                                     filePrivacySettings={filePrivacySettings}
                                     canAccessFile={canAccessFile}
                                     isDeleting={deletingFiles.has(obj.key)}
+                                    selected={selectedForBulk.has(obj.key)}
+                                    onToggleSelect={toggleFileSelection}
                                   />
                                 )
                               })}
@@ -2393,10 +2670,13 @@ export default function UploadPage() {
                                       thumbnailUrl={thumbnailUrl}
                                       onDelete={handleDelete}
                                       onPreview={handlePreview}
+                                      onDownload={handleDownloadFile}
                                       onPrivacyToggle={openPrivacyModal}
                                       filePrivacySettings={filePrivacySettings}
                                       canAccessFile={canAccessFile}
                                       isDeleting={deletingFiles.has(obj.key)}
+                                      selected={selectedForBulk.has(obj.key)}
+                                      onToggleSelect={toggleFileSelection}
                                     />
                                   )
                                 })}
@@ -2427,7 +2707,7 @@ export default function UploadPage() {
           )}
         </Box>
 
-        {!publicBase && (
+        {!API_ENV.r2PublicBaseUrl && (
           <Typography variant="body2" sx={{ mt: 1, opacity: 0.7 }}>
             لتفعيل زر (فتح)، اضف قيمة `VITE_R2_PUBLIC_BASE_URL` في `frontend/.env.local`.
           </Typography>
@@ -2440,96 +2720,20 @@ export default function UploadPage() {
         onClose={handleClosePreview}
       />
 
-      {/* Upload Progress Modal */}
-      <Dialog
-        open={showUploadModal}
-        maxWidth="sm"
-        fullWidth
-        PaperProps={{
-          sx: {
-            backgroundColor: 'background.default',
-            backgroundImage: 'none',
-          }
-        }}
-      >
-        <DialogTitle sx={{ textAlign: 'center', pb: 1 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-            <UploadIcon />
-            <Typography variant="h6">جارٍ رفع الملفات</Typography>
-          </Box>
-        </DialogTitle>
-        <DialogContent sx={{ pt: 1 }}>
-          <Box sx={{ textAlign: 'center' }}>
-            <LinearProgress
-              variant="determinate"
-              value={uploadProgress}
-              sx={{ height: 8, borderRadius: 999, mb: 2 }}
-            />
+      {encryptedViewerFile && (
+        <EncryptedFileViewer
+          open={encryptedViewerOpen}
+          onClose={handleCloseEncryptedViewer}
+          fileId={encryptedViewerFile.fileId}
+          filename={encryptedViewerFile.filename}
+          mimeType={encryptedViewerFile.mimeType}
+          size={encryptedViewerFile.size}
+          encryptionEnabled={encryptedViewerFile.encryptionEnabled}
+          encryptionIv={encryptedViewerFile.encryptionIv}
+          encryptionSalt={encryptedViewerFile.encryptionSalt}
+        />
+      )}
 
-            <Typography variant="h4" sx={{ fontWeight: 800, mb: 1 }}>
-              {uploadProgress}%
-            </Typography>
-
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="body2" sx={{ opacity: 0.75 }}>
-                {fmtBytes(bytesUploaded)} / {fmtBytes(totalBytes)}
-              </Typography>
-              {(uploadSpeed && uploadSpeed > 0) && (
-                <Typography variant="body2" sx={{ opacity: 0.75 }}>
-                  {fmtSpeed(uploadSpeed)}
-                </Typography>
-              )}
-            </Box>
-
-            {uploading && (
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-                <CircularProgress size={20} />
-                <Typography variant="body2" sx={{ opacity: 0.75 }}>
-                  جاري رفع الملف {currentUploadFileIndex || 1} من {currentUploadTotalFiles || selectedFiles.length}...
-                </Typography>
-              </Box>
-            )}
-
-            {uploadFailed && !uploading && (
-              <Box sx={{ mb: 2, mt: 1 }}>
-                <Alert severity="error" sx={{ mb: 2 }}>
-                  فشل عملية الرفع. يمكنك استعادة الرفع من النقطة التي توقفت عندها.
-                </Alert>
-                <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
-                  <Button
-                    variant="contained"
-                    onClick={() => {
-                      setUploadFailed(false)
-                      void handleUpload()
-                    }}
-                    startIcon={<RestoreIcon />}
-                  >
-                    استعادة الرفع
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    onClick={() => {
-                      setShowUploadModal(false)
-                      setSelectedFiles([])
-                      setCompletedUploadedFiles(new Set())
-                      setUploadFailed(false)
-                    }}
-                  >
-                    إلغاء
-                  </Button>
-                </Box>
-              </Box>
-            )}
-
-            {uploading && currentUploadFilePath && (
-              <Typography variant="caption" sx={{ display: 'block', mt: 1, opacity: 0.65, wordBreak: 'break-word' }}>
-                {currentUploadFilePath}
-              </Typography>
-            )}
-
-          </Box>
-        </DialogContent>
-      </Dialog>
 
       {/* Create Folder Modal */}
       <Dialog
@@ -2657,11 +2861,4 @@ export default function UploadPage() {
   )
 }
 
-function fmtSpeed(bytesPerSecond: number): string {
-  if (!Number.isFinite(bytesPerSecond) || bytesPerSecond <= 0) return '0 B/s'
-  const units = ['B/s', 'KB/s', 'MB/s', 'GB/s']
-  const idx = Math.min(units.length - 1, Math.floor(Math.log(bytesPerSecond) / Math.log(1024)))
-  const value = bytesPerSecond / Math.pow(1024, idx)
-  return `${value.toFixed(value >= 10 || idx === 0 ? 0 : 1)} ${units[idx]}`
-}
 

@@ -24,3 +24,8 @@ export async function updateWorkspace(workspaceId: string, data: UpdateWorkspace
   const res = await api.patch(`/api/workspaces/${workspaceId}`, data)
   return res.data.workspace
 }
+
+export async function getWorkspaceEncryptionKey(): Promise<{ ok?: boolean; key?: string }> {
+  const res = await api.get('/api/workspace/encryption-key')
+  return res.data as { ok?: boolean; key?: string }
+}

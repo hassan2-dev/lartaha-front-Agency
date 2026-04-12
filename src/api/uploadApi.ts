@@ -13,7 +13,19 @@ export type ListObjectsResult = {
   prefix?: string
   delimiter?: boolean
   folders?: string[]
-  objects?: Array<{ key: string; size?: number; lastModified?: string; createdAt?: string; updatedAt?: string; thumbnailKey?: string | null }>
+  objects?: Array<{
+    key: string
+    size?: number
+    lastModified?: string
+    createdAt?: string
+    updatedAt?: string
+    thumbnailKey?: string | null
+    fileId?: string
+    mimeType?: string
+    encryptionEnabled?: boolean
+    encryptionIv?: string
+    encryptionSalt?: string
+  }>
   pagination?: {
     hasMore: boolean
     nextContinuationToken: string | null
@@ -50,6 +62,9 @@ export type ListTrashResult = {
 export type StreamUploadInputFile = {
   file: File
   relativePath: string
+  encryptionEnabled?: boolean
+  encryptionIv?: string
+  encryptionSalt?: string
 }
 
 export type StreamUploadProgress = {
@@ -142,6 +157,20 @@ async function uploadVideoThumbnail(originalKey: string, thumbnailBlob: Blob) {
     headers: {
       'Content-Type': 'image/jpeg',
     },
+    timeout: 2 * 60 * 1000,
+    maxContentLength: Infinity,
+    maxBodyLength: Infinity,
+  })
+}
+
+export async function uploadImageThumbnail(key: string, thumbnailKey: string, thumbnailBlob: Blob): Promise<void> {
+  // Use FormData to send both file and metadata
+  const formData = new FormData()
+  formData.append('key', key)
+  formData.append('thumbnailKey', thumbnailKey)
+  formData.append('file', thumbnailBlob, 'thumbnail.jpg')
+  
+  await api.post('/api/upload/image-thumbnail', formData, {
     timeout: 2 * 60 * 1000,
     maxContentLength: Infinity,
     maxBodyLength: Infinity,
@@ -293,6 +322,9 @@ export async function uploadFilesStreamed(
           path: item.relativePath,
           uploadId,
           ...(folderName ? { folderName } : {}),
+          ...(item.encryptionEnabled ? { encryptionEnabled: '1' } : {}),
+          ...(item.encryptionIv ? { encryptionIv: item.encryptionIv } : {}),
+          ...(item.encryptionSalt ? { encryptionSalt: item.encryptionSalt } : {}),
         },
         headers: {
           'Content-Type': item.file.type || 'application/octet-stream',
@@ -376,6 +408,16 @@ export async function restoreFileFromTrash(key: string): Promise<TrashResult> {
   return res.data as TrashResult
 }
 
+export async function bulkMoveToTrash(keys: string[]): Promise<TrashResult> {
+  const res = await api.post('/api/files/trash/bulk', { keys })
+  return res.data as TrashResult
+}
+
+export async function bulkRestoreFromTrash(keys: string[]): Promise<TrashResult> {
+  const res = await api.post('/api/files/restore/bulk', { keys })
+  return res.data as TrashResult
+}
+
 export async function listTrashFiles(): Promise<ListTrashResult> {
   const res = await api.get('/api/files/trash')
   return res.data as ListTrashResult
@@ -404,6 +446,26 @@ export type UploadUrlResult = {
   r2Endpoint?: string
   r2Bucket?: string
   r2PublicUrl?: string
+}
+
+export type MultipartCreateResult = {
+  ok?: boolean
+  uploadId?: string
+  key?: string
+  multipartUploadId?: string
+}
+
+export type MultipartSignPartResult = {
+  ok?: boolean
+  url?: string
+}
+
+export type MultipartCompleteResult = {
+  ok?: boolean
+}
+
+export type MultipartAbortResult = {
+  ok?: boolean
 }
 
 export type ConfirmUploadResult = {
@@ -454,6 +516,44 @@ export async function requestUploadUrl(params: {
 }): Promise<UploadUrlResult> {
   const res = await api.post('/api/upload/url', params)
   return res.data as UploadUrlResult
+}
+
+// ========== Multipart Upload API ==========
+
+export async function createMultipartUpload(params: {
+  filename: string
+  mimeType?: string
+  size?: number
+}): Promise<MultipartCreateResult> {
+  const res = await api.post('/api/upload/multipart/create', params)
+  return res.data as MultipartCreateResult
+}
+
+export async function signMultipartPart(params: {
+  key: string
+  multipartUploadId: string
+  partNumber: number
+}): Promise<MultipartSignPartResult> {
+  const res = await api.post('/api/upload/multipart/part', params)
+  return res.data as MultipartSignPartResult
+}
+
+export async function completeMultipartUpload(params: {
+  uploadId: string
+  key: string
+  multipartUploadId: string
+  parts: Array<{ ETag?: string; etag?: string; PartNumber?: number; partNumber?: number }>
+}): Promise<MultipartCompleteResult> {
+  const res = await api.post('/api/upload/multipart/complete', params)
+  return res.data as MultipartCompleteResult
+}
+
+export async function abortMultipartUpload(params: {
+  key: string
+  multipartUploadId: string
+}): Promise<MultipartAbortResult> {
+  const res = await api.post('/api/upload/multipart/abort', params)
+  return res.data as MultipartAbortResult
 }
 
 /**

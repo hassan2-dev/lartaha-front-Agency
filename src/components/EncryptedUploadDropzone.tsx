@@ -35,28 +35,60 @@ import {
   FileCopy as FileIcon,
   Lock as LockIcon,
   Close as CloseIcon,
+  Pause as PauseIcon,
+  PlayArrow as PlayArrowIcon,
 } from '@mui/icons-material'
 
 import Uppy from '@uppy/core'
-import Tus from '@uppy/tus'
-import '@uppy/core/dist/style.min.css'
-import '@uppy/dashboard/dist/style.min.css'
-import '@uppy/status-bar/dist/style.min.css'
+import AwsS3Multipart from '@uppy/aws-s3'
+import '@uppy/core/css/style.min.css'
+import '@uppy/dashboard/css/style.min.css'
+import '@uppy/status-bar/css/style.min.css'
 
 import {
   encryptFile,
   encryptFileChunked,
   shouldUseChunkedEncryption,
+  generateThumbnail,
   type EncryptionResult,
   type ChunkedEncryptionResult,
 } from '../lib/encryption'
-import { requestUploadUrl, confirmUpload, type UploadUrlResult } from '../api/uploadApi'
+import {
+  createMultipartUpload,
+  signMultipartPart,
+  completeMultipartUpload,
+  abortMultipartUpload,
+  confirmUpload,
+  uploadImageThumbnail,
+} from '../api/uploadApi'
+
+// Build thumbnail key following server naming convention
+function buildImageThumbnailKey(originalKey: string): string {
+  const safeKey = String(originalKey || '').replace(/^\/+/, '')
+  if (!safeKey) return ''
+
+  const parts = safeKey.split('/').filter(Boolean)
+  const filename = parts.pop() || 'image'
+  const basename = filename.replace(/\.[^.]+$/, '') || filename
+  const directory = parts.join('/')
+  const thumbnailFilename = `${basename}__thumb.jpg`
+  return directory ? `${directory}/.thumbnails/${thumbnailFilename}` : `.thumbnails/${thumbnailFilename}`
+}
 
 export type SelectedUploadFile = {
   file: File
   relativePath: string
   encrypted?: boolean
   encryptionResult?: EncryptionResult | ChunkedEncryptionResult
+  uploadFile?: File
+  thumbnailUploadFile?: File | null // Encrypted thumbnail to upload separately
+}
+
+type UploadItemState = {
+  fileKey: string
+  fileId: string
+  status: 'idle' | 'uploading' | 'paused' | 'completed' | 'error'
+  progress: number
 }
 
 interface EncryptedUploadDropzoneProps {
@@ -99,17 +131,17 @@ export default function EncryptedUploadDropzone({
   uploading,
   error = null,
   encryptionPassword,
-  onEncryptionPasswordRequest,
   onUploadProgress,
 }: EncryptedUploadDropzoneProps) {
   const [dragOver, setDragOver] = useState(false)
   const [pendingFolderFiles, setPendingFolderFiles] = useState<SelectedUploadFile[] | null>(null)
   const [pendingFolderName, setPendingFolderName] = useState('')
-  const [encryptEnabled, setEncryptEnabled] = useState(false)
+  const [encryptEnabled] = useState(true)
   const [isEncrypting, setIsEncrypting] = useState(false)
   const [encryptionProgress, setEncryptionProgress] = useState(0)
   const [showUppyDashboard, setShowUppyDashboard] = useState(false)
   const [_currentUploadId, setCurrentUploadId] = useState<string | null>(null)
+  const [uploadItems, setUploadItems] = useState<Record<string, UploadItemState>>({})
   
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const folderInputRef = useRef<HTMLInputElement | null>(null)
@@ -127,6 +159,11 @@ export default function EncryptedUploadDropzone({
   useEffect(() => {
     return () => {
       if (uppyRef.current) {
+        uppyRef.current?.cancelAll()
+        // Some Uppy builds expose close(); guard for type compatibility
+        if (typeof (uppyRef.current as unknown as { close?: () => void }).close === 'function') {
+          (uppyRef.current as unknown as { close: () => void }).close()
+        }
         uppyRef.current = null
       }
     }
@@ -160,6 +197,10 @@ export default function EncryptedUploadDropzone({
       const sf = filesToEncrypt[i]
       
       try {
+        // Generate thumbnail from original file - SMALL and NON-ENCRYPTED
+        // This can be stored in R2 publicly and loaded via <img> without CORS
+        const thumbnailBlob = await generateThumbnail(sf.file, 200)
+
         const encryptionResult = await encryptSingleFile(
           sf.file,
           encryptionPasswordRef.current,
@@ -172,15 +213,32 @@ export default function EncryptedUploadDropzone({
           }
         )
 
+        let uploadFile = sf.file
+        if ('encryptedData' in encryptionResult) {
+          uploadFile = new File([encryptionResult.encryptedData], sf.relativePath, {
+            type: 'application/octet-stream',
+          })
+        } else if (Array.isArray(encryptionResult.encryptedChunks)) {
+          const blob = new Blob(encryptionResult.encryptedChunks, {
+            type: 'application/octet-stream',
+          })
+          uploadFile = new File([blob], sf.relativePath, { type: 'application/octet-stream' })
+        }
+
+        console.log('[DEBUG] encryptFiles: thumbnailBlob for', sf.relativePath, thumbnailBlob?.size, 'bytes')
         encryptedFiles.push({
           ...sf,
           encrypted: true,
           encryptionResult,
+          uploadFile,
+          thumbnailUploadFile: thumbnailBlob
+            ? new File([thumbnailBlob], `thumb_${sf.relativePath}.jpg`, { type: 'image/jpeg' })
+            : null,
         })
       } catch (err) {
         console.error(`Failed to encrypt ${sf.relativePath}:`, err)
         // Continue with unencrypted file if encryption fails
-        encryptedFiles.push(sf)
+        encryptedFiles.push({ ...sf, uploadFile: sf.file })
       }
 
       setEncryptionProgress(Math.round(((i + 1) / totalFiles) * 100))
@@ -201,31 +259,25 @@ export default function EncryptedUploadDropzone({
     }
   }
 
-  // Initialize Uppy with tus for chunked uploads
+  // Initialize Uppy with S3 multipart for chunked uploads
   const initUppy = useCallback(async (fileToUpload: SelectedUploadFile) => {
-    // Request upload URL from server
-    const uploadUrlResult: UploadUrlResult = await requestUploadUrl({
+    const dataFile = fileToUpload.uploadFile || fileToUpload.file
+
+    const createResult = await createMultipartUpload({
       filename: fileToUpload.relativePath,
-      mimeType: fileToUpload.file.type || 'application/octet-stream',
-      size: fileToUpload.file.size,
-      encryptionEnabled: encryptEnabled,
-      encryptionIv: fileToUpload.encryptionResult 
-        ? 'encryptionResult' in fileToUpload.encryptionResult 
-          ? fileToUpload.encryptionResult.iv 
-          : undefined
-        : undefined,
-      encryptionSalt: fileToUpload.encryptionResult
-        ? 'encryptionResult' in fileToUpload.encryptionResult
-          ? fileToUpload.encryptionResult.salt
-          : undefined
-        : undefined,
+      mimeType: dataFile.type || 'application/octet-stream',
+      size: dataFile.size,
     })
 
-    if (!uploadUrlResult.ok || !uploadUrlResult.url) {
-      throw new Error('Failed to get upload URL')
+    if (!createResult.ok || !createResult.multipartUploadId || !createResult.key || !createResult.uploadId) {
+      throw new Error('Failed to create multipart upload')
     }
 
-    setCurrentUploadId(uploadUrlResult.uploadId || null)
+    const multipartUploadId = createResult.multipartUploadId
+    const uploadKey = createResult.key
+    const uploadId = createResult.uploadId
+
+    setCurrentUploadId(createResult.uploadId || null)
 
     // Create Uppy instance
     const uppy = new Uppy({
@@ -236,54 +288,160 @@ export default function EncryptedUploadDropzone({
       autoProceed: false,
     })
 
-    // Add tus plugin for chunked uploads
-    uppy.use(Tus, {
-      endpoint: uploadUrlResult.url,
-      chunkSize: 5 * 1024 * 1024, // 5MB chunks
-      retryDelays: [0, 1000, 3000, 5000],
+    // Add S3 multipart plugin for chunked uploads
+    uppy.use(AwsS3Multipart, {
+      limit: 4,
+      shouldUseMultipart: (file: { size: number | null }) => (file.size ?? 0) > 5 * 1024 * 1024,
+      createMultipartUpload: async (_file: unknown) => {
+        return {
+          uploadId: multipartUploadId,
+          key: uploadKey,
+        }
+      },
+      listParts: async (_file: unknown, _opts: unknown) => {
+        // Return empty array as we don't need to list parts for new uploads
+        return []
+      },
+      signPart: async (_file: unknown, partData: { partNumber: number }) => {
+        const partNumber = partData.partNumber
+        const signed = await signMultipartPart({
+          key: uploadKey,
+          multipartUploadId,
+          partNumber,
+        })
+        if (!signed.ok || !signed.url) {
+          throw new Error('Failed to sign upload part')
+        }
+        return { url: signed.url }
+      },
+      completeMultipartUpload: async (_file: unknown, { parts }: { parts: Array<{ ETag?: string; PartNumber?: number }> }) => {
+        await completeMultipartUpload({
+          uploadId,
+          key: uploadKey,
+          multipartUploadId,
+          parts,
+        })
+        return {}
+      },
+      abortMultipartUpload: async () => {
+        await abortMultipartUpload({
+          key: uploadKey,
+          multipartUploadId,
+        })
+      },
+      getUploadParameters: async (_file: unknown) => {
+        // Return dummy parameters for non-multipart uploads
+        return { url: '' }
+      },
     })
 
     // Add the file
-    uppy.addFile({
+    const added = uppy.addFile({
       name: fileToUpload.relativePath,
-      type: fileToUpload.file.type || 'application/octet-stream',
-      data: fileToUpload.file,
-      size: fileToUpload.file.size,
+      type: dataFile.type || 'application/octet-stream',
+      data: dataFile,
+      size: dataFile.size,
     })
+
+    const fileKey = `${fileToUpload.relativePath}_${fileToUpload.file.size}`
+    const fileId = typeof added === 'string'
+      ? added
+      : (added as unknown as { id?: string })?.id
+    if (fileId) {
+      setUploadItems((prev) => ({
+        ...prev,
+        [fileKey]: {
+          fileKey,
+          fileId,
+          status: 'uploading',
+          progress: 0,
+        },
+      }))
+    }
 
     // Track progress
     uppy.on('progress', (progress: number) => {
       onUploadProgress?.(progress)
     })
 
+    uppy.on('upload-progress', (fileMaybe, progress) => {
+      const file = fileMaybe as { name?: string; size?: number; id?: string } | undefined
+      if (!file?.name || !file?.size) return
+      const fileKey = `${file.name}_${file.size}`
+      const pct = progress?.bytesTotal
+        ? Math.round((progress.bytesUploaded * 100) / progress.bytesTotal)
+        : 0
+      setUploadItems((prev) => ({
+        ...prev,
+        [fileKey]: {
+          fileKey,
+          fileId: file.id || prev[fileKey]?.fileId || '',
+          status: 'uploading',
+          progress: pct,
+        },
+      }))
+    })
+
     uppy.on('complete', async () => {
-      // Confirm upload on server
-      if (uploadUrlResult.uploadId && uploadUrlResult.key) {
-        await confirmUpload({
-          uploadId: uploadUrlResult.uploadId,
-          key: uploadUrlResult.key,
-          filename: fileToUpload.relativePath,
-          mimeType: fileToUpload.file.type || undefined,
-          size: fileToUpload.file.size,
-          encryptionEnabled: encryptEnabled,
-          encryptionIv: fileToUpload.encryptionResult
-            ? 'encryptionResult' in fileToUpload.encryptionResult
-              ? fileToUpload.encryptionResult.iv
-              : undefined
-            : undefined,
-          encryptionSalt: fileToUpload.encryptionResult
-            ? 'encryptionResult' in fileToUpload.encryptionResult
-              ? fileToUpload.encryptionResult.salt
-              : undefined
-            : undefined,
-        })
+      await confirmUpload({
+        uploadId,
+        key: uploadKey,
+        filename: fileToUpload.relativePath,
+        mimeType: dataFile.type || undefined,
+        size: dataFile.size,
+        encryptionEnabled: encryptEnabled,
+        encryptionIv: fileToUpload.encryptionResult
+          ? 'encryptionResult' in fileToUpload.encryptionResult
+            ? fileToUpload.encryptionResult.iv
+            : undefined
+          : undefined,
+        encryptionSalt: fileToUpload.encryptionResult
+          ? 'encryptionResult' in fileToUpload.encryptionResult
+            ? fileToUpload.encryptionResult.salt
+            : undefined
+          : undefined,
+      })
+
+      // Upload non-encrypted thumbnail for encrypted images
+      console.log('[DEBUG] thumbnail check:', { hasThumbnailUploadFile: !!fileToUpload.thumbnailUploadFile, isEncrypted: fileToUpload.encrypted, thumbnailFileSize: fileToUpload.thumbnailUploadFile?.size })
+      if (fileToUpload.thumbnailUploadFile && fileToUpload.encrypted) {
+        const thumbnailKey = buildImageThumbnailKey(uploadKey)
+        console.log('[DEBUG] Uploading thumbnail:', { uploadKey, thumbnailKey, hasFile: !!fileToUpload.thumbnailUploadFile, size: fileToUpload.thumbnailUploadFile.size })
+        try {
+          const result = await uploadImageThumbnail(uploadKey, thumbnailKey, fileToUpload.thumbnailUploadFile)
+          console.log('[DEBUG] Thumbnail upload success:', result)
+        } catch (err) {
+          console.error('[DEBUG] Failed to upload thumbnail:', err)
+          // Continue without thumbnail - not critical
+        }
       }
       
+      const fileKey = `${fileToUpload.relativePath}_${fileToUpload.file.size}`
+      setUploadItems((prev) => ({
+        ...prev,
+        [fileKey]: {
+          fileKey,
+          fileId: fileId || prev[fileKey]?.fileId || '',
+          status: 'completed',
+          progress: 100,
+        },
+      }))
+
       setCurrentUploadId(null)
     })
 
     uppy.on('error', (err: Error) => {
       console.error('Uppy error:', err)
+      const fileKey = `${fileToUpload.relativePath}_${fileToUpload.file.size}`
+      setUploadItems((prev) => ({
+        ...prev,
+        [fileKey]: {
+          fileKey,
+          fileId: fileId || prev[fileKey]?.fileId || '',
+          status: 'error',
+          progress: prev[fileKey]?.progress ?? 0,
+        },
+      }))
       setCurrentUploadId(null)
     })
 
@@ -293,6 +451,22 @@ export default function EncryptedUploadDropzone({
     uppyRef.current = uppy
     return uppy
   }, [encryptEnabled, onUploadProgress])
+
+  const togglePauseResume = (fileKey: string) => {
+    const item = uploadItems[fileKey]
+    if (!item || !uppyRef.current) return
+    if (!item.fileId) return
+    try {
+      uppyRef.current.pauseResume(item.fileId)
+      const nextStatus = item.status === 'paused' ? 'uploading' : 'paused'
+      setUploadItems((prev) => ({
+        ...prev,
+        [fileKey]: { ...item, status: nextStatus },
+      }))
+    } catch (err) {
+      console.error('Failed to toggle pause/resume', err)
+    }
+  }
 
   async function toSelectedFilesFromDropWithPaths(dt: DataTransfer): Promise<SelectedUploadFile[]> {
     const items = dt.items
@@ -399,13 +573,6 @@ export default function EncryptedUploadDropzone({
     handleFileSelection(deduped)
   }
 
-  const handleToggleEncryption = () => {
-    if (!encryptEnabled && !encryptionPasswordRef.current && onEncryptionPasswordRequest) {
-      onEncryptionPasswordRequest()
-      return
-    }
-    setEncryptEnabled(!encryptEnabled)
-  }
 
   return (
     <>
@@ -439,19 +606,19 @@ export default function EncryptedUploadDropzone({
         {/* Encryption Toggle */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, p: 1.5, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.03)' }}>
           <Box sx={{ color: encryptEnabled ? 'success.main' : 'text.secondary' }}>
-            {encryptEnabled ? <LockIcon /> : <LockIcon />}
+            <LockIcon />
           </Box>
           <Typography variant="body2" sx={{ flex: 1 }}>
-            تشفير الملفات (E2E)
+            تشفير الملفات (E2E) — مفعّل دائمًا
           </Typography>
           <Button
             size="small"
-            variant={encryptEnabled ? 'contained' : 'outlined'}
-            color={encryptEnabled ? 'success' : 'inherit'}
-            onClick={handleToggleEncryption}
-            sx={{ minWidth: 80 }}
+            variant="contained"
+            color="success"
+            disabled
+            sx={{ minWidth: 100 }}
           >
-            {encryptEnabled ? 'مفعّل' : 'معطّل'}
+            مفعّل
           </Button>
         </Box>
 
@@ -617,6 +784,23 @@ export default function EncryptedUploadDropzone({
                     <Typography variant="body2" sx={{ opacity: 0.6, fontSize: '0.75rem' }}>
                       {fmtBytes(sf.file.size)}
                     </Typography>
+                    {uploadItems[`${sf.relativePath}_${sf.file.size}`] && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="body2" sx={{ opacity: 0.6, fontSize: '0.75rem' }}>
+                          {uploadItems[`${sf.relativePath}_${sf.file.size}`].progress}%
+                        </Typography>
+                        <Button
+                          size="small"
+                          onClick={() => togglePauseResume(`${sf.relativePath}_${sf.file.size}`)}
+                          sx={{ minWidth: 'auto', p: 0.5 }}
+                          disabled={uploadItems[`${sf.relativePath}_${sf.file.size}`].status === 'completed'}
+                        >
+                          {uploadItems[`${sf.relativePath}_${sf.file.size}`].status === 'paused'
+                            ? <PlayArrowIcon sx={{ fontSize: 16 }} />
+                            : <PauseIcon sx={{ fontSize: 16 }} />}
+                        </Button>
+                      </Box>
+                    )}
                     <Button
                       size="small"
                       onClick={() => {

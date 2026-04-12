@@ -5,7 +5,7 @@
  * Supports images, videos, and other file types.
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Box,
   Button,
@@ -17,7 +17,6 @@ import {
   LinearProgress,
   Typography,
   IconButton,
-  TextField,
 } from '@mui/material'
 import {
   Close as CloseIcon,
@@ -28,10 +27,31 @@ import {
 } from '@mui/icons-material'
 
 import { getDownloadUrl } from '../api/uploadApi'
+import { getWorkspaceEncryptionKey } from '../api/workspaceApi'
+import { API_ENV, TOKEN_STORAGE_KEY } from '../config/api'
 import {
   decryptFile,
-  verifyPassword,
+  decryptFileChunked,
 } from '../lib/encryption'
+
+// Cache for workspace encryption key in sessionStorage
+const WORKSPACE_KEY_CACHE = 'workspace_encryption_key'
+
+function getCachedWorkspaceKey(): string | null {
+  try {
+    return sessionStorage.getItem(WORKSPACE_KEY_CACHE)
+  } catch {
+    return null
+  }
+}
+
+function setCachedWorkspaceKey(key: string): void {
+  try {
+    sessionStorage.setItem(WORKSPACE_KEY_CACHE, key)
+  } catch {
+    // Ignore storage errors
+  }
+}
 
 interface EncryptedFileViewerProps {
   fileId: string
@@ -56,144 +76,158 @@ export default function EncryptedFileViewer({
   open,
   onClose,
 }: EncryptedFileViewerProps) {
-  const [password, setPassword] = useState('')
+  const [decryptedUrl, setDecryptedUrl] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isDecrypting, setIsDecrypting] = useState(false)
   const [decryptionProgress, setDecryptionProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
-  const [decryptedUrl, setDecryptedUrl] = useState<string | null>(null)
-  const [isPasswordRequired, setIsPasswordRequired] = useState(encryptionEnabled)
-  const [passwordVerified, setPasswordVerified] = useState(false)
 
   const videoRef = useRef<HTMLVideoElement>(null)
 
   // Reset state when file changes
   useEffect(() => {
     if (open) {
-      setPassword('')
+      setDecryptedUrl(null)
       setIsLoading(false)
       setIsDecrypting(false)
       setDecryptionProgress(0)
       setError(null)
-      setDecryptedUrl(null)
-      setIsPasswordRequired(encryptionEnabled)
-      setPasswordVerified(false)
     }
-  }, [open, fileId, encryptionEnabled])
+  }, [open, fileId])
 
-  // Fetch and decrypt file
-  const fetchAndDecrypt = useCallback(async () => {
-    if (!encryptionEnabled || !encryptionIv || !encryptionSalt) {
-      // No encryption, just fetch the file
+  // Auto-fetch workspace key and decrypt when opening
+  useEffect(() => {
+    console.log('[EncryptedFileViewer] Props:', { open, encryptionEnabled, encryptionIv, encryptionSalt })
+    if (!open) {
+      console.log('[EncryptedFileViewer] Dialog not open, skipping')
+      return
+    }
+    if (!encryptionEnabled) {
+      console.log('[EncryptedFileViewer] File not encrypted, will show directly')
+      // For non-encrypted files, just fetch and show directly
       setIsLoading(true)
+      getDownloadUrl(fileId)
+        .then(result => {
+          if (result.ok && result.url) {
+            setDecryptedUrl(result.url)
+          } else {
+            setError('Failed to get file URL')
+          }
+        })
+        .catch(() => setError('Failed to fetch file'))
+        .finally(() => setIsLoading(false))
+      return
+    }
+    if (!encryptionIv || !encryptionSalt) {
+      console.error('[EncryptedFileViewer] MISSING IV or SALT - treating as non-encrypted:', { encryptionIv, encryptionSalt })
+      // Fallback: try to show as non-encrypted
+      setIsLoading(true)
+      getDownloadUrl(fileId)
+        .then(result => {
+          if (result.ok && result.url) {
+            setDecryptedUrl(result.url)
+          } else {
+            setError('Failed to get file URL')
+          }
+        })
+        .catch(() => setError('Failed to fetch file'))
+        .finally(() => setIsLoading(false))
+      return
+    }
+
+    const decrypt = async () => {
+      console.log('[EncryptedFileViewer] Starting decrypt flow...')
+      setIsLoading(true)
+      setError(null)
+
       try {
-        const result = await getDownloadUrl(fileId)
-        if (result.ok && result.url) {
-          setDecryptedUrl(result.url)
+        // Step 1: Get workspace key (use cache if available)
+        let key = getCachedWorkspaceKey()
+        if (!key) {
+          console.log('[EncryptedFileViewer] Step 1: Fetching workspace encryption key...')
+          const res = await getWorkspaceEncryptionKey()
+          if (!res.ok || !res.key) {
+            throw new Error('Failed to get encryption key from server')
+          }
+          // Convert Node.js base64 to URL-safe base64
+          key = res.key.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+          setCachedWorkspaceKey(key)
+          console.log('[EncryptedFileViewer] Step 1: Got and cached key:', key.substring(0, 15) + '...')
         } else {
-          setError('Failed to get file URL')
+          console.log('[EncryptedFileViewer] Step 1: Using cached key:', key.substring(0, 15) + '...')
         }
-      } catch (err) {
-        setError('Failed to fetch file')
-      } finally {
+
+        // Step 2: Get download URL
+        console.log('[EncryptedFileViewer] Step 2: Getting download URL for:', fileId)
+        const result = await getDownloadUrl(fileId)
+        if (!result.ok || !result.url) {
+          throw new Error('Failed to get download URL')
+        }
+        console.log('[EncryptedFileViewer] Step 2: Got URL:', result.url.substring(0, 50) + '...')
+
+        // Step 3: Fetch encrypted data through server proxy (bypasses CORS)
+        console.log('[EncryptedFileViewer] Step 3: Fetching encrypted data through server proxy...')
+        // Use API base URL or fallback to localhost:3030 for development
+        const apiBase = API_ENV.apiBaseUrl || 'http://localhost:3030'
+        console.log('[EncryptedFileViewer] API base:', apiBase)
+        
+        // Get auth token for the request
+        const token = localStorage.getItem(TOKEN_STORAGE_KEY)
+        const headers: Record<string, string> = {}
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`
+        }
+        
+        const response = await fetch(`${apiBase}/api/upload/download/${fileId}/data`, { headers })
+        if (!response.ok) {
+          throw new Error('Failed to fetch encrypted file')
+        }
+        const encryptedData = await response.arrayBuffer()
+        console.log('[EncryptedFileViewer] Step 3: Got data, size:', encryptedData.byteLength)
+
+        if (encryptedData.byteLength === 0) {
+          throw new Error('Encrypted file is empty')
+        }
+
         setIsLoading(false)
+        setIsDecrypting(true)
+
+        // Step 4: Decrypt
+        console.log('[EncryptedFileViewer] Step 4: Decrypting with IV:', encryptionIv, 'Salt:', encryptionSalt)
+        
+        const decrypted = encryptedData.byteLength > 12 * 1024 * 1024
+          ? await decryptFileChunked(
+              { encryptedChunks: splitIntoChunks(encryptedData), iv: encryptionIv!, salt: encryptionSalt!, password: key },
+              (progress) => setDecryptionProgress(progress)
+            )
+          : await decryptFile(encryptedData, encryptionIv!, encryptionSalt!, key)
+        
+        console.log('[EncryptedFileViewer] Step 4: Decryption complete, blob size:', decrypted.size)
+
+        const url = URL.createObjectURL(decrypted)
+        setDecryptedUrl(url)
+        setIsDecrypting(false)
+      } catch (err) {
+        console.error('[EncryptedFileViewer] Decryption error:', err)
+        setError(err instanceof Error ? err.message : 'Decryption failed')
+        setIsLoading(false)
+        setIsDecrypting(false)
       }
-      return
     }
 
-    // Need password for encrypted files
-    if (!password) {
-      setError('Password is required')
-      return
+    void decrypt()
+  }, [open, fileId, encryptionEnabled, encryptionIv, encryptionSalt])
+
+  // Cleanup blob URL on unmount
+  useEffect(() => {
+    return () => {
+      if (decryptedUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(decryptedUrl)
+      }
     }
+  }, [decryptedUrl])
 
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      // Get download URL from server
-      const result = await getDownloadUrl(fileId)
-      if (!result.ok || !result.url) {
-        throw new Error('Failed to get file URL')
-      }
-
-      // Fetch encrypted data
-      const response = await fetch(result.url)
-      if (!response.ok) {
-        throw new Error('Failed to fetch encrypted file')
-      }
-
-      const encryptedData = await response.arrayBuffer()
-
-      // Decrypt the data
-      setIsLoading(false)
-      setIsDecrypting(true)
-
-      const decrypted = await decryptFile(
-        encryptedData,
-        encryptionIv,
-        encryptionSalt,
-        password
-      )
-
-      // Create blob URL for preview
-      const url = URL.createObjectURL(decrypted)
-      setDecryptedUrl(url)
-      setPasswordVerified(true)
-      setIsDecrypting(false)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Decryption failed'
-      setError(message)
-      setIsLoading(false)
-      setIsDecrypting(false)
-    }
-  }, [fileId, encryptionEnabled, encryptionIv, encryptionSalt, password])
-
-  // Verify password without downloading full file (for small files)
-  const verifyPasswordHandler = useCallback(async () => {
-    if (!encryptionEnabled || !encryptionIv || !encryptionSalt || !password) {
-      setError('Encryption parameters missing')
-      return
-    }
-
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      // Get download URL
-      const result = await getDownloadUrl(fileId)
-      if (!result.ok || !result.url) {
-        throw new Error('Failed to get file URL')
-      }
-
-      // Fetch a small portion to verify password (first 1MB)
-      const response = await fetch(result.url)
-      if (!response.ok) {
-        throw new Error('Failed to fetch file')
-      }
-
-      const partialData = await response.arrayBuffer()
-
-      // Try to decrypt
-      const isValid = await verifyPassword(partialData, encryptionIv, encryptionSalt, password)
-      
-      if (isValid) {
-        setPasswordVerified(true)
-        // Now fetch and decrypt the full file
-        await fetchAndDecrypt()
-      } else {
-        setError('Incorrect password')
-      }
-    } catch (err) {
-      // If partial decrypt fails, try full decrypt anyway
-      await fetchAndDecrypt()
-    } finally {
-      setIsLoading(false)
-    }
-  }, [fileId, encryptionEnabled, encryptionIv, encryptionSalt, password, fetchAndDecrypt])
-
-  // Handle download
-  const handleDownload = useCallback(() => {
+  const handleDownload = () => {
     if (!decryptedUrl) return
 
     const a = document.createElement('a')
@@ -202,16 +236,7 @@ export default function EncryptedFileViewer({
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
-  }, [decryptedUrl, filename])
-
-  // Cleanup blob URL on close
-  useEffect(() => {
-    return () => {
-      if (decryptedUrl && decryptedUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(decryptedUrl)
-      }
-    }
-  }, [decryptedUrl])
+  }
 
   // Determine file type for preview
   const isImage = mimeType.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(filename)
@@ -338,38 +363,6 @@ export default function EncryptedFileViewer({
           )}
         </Box>
 
-        {/* Password Input for Encrypted Files */}
-        {isPasswordRequired && !passwordVerified && (
-          <Box sx={{ mb: 3, p: 2, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.03)' }}>
-            <Typography variant="body2" sx={{ mb: 2 }}>
-              هذا الملف مشفر. أدخل كلمة المرور لفك التشفير.
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <TextField
-                type="password"
-                size="small"
-                label="كلمة المرور"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                fullWidth
-                onKeyPress={(e) => e.key === 'Enter' && verifyPasswordHandler()}
-              />
-              <Button
-                variant="contained"
-                onClick={verifyPasswordHandler}
-                disabled={!password || isLoading}
-              >
-                فك التشفير
-              </Button>
-            </Box>
-            {error && (
-              <Typography variant="body2" color="error" sx={{ mt: 1 }}>
-                {error}
-              </Typography>
-            )}
-          </Box>
-        )}
-
         {/* Preview Area */}
         {renderPreview()}
       </DialogContent>
@@ -393,4 +386,14 @@ function formatBytes(bytes: number): string {
   const idx = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)))
   const value = bytes / Math.pow(1024, idx)
   return `${value.toFixed(value >= 10 || idx === 0 ? 0 : 1)} ${units[idx]}`
+}
+
+function splitIntoChunks(buffer: ArrayBuffer, chunkSize: number = 5 * 1024 * 1024): ArrayBuffer[] {
+  const chunks: ArrayBuffer[] = []
+  let offset = 0
+  while (offset < buffer.byteLength) {
+    chunks.push(buffer.slice(offset, offset + chunkSize))
+    offset += chunkSize
+  }
+  return chunks
 }

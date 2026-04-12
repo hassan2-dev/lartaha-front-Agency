@@ -150,23 +150,29 @@ export async function encryptData(data: ArrayBuffer, password: string): Promise<
  * Decrypt data using AES-256-GCM
  */
 export async function decryptData(input: DecryptionInput): Promise<ArrayBuffer> {
-  const iv = base64ToArrayBuffer(input.iv);
-  const salt = base64ToArrayBuffer(input.salt);
+  try {
+    const iv = base64ToArrayBuffer(input.iv);
+    const salt = base64ToArrayBuffer(input.salt);
+    console.log('[decryptData] IV bytes:', iv.byteLength, 'Salt bytes:', salt.byteLength);
 
-  // Derive key from password
-  const key = await deriveKey(input.password, new Uint8Array(salt));
+    // Derive key from password
+    const key = await deriveKey(input.password, new Uint8Array(salt));
 
-  // Decrypt the data
-  const decryptedData = await subtle.decrypt(
-    {
-      name: 'AES-GCM',
-      iv: new Uint8Array(iv),
-    },
-    key,
-    input.encryptedData
-  );
+    // Decrypt the data
+    const decryptedData = await subtle.decrypt(
+      {
+        name: 'AES-GCM',
+        iv: new Uint8Array(iv),
+      },
+      key,
+      input.encryptedData
+    );
 
-  return decryptedData;
+    return decryptedData;
+  } catch (err) {
+    console.error('[decryptData] Error:', err);
+    throw err;
+  }
 }
 
 /**
@@ -364,7 +370,71 @@ export async function verifyPassword(
   try {
     await decryptData({ encryptedData, iv, salt, password });
     return true;
-  } catch {
+  } catch (err) {
+    console.error('[verifyPassword] Decryption failed:', err);
     return false;
+  }
+}
+
+/**
+ * Generate a small thumbnail from an image file (not encrypted)
+ * Returns a Blob of the thumbnail
+ */
+export async function generateThumbnail(
+  file: File,
+  maxSize: number = 200
+): Promise<Blob | null> {
+  // Only process images
+  if (!file.type.startsWith('image/')) {
+    console.log('[DEBUG] generateThumbnail: not an image', file.type)
+    return null
+  }
+
+  console.log('[DEBUG] generateThumbnail: starting for', file.name, file.type, file.size)
+  try {
+    // Load the image
+    const bitmap = await createImageBitmap(file)
+    console.log('[DEBUG] generateThumbnail: bitmap created', bitmap.width, 'x', bitmap.height)
+
+    // Calculate thumbnail dimensions maintaining aspect ratio
+    let width = bitmap.width
+    let height = bitmap.height
+
+    if (width > height) {
+      if (width > maxSize) {
+        height = Math.round((height * maxSize) / width)
+        width = maxSize
+      }
+    } else {
+      if (height > maxSize) {
+        width = Math.round((width * maxSize) / height)
+        height = maxSize
+      }
+    }
+
+    // Create canvas and draw resized image
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+
+    ctx.drawImage(bitmap, 0, 0, width, height)
+
+    // Convert to JPEG blob with low quality for small size
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(
+        (b) => resolve(b),
+        'image/jpeg',
+        0.6 // 60% quality - small file size
+      )
+    })
+
+    console.log('[DEBUG] generateThumbnail: blob created', blob?.size, 'bytes')
+    return blob
+  } catch (err) {
+    console.error('[DEBUG] Failed to generate thumbnail:', err)
+    return null
   }
 }
