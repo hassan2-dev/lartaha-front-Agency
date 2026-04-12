@@ -90,6 +90,9 @@ export type UploadItemState = {
   fileId: string
   status: 'idle' | 'uploading' | 'paused' | 'completed' | 'error'
   progress: number
+  speed?: number // bytes per second
+  bytesUploaded?: number
+  totalBytes?: number
 }
 
 interface EncryptedUploadDropzoneProps {
@@ -99,7 +102,15 @@ interface EncryptedUploadDropzoneProps {
   error?: string | null
   encryptionPassword?: string
   onEncryptionPasswordRequest?: () => void
-  onUploadProgress?: (progress: number) => void
+  onUploadProgress?: (progress: {
+    progressPercent: number
+    bytesUploaded: number
+    totalBytes: number
+    uploadSpeed: number
+    currentFileIndex: number
+    totalFiles: number
+    currentFilePath: string
+  }) => void
   externalUploadItems?: Record<string, UploadItemState>
 }
 
@@ -367,16 +378,30 @@ export default function EncryptedUploadDropzone({
 
     // Track progress
     uppy.on('progress', (progress: number) => {
-      onUploadProgress?.(progress)
+      onUploadProgress?.({
+        progressPercent: progress,
+        bytesUploaded: 0,
+        totalBytes: dataFile.size,
+        uploadSpeed: 0,
+        currentFileIndex: 1,
+        totalFiles: 1,
+        currentFilePath: fileToUpload.relativePath,
+      })
     })
 
     uppy.on('upload-progress', (fileMaybe, progress) => {
       const file = fileMaybe as { name?: string; size?: number; id?: string } | undefined
       if (!file?.name || !file?.size) return
       const fileKey = `${file.name}_${file.size}`
-      const pct = progress?.bytesTotal
-        ? Math.round((progress.bytesUploaded * 100) / progress.bytesTotal)
-        : 0
+      const bytesTotal = file.size
+      const bytesUploaded = progress?.bytesTotal ? progress.bytesUploaded : 0
+      const pct = bytesTotal > 0 ? Math.round((bytesUploaded * 100) / bytesTotal) : 0
+
+      // Calculate speed (approximate)
+      const now = Date.now()
+      const timeSinceStart = now - ((uppy as unknown as { _startTime?: number })._startTime || now)
+      const uploadSpeed = timeSinceStart > 0 ? bytesUploaded / (timeSinceStart / 1000) : 0
+
       setUploadItems((prev) => ({
         ...prev,
         [fileKey]: {
@@ -384,6 +409,9 @@ export default function EncryptedUploadDropzone({
           fileId: file.id || prev[fileKey]?.fileId || '',
           status: 'uploading',
           progress: pct,
+          speed: uploadSpeed,
+          bytesUploaded,
+          totalBytes: bytesTotal,
         },
       }))
     })
@@ -688,7 +716,9 @@ export default function EncryptedUploadDropzone({
                   </Typography>
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>
                     {Object.values(mergedUploadItems).filter(item => item.status === 'uploading').length > 0
-                      ? Math.round(Object.values(mergedUploadItems).reduce((sum, item) => sum + item.progress, 0) / Object.values(mergedUploadItems).filter(item => item.status === 'uploading').length)
+                      ? Math.round(Object.values(mergedUploadItems).filter(item => item.status === 'uploading').length > 0
+                        ? Object.values(mergedUploadItems).reduce((sum, item) => sum + item.progress, 0) / Object.values(mergedUploadItems).filter(item => item.status === 'uploading').length
+                        : 0)
                       : 0}%
                   </Typography>
                 </Box>
@@ -698,6 +728,28 @@ export default function EncryptedUploadDropzone({
                     ? Math.round(Object.values(mergedUploadItems).reduce((sum, item) => sum + item.progress, 0) / Object.values(mergedUploadItems).filter(item => item.status === 'uploading').length)
                     : 0} 
                 />
+                {/* Speed and size info */}
+                {(() => {
+                  const uploadingItems = Object.values(mergedUploadItems).filter(item => item.status === 'uploading')
+                  if (uploadingItems.length === 0) return null
+                  const totalSpeed = uploadingItems.reduce((sum, item) => sum + (item.speed || 0), 0)
+                  const totalUploaded = uploadingItems.reduce((sum, item) => sum + (item.bytesUploaded || 0), 0)
+                  const totalSize = uploadingItems.reduce((sum, item) => sum + (item.totalBytes || 0), 0)
+                  const speedStr = totalSpeed > 0 ? `${fmtBytes(totalSpeed)}/s` : ''
+                  const sizeStr = totalSize > 0 ? `${fmtBytes(totalUploaded)} / ${fmtBytes(totalSize)}` : ''
+                  return (
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                      <Typography variant="caption" sx={{ opacity: 0.7 }}>
+                        {sizeStr}
+                      </Typography>
+                      {speedStr && (
+                        <Typography variant="caption" sx={{ opacity: 0.7, color: 'primary.main' }}>
+                          {speedStr}
+                        </Typography>
+                      )}
+                    </Box>
+                  )
+                })()}
               </Box>
               
               {/* Individual File Progress */}
@@ -752,6 +804,14 @@ export default function EncryptedUploadDropzone({
                         value={item.progress}
                         color={item.status === 'completed' ? 'success' : 'primary'}
                       />
+                      {item.status === 'uploading' && item.bytesUploaded && item.totalBytes && (
+                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 0.25 }}>
+                          <Typography variant="caption" sx={{ opacity: 0.6, fontSize: '0.7rem' }}>
+                            {fmtBytes(item.bytesUploaded)} / {fmtBytes(item.totalBytes)}
+                            {item.speed ? ` · ${fmtBytes(item.speed)}/s` : ''}
+                          </Typography>
+                        </Box>
+                      )}
                     </Box>
                   ))}
               </Box>
