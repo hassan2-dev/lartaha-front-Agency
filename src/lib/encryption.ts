@@ -9,6 +9,7 @@ const SALT_LENGTH = 16; // 16 bytes = 128 bits
 const IV_LENGTH = 12;   // 12 bytes = 96 bits (recommended for GCM)
 const KEY_LENGTH = 256; // 256 bits for AES-256-GCM
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks for large file encryption
+const THUMBNAIL_MAGIC = 'E2ETHMB1';
 
 export interface EncryptionResult {
   encryptedData: ArrayBuffer;
@@ -35,6 +36,10 @@ export interface ChunkedDecryptionInput {
   iv: string;
   salt: string;
   password: string;
+}
+
+export interface EncryptedThumbnailPayload {
+  buffer: ArrayBuffer;
 }
 
 /**
@@ -67,6 +72,14 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes.buffer;
+}
+
+function textToBytes(text: string): Uint8Array {
+  return new TextEncoder().encode(text);
+}
+
+function bytesToText(bytes: Uint8Array): string {
+  return new TextDecoder().decode(bytes);
 }
 
 /**
@@ -303,6 +316,70 @@ export async function decryptFile(
   salt: string,
   password: string
 ): Promise<Blob> {
+  const decrypted = await decryptData({ encryptedData, iv, salt, password });
+  return new Blob([decrypted]);
+}
+
+/**
+ * Encrypt a thumbnail blob with a self-contained header.
+ * Header layout:
+ * [magic(8 bytes)] [ivLen(1)] [saltLen(1)] [iv bytes] [salt bytes] [ciphertext]
+ */
+export async function encryptThumbnailBlob(blob: Blob, password: string): Promise<Blob> {
+  const data = await blob.arrayBuffer();
+  const { encryptedData, iv, salt } = await encryptData(data, password);
+  const ivBytes = new Uint8Array(base64ToArrayBuffer(iv));
+  const saltBytes = new Uint8Array(base64ToArrayBuffer(salt));
+  const magicBytes = textToBytes(THUMBNAIL_MAGIC);
+
+  const headerLength = magicBytes.length + 1 + 1 + ivBytes.length + saltBytes.length;
+  const totalLength = headerLength + encryptedData.byteLength;
+  const out = new Uint8Array(totalLength);
+
+  let offset = 0;
+  out.set(magicBytes, offset);
+  offset += magicBytes.length;
+  out[offset++] = ivBytes.length;
+  out[offset++] = saltBytes.length;
+  out.set(ivBytes, offset);
+  offset += ivBytes.length;
+  out.set(saltBytes, offset);
+  offset += saltBytes.length;
+  out.set(new Uint8Array(encryptedData), offset);
+
+  return new Blob([out.buffer], { type: 'application/octet-stream' });
+}
+
+/**
+ * Decrypt a thumbnail buffer produced by encryptThumbnailBlob.
+ */
+export async function decryptThumbnailBuffer(buffer: ArrayBuffer, password: string): Promise<Blob> {
+  const view = new Uint8Array(buffer);
+  const magicBytes = textToBytes(THUMBNAIL_MAGIC);
+  if (view.length < magicBytes.length + 2) {
+    throw new Error('Invalid thumbnail payload');
+  }
+
+  const magic = bytesToText(view.slice(0, magicBytes.length));
+  if (magic !== THUMBNAIL_MAGIC) {
+    throw new Error('Unknown thumbnail payload');
+  }
+
+  let offset = magicBytes.length;
+  const ivLen = view[offset++];
+  const saltLen = view[offset++];
+  if (view.length < offset + ivLen + saltLen) {
+    throw new Error('Invalid thumbnail payload');
+  }
+
+  const ivBytes = view.slice(offset, offset + ivLen);
+  offset += ivLen;
+  const saltBytes = view.slice(offset, offset + saltLen);
+  offset += saltLen;
+  const encryptedData = view.slice(offset).buffer;
+
+  const iv = arrayBufferToBase64(ivBytes.buffer);
+  const salt = arrayBufferToBase64(saltBytes.buffer);
   const decrypted = await decryptData({ encryptedData, iv, salt, password });
   return new Blob([decrypted]);
 }

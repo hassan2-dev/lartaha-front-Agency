@@ -50,6 +50,7 @@ import {
   encryptFileChunked,
   shouldUseChunkedEncryption,
   generateThumbnail,
+  encryptThumbnailBlob,
   type EncryptionResult,
   type ChunkedEncryptionResult,
 } from '../lib/encryption'
@@ -84,7 +85,7 @@ export type SelectedUploadFile = {
   thumbnailUploadFile?: File | null // Encrypted thumbnail to upload separately
 }
 
-type UploadItemState = {
+export type UploadItemState = {
   fileKey: string
   fileId: string
   status: 'idle' | 'uploading' | 'paused' | 'completed' | 'error'
@@ -99,6 +100,7 @@ interface EncryptedUploadDropzoneProps {
   encryptionPassword?: string
   onEncryptionPasswordRequest?: () => void
   onUploadProgress?: (progress: number) => void
+  externalUploadItems?: Record<string, UploadItemState>
 }
 
 // Simple file selection (without Uppy) for initial selection
@@ -132,6 +134,7 @@ export default function EncryptedUploadDropzone({
   error = null,
   encryptionPassword,
   onUploadProgress,
+  externalUploadItems,
 }: EncryptedUploadDropzoneProps) {
   const [dragOver, setDragOver] = useState(false)
   const [pendingFolderFiles, setPendingFolderFiles] = useState<SelectedUploadFile[] | null>(null)
@@ -142,6 +145,7 @@ export default function EncryptedUploadDropzone({
   const [showUppyDashboard, setShowUppyDashboard] = useState(false)
   const [_currentUploadId, setCurrentUploadId] = useState<string | null>(null)
   const [uploadItems, setUploadItems] = useState<Record<string, UploadItemState>>({})
+  const uppyInstancesRef = useRef<Map<string, Uppy>>(new Map())
   
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const folderInputRef = useRef<HTMLInputElement | null>(null)
@@ -197,9 +201,11 @@ export default function EncryptedUploadDropzone({
       const sf = filesToEncrypt[i]
       
       try {
-        // Generate thumbnail from original file - SMALL and NON-ENCRYPTED
-        // This can be stored in R2 publicly and loaded via <img> without CORS
-        const thumbnailBlob = await generateThumbnail(sf.file, 200)
+        // Generate thumbnail and encrypt it (E2E)
+        const rawThumbnailBlob = await generateThumbnail(sf.file, 200)
+        const encryptedThumbnailBlob = rawThumbnailBlob
+          ? await encryptThumbnailBlob(rawThumbnailBlob, encryptionPasswordRef.current)
+          : null
 
         const encryptionResult = await encryptSingleFile(
           sf.file,
@@ -225,14 +231,14 @@ export default function EncryptedUploadDropzone({
           uploadFile = new File([blob], sf.relativePath, { type: 'application/octet-stream' })
         }
 
-        console.log('[DEBUG] encryptFiles: thumbnailBlob for', sf.relativePath, thumbnailBlob?.size, 'bytes')
+        console.log('[DEBUG] encryptFiles: thumbnailBlob for', sf.relativePath, encryptedThumbnailBlob?.size, 'bytes')
         encryptedFiles.push({
           ...sf,
           encrypted: true,
           encryptionResult,
           uploadFile,
-          thumbnailUploadFile: thumbnailBlob
-            ? new File([thumbnailBlob], `thumb_${sf.relativePath}.jpg`, { type: 'image/jpeg' })
+          thumbnailUploadFile: encryptedThumbnailBlob
+            ? new File([encryptedThumbnailBlob], `thumb_${sf.relativePath}.bin`, { type: 'application/octet-stream' })
             : null,
         })
       } catch (err) {
@@ -445,19 +451,23 @@ export default function EncryptedUploadDropzone({
       setCurrentUploadId(null)
     })
 
+    // Store Uppy instance for this file
+    uppyInstancesRef.current.set(fileKey, uppy)
+    uppyRef.current = uppy // Also keep for backwards compatibility
+
     // Start upload
     uppy.upload()
 
-    uppyRef.current = uppy
     return uppy
   }, [encryptEnabled, onUploadProgress])
 
   const togglePauseResume = (fileKey: string) => {
     const item = uploadItems[fileKey]
-    if (!item || !uppyRef.current) return
-    if (!item.fileId) return
+    if (!item || !item.fileId) return
+    const uppy = uppyInstancesRef.current.get(fileKey)
+    if (!uppy) return
     try {
-      uppyRef.current.pauseResume(item.fileId)
+      uppy.pauseResume(item.fileId)
       const nextStatus = item.status === 'paused' ? 'uploading' : 'paused'
       setUploadItems((prev) => ({
         ...prev,
@@ -574,6 +584,11 @@ export default function EncryptedUploadDropzone({
   }
 
 
+  const mergedUploadItems = {
+    ...(externalUploadItems || {}),
+    ...uploadItems,
+  }
+
   return (
     <>
       <Paper
@@ -631,6 +646,118 @@ export default function EncryptedUploadDropzone({
             <LinearProgress variant="determinate" value={encryptionProgress} />
           </Box>
         )}
+
+        {/* Overall Upload Progress */}
+        {uploading && Object.values(mergedUploadItems).length > 0 && (
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="body2" sx={{ mb: 0.5 }}>
+              جاري الرفع...
+            </Typography>
+            <LinearProgress variant="determinate" value={
+              Object.values(mergedUploadItems).filter(item => item.status === 'uploading').length > 0
+                ? Math.round(Object.values(mergedUploadItems).filter(item => item.status === 'uploading').length === 0 ? 0 :
+                  Object.values(mergedUploadItems).reduce((sum, item) => sum + item.progress, 0) / Object.values(mergedUploadItems).filter(item => item.status === 'uploading').length)
+                : 0
+            } />
+            <Typography variant="caption" sx={{ opacity: 0.7 }}>
+              {Object.values(mergedUploadItems).filter(item => item.status === 'uploading').length} ملفات قيد الرفع
+            </Typography>
+          </Box>
+        )}
+
+        {/* Upload Progress Modal */}
+        <Dialog
+          open={uploading && Object.values(mergedUploadItems).some(item => item.status === 'uploading')}
+          maxWidth="sm"
+          fullWidth
+          disableEscapeKeyDown
+        >
+          <DialogTitle>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <CloudUploadIcon />
+              <Typography>جاري رفع الملفات...</Typography>
+            </Box>
+          </DialogTitle>
+          <DialogContent>
+            <Box sx={{ py: 2 }}>
+              {/* Overall Progress */}
+              <Box sx={{ mb: 3 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                  <Typography variant="body2">
+                    {Object.values(mergedUploadItems).filter(item => item.status === 'completed').length} من {Object.values(mergedUploadItems).length} ملفات
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    {Object.values(mergedUploadItems).filter(item => item.status === 'uploading').length > 0
+                      ? Math.round(Object.values(mergedUploadItems).reduce((sum, item) => sum + item.progress, 0) / Object.values(mergedUploadItems).filter(item => item.status === 'uploading').length)
+                      : 0}%
+                  </Typography>
+                </Box>
+                <LinearProgress 
+                  variant="determinate" 
+                  value={Object.values(mergedUploadItems).filter(item => item.status === 'uploading').length > 0
+                    ? Math.round(Object.values(mergedUploadItems).reduce((sum, item) => sum + item.progress, 0) / Object.values(mergedUploadItems).filter(item => item.status === 'uploading').length)
+                    : 0} 
+                />
+              </Box>
+              
+              {/* Individual File Progress */}
+              <Box sx={{ maxHeight: 200, overflow: 'auto' }}>
+                {Object.entries(mergedUploadItems)
+                  .filter(([key]) => !key.includes('thumb_'))
+                  .map(([key, item]) => (
+                    <Box key={key} sx={{ mb: 1.5 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5, alignItems: 'center' }}>
+                        <Typography variant="caption" sx={{ wordBreak: 'break-all', flex: 1, mr: 1 }}>
+                          {key.split('_').slice(0, -1).join('_')}
+                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          {(item.status === 'uploading' || item.status === 'paused') && item.fileId && (
+                            <>
+                              <Button
+                                size="small"
+                                onClick={() => togglePauseResume(key)}
+                                sx={{ minWidth: 'auto', p: 0.5, color: 'warning.main' }}
+                              >
+                                {item.status === 'paused'
+                                  ? <PlayArrowIcon sx={{ fontSize: 16 }} />
+                                  : <PauseIcon sx={{ fontSize: 16 }} />}
+                              </Button>
+                              <Button
+                                size="small"
+                                onClick={() => {
+                                  const uppy = uppyInstancesRef.current.get(key)
+                                  if (uppy && item.fileId) {
+                                    uppy.removeFile(item.fileId)
+                                    uppyInstancesRef.current.delete(key)
+                                    setUploadItems(prev => {
+                                      const next = { ...prev }
+                                      delete next[key]
+                                      return next
+                                    })
+                                  }
+                                }}
+                                sx={{ minWidth: 'auto', p: 0.5, color: 'error.main' }}
+                              >
+                                <CloseIcon sx={{ fontSize: 16 }} />
+                              </Button>
+                            </>
+                          )}
+                          <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                            {item.status === 'completed' ? '✓' : `${item.progress}%`}
+                          </Typography>
+                        </Box>
+                      </Box>
+                      <LinearProgress 
+                        variant="determinate" 
+                        value={item.progress}
+                        color={item.status === 'completed' ? 'success' : 'primary'}
+                      />
+                    </Box>
+                  ))}
+              </Box>
+            </Box>
+          </DialogContent>
+        </Dialog>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
           <Box sx={{ color: 'primary.main', display: 'flex' }}>
@@ -784,21 +911,23 @@ export default function EncryptedUploadDropzone({
                     <Typography variant="body2" sx={{ opacity: 0.6, fontSize: '0.75rem' }}>
                       {fmtBytes(sf.file.size)}
                     </Typography>
-                    {uploadItems[`${sf.relativePath}_${sf.file.size}`] && (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {mergedUploadItems[`${sf.relativePath}_${sf.file.size}`] && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 110 }}>
                         <Typography variant="body2" sx={{ opacity: 0.6, fontSize: '0.75rem' }}>
-                          {uploadItems[`${sf.relativePath}_${sf.file.size}`].progress}%
+                          {mergedUploadItems[`${sf.relativePath}_${sf.file.size}`].progress}%
                         </Typography>
-                        <Button
-                          size="small"
-                          onClick={() => togglePauseResume(`${sf.relativePath}_${sf.file.size}`)}
-                          sx={{ minWidth: 'auto', p: 0.5 }}
-                          disabled={uploadItems[`${sf.relativePath}_${sf.file.size}`].status === 'completed'}
-                        >
-                          {uploadItems[`${sf.relativePath}_${sf.file.size}`].status === 'paused'
-                            ? <PlayArrowIcon sx={{ fontSize: 16 }} />
-                            : <PauseIcon sx={{ fontSize: 16 }} />}
-                        </Button>
+                        {mergedUploadItems[`${sf.relativePath}_${sf.file.size}`].fileId && (
+                          <Button
+                            size="small"
+                            onClick={() => togglePauseResume(`${sf.relativePath}_${sf.file.size}`)}
+                            sx={{ minWidth: 'auto', p: 0.5 }}
+                            disabled={mergedUploadItems[`${sf.relativePath}_${sf.file.size}`].status === 'completed'}
+                          >
+                            {mergedUploadItems[`${sf.relativePath}_${sf.file.size}`].status === 'paused'
+                              ? <PlayArrowIcon sx={{ fontSize: 16 }} />
+                              : <PauseIcon sx={{ fontSize: 16 }} />}
+                          </Button>
+                        )}
                       </Box>
                     )}
                     <Button
@@ -811,6 +940,20 @@ export default function EncryptedUploadDropzone({
                       <CloseIcon sx={{ fontSize: 14 }} />
                     </Button>
                   </Box>
+                ))}
+                {files.slice(0, 80).map((sf) => (
+                  mergedUploadItems[`${sf.relativePath}_${sf.file.size}`] ? (
+                    <Box
+                      key={`progress_${sf.relativePath}_${sf.file.size}`}
+                      sx={{ px: 1.5, pb: 1, mt: -0.5 }}
+                    >
+                      <LinearProgress
+                        variant="determinate"
+                        value={mergedUploadItems[`${sf.relativePath}_${sf.file.size}`].progress}
+                        sx={{ height: 6, borderRadius: 999 }}
+                      />
+                    </Box>
+                  ) : null
                 ))}
                 {files.length > 80 && (
                   <Box sx={{ py: 0.75, px: 1.5 }}>

@@ -79,6 +79,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const me = await fetchMe()
       console.log('📥 fetchMe response:', me)
       setUser(me)
+      if (me?.workspaceId) {
+        try {
+          sessionStorage.setItem('file_encryption_password', me.workspaceId)
+        } catch {
+          // ignore storage errors
+        }
+      }
       console.log('✅ User state set:', me)
     } catch (error) {
       console.error('❌ fetchMe error:', error)

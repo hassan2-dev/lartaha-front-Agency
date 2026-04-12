@@ -3,26 +3,17 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { getWorkspaceEncryptionKey } from '../api/workspaceApi'
 import { decryptFile, decryptFileChunked } from '../lib/encryption'
 import { API_ENV, TOKEN_STORAGE_KEY } from '../config/api'
 
-// Cache for workspace encryption key in sessionStorage
-const WORKSPACE_KEY_CACHE = 'workspace_encryption_key'
+// Cache for client-only encryption key in sessionStorage
+const CLIENT_KEY_CACHE = 'file_encryption_password'
 
-function getCachedWorkspaceKey(): string | null {
+function getCachedClientKey(): string | null {
   try {
-    return sessionStorage.getItem(WORKSPACE_KEY_CACHE)
+    return sessionStorage.getItem(CLIENT_KEY_CACHE)
   } catch {
     return null
-  }
-}
-
-function setCachedWorkspaceKey(key: string): void {
-  try {
-    sessionStorage.setItem(WORKSPACE_KEY_CACHE, key)
-  } catch {
-    // Ignore storage errors
   }
 }
 
@@ -76,15 +67,10 @@ export function useFileDecryption(
     setDecryptedUrl(null)
 
     try {
-      // Get workspace key (use cache if available)
-      let key = getCachedWorkspaceKey()
+      // Get client-only key (use cache if available)
+      const key = getCachedClientKey()
       if (!key) {
-        const res = await getWorkspaceEncryptionKey()
-        if (!res.ok || !res.key) {
-          throw new Error('Failed to get encryption key')
-        }
-        key = res.key.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-        setCachedWorkspaceKey(key)
+        throw new Error('Missing encryption key')
       }
 
       if (abortRef.current) return
@@ -179,15 +165,10 @@ export async function decryptFileToBlobUrl(
     throw new Error('File is not encrypted')
   }
 
-  // Get workspace key
-  let key = getCachedWorkspaceKey()
+  // Get client-only key
+  const key = getCachedClientKey()
   if (!key) {
-    const res = await getWorkspaceEncryptionKey()
-    if (!res.ok || !res.key) {
-      throw new Error('Failed to get encryption key')
-    }
-    key = res.key.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-    setCachedWorkspaceKey(key)
+    throw new Error('Missing encryption key')
   }
 
   // Get auth token

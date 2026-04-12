@@ -46,10 +46,10 @@ import SelectAllIcon from '@mui/icons-material/SelectAll'
 import LockIcon from '@mui/icons-material/Lock'
 import EncryptedUploadDropzone, { type SelectedUploadFile } from '../components/EncryptedUploadDropzone'
 import EncryptedFileViewer from '../components/EncryptedFileViewer'
-import { getWorkspaceEncryptionKey } from '../api/workspaceApi'
 import { useAuth } from '../contexts/AuthContext'
-import { API_ENV } from '../config/api'
-import { listUploadedObjects, uploadFilesStreamed, moveFileToTrash, restoreFileFromTrash, listTrashFiles, fetchBulkPrivacySettings, bulkMoveToTrash, bulkRestoreFromTrash } from '../api/uploadApi'
+import { API_ENV, TOKEN_STORAGE_KEY } from '../config/api'
+import { decryptThumbnailBuffer, encryptThumbnailBlob } from '../lib/encryption'
+import { listUploadedObjects, uploadFilesStreamed, moveFileToTrash, restoreFileFromTrash, listTrashFiles, fetchBulkPrivacySettings, bulkMoveToTrash, bulkRestoreFromTrash, createImageThumbnailBlob, createVideoThumbnailBlob } from '../api/uploadApi'
 import { subscribeRealtime } from '../api/realtimeApi'
 import { api } from '../api/http'
 import { FileItemSkeleton, FileItemGridSkeleton, FolderItemSkeleton, FolderItemGridSkeleton } from '../components/SkeletonLoaders'
@@ -88,6 +88,18 @@ function buildVideoThumbnailKeyFromFileKey(fileKey: string) {
 
   const parts = safeKey.split('/').filter(Boolean)
   const filename = parts.pop() || 'video'
+  const basename = filename.replace(/\.[^.]+$/, '') || filename
+  const directory = parts.join('/')
+  const thumbnailFilename = `${basename}__thumb.jpg`
+  return directory ? `${directory}/.thumbnails/${thumbnailFilename}` : `.thumbnails/${thumbnailFilename}`
+}
+
+function buildImageThumbnailKeyFromFileKey(fileKey: string) {
+  const safeKey = String(fileKey || '').replace(/^\/+/, '')
+  if (!safeKey) return ''
+
+  const parts = safeKey.split('/').filter(Boolean)
+  const filename = parts.pop() || 'image'
   const basename = filename.replace(/\.[^.]+$/, '') || filename
   const directory = parts.join('/')
   const thumbnailFilename = `${basename}__thumb.jpg`
@@ -148,6 +160,24 @@ function filenameFromKey(key: string) {
   return parts[parts.length - 1] || 'file'
 }
 
+const CLIENT_KEY_STORAGE = 'file_encryption_password'
+
+function getClientEncryptionKey(): string | null {
+  try {
+    return sessionStorage.getItem(CLIENT_KEY_STORAGE)
+  } catch {
+    return null
+  }
+}
+
+function setClientEncryptionKey(key: string) {
+  try {
+    sessionStorage.setItem(CLIENT_KEY_STORAGE, key)
+  } catch {
+    // ignore storage errors
+  }
+}
+
 // Thumbnail preview component for images
 // Uses thumbnailKey for non-encrypted thumbnails, or shows lock for encrypted files without thumbnail
 function ImageThumbnail({ 
@@ -164,31 +194,123 @@ function ImageThumbnail({
   thumbnailKey?: string | null
 }) {
   const [imgError, setImgError] = useState(false)
+  const [decryptedThumbnailUrl, setDecryptedThumbnailUrl] = useState<string | null>(null)
+  const [protectedThumbnailUrl, setProtectedThumbnailUrl] = useState<string | null>(null)
   
   // Determine which URL to use:
-  // 1. If thumbnailKey is available (non-encrypted thumbnail), use it directly
-  // 2. If no thumbnailKey but file is encrypted, show lock icon
-  // 3. Otherwise use the main file URL
+  // 1. If thumbnailKey is available, use it directly (non-encrypted thumbnail)
+  // 2. Otherwise use the main file URL
+  // Note: encryptionEnabled doesn't affect whether we show the image - it only affects
+  // whether we show a lock icon if there's no thumbnail (encrypted files can't show direct URL)
+  const apiBase = API_ENV.apiBaseUrl?.trim() || ''
+  const apiBaseNormalized = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase
   const displayUrl = (() => {
-    if (thumbnailKey) {
-      // Non-encrypted thumbnail available - use R2 URL directly
-      const publicBase = API_ENV.r2PublicBaseUrl?.trim() || ''
+    if (thumbnailKey && typeof thumbnailKey === 'string' && thumbnailKey.trim() !== '') {
       const safeKey = thumbnailKey.startsWith('/') ? thumbnailKey.slice(1) : thumbnailKey
-      if (publicBase) {
-        const base = publicBase.endsWith('/') ? publicBase.slice(0, -1) : publicBase
-        return `${base}/${safeKey}`
-      } else {
-        const base = API_ENV.apiBaseUrl?.trim() || ''
-        const normalized = base.endsWith('/') ? base.slice(0, -1) : base
-        return `${normalized}/api/image/${encodeURIComponent(safeKey)}`
-      }
+      return `${apiBaseNormalized}/api/image/${encodeURIComponent(safeKey)}`
     }
-    // No thumbnail - use main URL
     return url
   })()
 
-  // Show lock if encrypted without thumbnail
-  const showLock = encryptionEnabled && !thumbnailKey
+  useEffect(() => {
+    if (encryptionEnabled) {
+      setProtectedThumbnailUrl(null)
+      return
+    }
+
+    const token = localStorage.getItem(TOKEN_STORAGE_KEY)
+    if (!token || !displayUrl || !apiBaseNormalized) {
+      setProtectedThumbnailUrl(null)
+      return
+    }
+
+    const apiPrefix = `${apiBaseNormalized}/api/image/`
+    if (!displayUrl.startsWith(apiPrefix)) {
+      setProtectedThumbnailUrl(null)
+      return
+    }
+
+    let cancelled = false
+    let objectUrl: string | null = null
+
+    const run = async () => {
+      try {
+        const response = await fetch(displayUrl, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!response.ok) return
+        const blob = await response.blob()
+        objectUrl = URL.createObjectURL(blob)
+        if (!cancelled) {
+          setProtectedThumbnailUrl(objectUrl)
+        }
+      } catch {
+        if (!cancelled) {
+          setProtectedThumbnailUrl(null)
+        }
+      }
+    }
+
+    void run()
+
+    return () => {
+      cancelled = true
+      if (objectUrl && objectUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(objectUrl)
+      }
+    }
+  }, [displayUrl, apiBaseNormalized, encryptionEnabled])
+  useEffect(() => {
+    if (!encryptionEnabled || !thumbnailKey || thumbnailKey.trim() === '') {
+      setDecryptedThumbnailUrl(null)
+      return
+    }
+
+    let cancelled = false
+    let objectUrl: string | null = null
+
+    const run = async () => {
+      try {
+        const key = getClientEncryptionKey()
+        if (!key) return
+
+        const safeKey = thumbnailKey.startsWith('/') ? thumbnailKey.slice(1) : thumbnailKey
+        const fetchUrl = `${apiBaseNormalized}/api/image/${encodeURIComponent(safeKey)}`
+
+        const headers: Record<string, string> = {}
+        const token = localStorage.getItem(TOKEN_STORAGE_KEY)
+        if (token) headers.Authorization = `Bearer ${token}`
+
+        const response = await fetch(fetchUrl, { headers })
+        if (!response.ok) return
+        const encryptedBuffer = await response.arrayBuffer()
+        const decryptedBlob = await decryptThumbnailBuffer(encryptedBuffer, key)
+        objectUrl = URL.createObjectURL(decryptedBlob)
+        if (!cancelled) {
+          setDecryptedThumbnailUrl(objectUrl)
+        }
+      } catch {
+        if (!cancelled) {
+          setDecryptedThumbnailUrl(null)
+        }
+      }
+    }
+
+    void run()
+
+    return () => {
+      cancelled = true
+      if (objectUrl && objectUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(objectUrl)
+      }
+    }
+  }, [encryptionEnabled, thumbnailKey])
+
+  const effectiveUrl = encryptionEnabled
+    ? (decryptedThumbnailUrl || '')
+    : (protectedThumbnailUrl || displayUrl)
+  const showLock = encryptionEnabled === true && !effectiveUrl
+  const imgSrc = effectiveUrl
 
   const handleImageError = () => {
     if (!imgError) {
@@ -213,7 +335,7 @@ function ImageThumbnail({
         <LockIcon sx={{ fontSize: size * 0.5, color: 'text.secondary' }} />
       ) : (
         <img
-          src={displayUrl}
+          src={imgSrc}
           alt={filename}
           style={{
             width: '100%',
@@ -233,33 +355,127 @@ function VideoThumbnail({
   url, 
   thumbnailKey, 
   size = 60,
+  encryptionEnabled,
 }: { 
   url: string; 
   thumbnailKey?: string | null; 
   size?: number
+  encryptionEnabled?: boolean
 }) {
+  const [decryptedThumbnailUrl, setDecryptedThumbnailUrl] = useState<string | null>(null)
+  const [protectedThumbnailUrl, setProtectedThumbnailUrl] = useState<string | null>(null)
   // Determine which URL to use:
   // 1. If thumbnailKey is available (non-encrypted thumbnail), use it directly
   // 2. Otherwise use the main file URL
+  const apiBase = API_ENV.apiBaseUrl?.trim() || ''
+  const apiBaseNormalized = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase
   const displayUrl = (() => {
     if (thumbnailKey) {
-      // Non-encrypted thumbnail available - use R2 URL directly
-      const publicBase = API_ENV.r2PublicBaseUrl?.trim() || ''
       const safeKey = thumbnailKey.startsWith('/') ? thumbnailKey.slice(1) : thumbnailKey
-      if (publicBase) {
-        const base = publicBase.endsWith('/') ? publicBase.slice(0, -1) : publicBase
-        return `${base}/${safeKey}`
-      } else {
-        const base = API_ENV.apiBaseUrl?.trim() || ''
-        const normalized = base.endsWith('/') ? base.slice(0, -1) : base
-        return `${normalized}/api/image/${encodeURIComponent(safeKey)}`
-      }
+      return `${apiBaseNormalized}/api/image/${encodeURIComponent(safeKey)}`
     }
-    // No thumbnail - use main URL
     return url
   })()
 
-  const showPlayIcon = !!displayUrl
+  useEffect(() => {
+    if (encryptionEnabled) {
+      setProtectedThumbnailUrl(null)
+      return
+    }
+
+    const token = localStorage.getItem(TOKEN_STORAGE_KEY)
+    if (!token || !displayUrl || !apiBaseNormalized) {
+      setProtectedThumbnailUrl(null)
+      return
+    }
+
+    const apiPrefix = `${apiBaseNormalized}/api/image/`
+    if (!displayUrl.startsWith(apiPrefix)) {
+      setProtectedThumbnailUrl(null)
+      return
+    }
+
+    let cancelled = false
+    let objectUrl: string | null = null
+
+    const run = async () => {
+      try {
+        const response = await fetch(displayUrl, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!response.ok) return
+        const blob = await response.blob()
+        objectUrl = URL.createObjectURL(blob)
+        if (!cancelled) {
+          setProtectedThumbnailUrl(objectUrl)
+        }
+      } catch {
+        if (!cancelled) {
+          setProtectedThumbnailUrl(null)
+        }
+      }
+    }
+
+    void run()
+
+    return () => {
+      cancelled = true
+      if (objectUrl && objectUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(objectUrl)
+      }
+    }
+  }, [displayUrl, apiBaseNormalized, encryptionEnabled])
+
+  useEffect(() => {
+    if (!thumbnailKey || thumbnailKey.trim() === '') {
+      setDecryptedThumbnailUrl(null)
+      return
+    }
+
+    let cancelled = false
+    let objectUrl: string | null = null
+
+    const run = async () => {
+      try {
+        const key = getClientEncryptionKey()
+        if (!key) return
+
+        const safeKey = thumbnailKey.startsWith('/') ? thumbnailKey.slice(1) : thumbnailKey
+        const fetchUrl = `${apiBaseNormalized}/api/image/${encodeURIComponent(safeKey)}`
+
+        const headers: Record<string, string> = {}
+        const token = localStorage.getItem(TOKEN_STORAGE_KEY)
+        if (token) headers.Authorization = `Bearer ${token}`
+
+        const response = await fetch(fetchUrl, { headers })
+        if (!response.ok) return
+        const encryptedBuffer = await response.arrayBuffer()
+        const decryptedBlob = await decryptThumbnailBuffer(encryptedBuffer, key)
+        objectUrl = URL.createObjectURL(decryptedBlob)
+        if (!cancelled) {
+          setDecryptedThumbnailUrl(objectUrl)
+        }
+      } catch {
+        if (!cancelled) {
+          setDecryptedThumbnailUrl(null)
+        }
+      }
+    }
+
+    void run()
+
+    return () => {
+      cancelled = true
+      if (objectUrl && objectUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(objectUrl)
+      }
+    }
+  }, [thumbnailKey])
+
+  const effectiveUrl = encryptionEnabled
+    ? (decryptedThumbnailUrl || '')
+    : (protectedThumbnailUrl || displayUrl)
+  const showPlayIcon = !!effectiveUrl
 
   return (
     <Box
@@ -277,7 +493,7 @@ function VideoThumbnail({
     >
       {showPlayIcon ? (
         <img
-          src={displayUrl}
+          src={effectiveUrl}
           alt="Video thumbnail"
           style={{
             width: '100%',
@@ -358,7 +574,7 @@ function FileItem({
   const fileType = getFileType(filename)
   const isImage = fileType === 'image'
   const isVideo = fileType === 'video'
-  const resolvedThumbnailKey = obj.thumbnailKey || (isVideo ? buildVideoThumbnailKeyFromFileKey(obj.key) : null)
+  const resolvedThumbnailKey = obj.thumbnailKey || (isVideo ? buildVideoThumbnailKeyFromFileKey(obj.key) : buildImageThumbnailKeyFromFileKey(obj.key)) || null
   const hasAccess = canAccessFile(obj.key)
   const privacySettings = filePrivacySettings[obj.key]
   const isRestricted = privacySettings?.restricted
@@ -404,7 +620,7 @@ function FileItem({
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
         {isImage && url && hasAccess ? (
           <Box sx={{ position: 'relative' }}>
-            <ImageThumbnail url={url} filename={filename} encryptionEnabled={obj.encryptionEnabled} thumbnailKey={obj.thumbnailKey} />
+            <ImageThumbnail url={url} filename={filename} encryptionEnabled={obj.encryptionEnabled} thumbnailKey={resolvedThumbnailKey} />
             <ThumbnailTypeBadge fileType={fileType} size={14} />
             {isRestricted && !hasAccess && (
               <Box sx={{
@@ -425,7 +641,7 @@ function FileItem({
           </Box>
         ) : isVideo && hasAccess ? (
           <Box sx={{ position: 'relative' }}>
-            <VideoThumbnail url={thumbnailUrl || ''} thumbnailKey={resolvedThumbnailKey} />
+            <VideoThumbnail url={thumbnailUrl || ''} thumbnailKey={resolvedThumbnailKey} encryptionEnabled={obj.encryptionEnabled} />
             <ThumbnailTypeBadge fileType={fileType} size={14} />
             {isRestricted && !hasAccess && (
               <Box sx={{
@@ -555,7 +771,7 @@ function FileItemGrid({
   const fileType = getFileType(filename)
   const isImage = fileType === 'image'
   const isVideo = fileType === 'video'
-  const resolvedThumbnailKey = obj.thumbnailKey || (isVideo ? buildVideoThumbnailKeyFromFileKey(obj.key) : null)
+  const resolvedThumbnailKey = obj.thumbnailKey || (isVideo ? buildVideoThumbnailKeyFromFileKey(obj.key) : buildImageThumbnailKeyFromFileKey(obj.key)) || null
   const hasAccess = canAccessFile(obj.key)
   const privacySettings = filePrivacySettings[obj.key]
   const isRestricted = privacySettings?.restricted
@@ -600,7 +816,7 @@ function FileItemGrid({
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
           {isImage && url && hasAccess ? (
             <Box sx={{ position: 'relative' }}>
-              <ImageThumbnail url={url} filename={filename} size={60} encryptionEnabled={obj.encryptionEnabled} thumbnailKey={obj.thumbnailKey} />
+              <ImageThumbnail url={url} filename={filename} size={60} encryptionEnabled={obj.encryptionEnabled} thumbnailKey={resolvedThumbnailKey} />
               <ThumbnailTypeBadge fileType={fileType} size={14} />
               {isRestricted && !hasAccess && (
                 <Box sx={{
@@ -621,7 +837,7 @@ function FileItemGrid({
             </Box>
           ) : isVideo && hasAccess ? (
             <Box sx={{ position: 'relative' }}>
-              <VideoThumbnail url={thumbnailUrl || ''} thumbnailKey={resolvedThumbnailKey} size={60} />
+              <VideoThumbnail url={thumbnailUrl || ''} thumbnailKey={resolvedThumbnailKey} size={60} encryptionEnabled={obj.encryptionEnabled} />
               <ThumbnailTypeBadge fileType={fileType} size={14} />
               {isRestricted && !hasAccess && (
                 <Box sx={{
@@ -760,7 +976,8 @@ function TrashFileItem({
     if (!file.originalKey) return null
     const baseUrl = API_ENV.apiBaseUrl?.trim() || ''
     if (isImage) {
-      return `${baseUrl}/api/image/${encodeURIComponent(file.originalKey)}`
+      const imageThumbnailKey = buildImageThumbnailKeyFromFileKey(file.originalKey)
+      return imageThumbnailKey ? `${baseUrl}/api/image/${encodeURIComponent(imageThumbnailKey)}` : null
     }
     if (isVideo) {
       const videoThumbnailKey = buildVideoThumbnailKeyFromFileKey(file.originalKey)
@@ -805,9 +1022,9 @@ function TrashFileItem({
           <ImageThumbnail url={thumbnailUrl} filename={filename} />
           <ThumbnailTypeBadge fileType={fileType} size={14} />
         </Box>
-      ) : isVideo && thumbnailUrl ? (
+        ) : isVideo && thumbnailUrl ? (
         <Box sx={{ position: 'relative' }}>
-          <VideoThumbnail url={thumbnailUrl} thumbnailKey={buildVideoThumbnailKeyFromFileKey(file.originalKey)} />
+            <VideoThumbnail url={thumbnailUrl} thumbnailKey={buildVideoThumbnailKeyFromFileKey(file.originalKey)} encryptionEnabled />
           <ThumbnailTypeBadge fileType={fileType} size={14} />
         </Box>
       ) : (
@@ -1322,6 +1539,7 @@ export default function UploadPage() {
   const [previewFile, setPreviewFile] = useState<{ key: string; url: string; filename: string; type: string } | null>(null)
   const [encryptedViewerOpen, setEncryptedViewerOpen] = useState(false)
   const [encryptedViewerFile, setEncryptedViewerFile] = useState<{ fileId: string; filename: string; mimeType?: string; size?: number; encryptionEnabled?: boolean; encryptionIv?: string; encryptionSalt?: string } | null>(null)
+  const [uploadItemStates, setUploadItemStates] = useState<Record<string, { fileKey: string; fileId: string; status: 'idle' | 'uploading' | 'paused' | 'completed' | 'error'; progress: number }>>({})
 
   // Folder creation state
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false)
@@ -1384,24 +1602,18 @@ export default function UploadPage() {
   }, [canUpload, selectedFiles.length, hasTriggeredUpload])
 
   useEffect(() => {
-    const loadWorkspaceKey = async () => {
-      try {
-        const res = await getWorkspaceEncryptionKey()
-        if (res.ok && res.key) {
-          // Convert Node.js base64 to standard base64 for browser compatibility
-          const standardBase64 = res.key
-            .replace(/\+/g, '-')
-            .replace(/\//g, '_')
-            .replace(/=+$/, '')
-          setEncryptionPassword(standardBase64)
-        }
-      } catch (error) {
-        console.error('Failed to load workspace encryption key', error)
-      }
+    const workspaceId = user?.workspaceId?.trim()
+    if (workspaceId) {
+      setClientEncryptionKey(workspaceId)
+      setEncryptionPassword(workspaceId)
+      return
     }
 
-    void loadWorkspaceKey()
-  }, [])
+    const existingKey = getClientEncryptionKey()
+    if (existingKey) {
+      setEncryptionPassword(existingKey)
+    }
+  }, [user?.workspaceId])
 
   const ROOT_PREFIX = useMemo(() => {
     const workspaceId = user?.workspaceId?.trim()
@@ -1439,6 +1651,14 @@ export default function UploadPage() {
 
     setUploading(true)
 
+    // Initialize upload item states for all files
+    const initialStates: Record<string, { fileKey: string; fileId: string; status: 'idle' | 'uploading' | 'paused' | 'completed' | 'error'; progress: number }> = {}
+    selectedFiles.forEach(sf => {
+      const fileKey = `${sf.relativePath}_${sf.file.size}`
+      initialStates[fileKey] = { fileKey, fileId: '', status: 'uploading', progress: 0 }
+    })
+    setUploadItemStates(initialStates)
+
     try {
       const hasFolderStructure = selectedFiles.some(sf => sf.relativePath.includes('/'))
       let rootFolderName = ''
@@ -1454,27 +1674,81 @@ export default function UploadPage() {
       // Filter out already completed files before uploading
       const filesToUpload = selectedFiles
         .filter(sf => !completedUploadedFiles.has(sf.file.name))
-        .map(sf => {
+        .map(async (sf) => {
           const encryptionResult = sf.encryptionResult
           // For simple encryption (small files), encryptionResult has encryptedData, iv, salt
           // For chunked encryption (large files), encryptionResult has encryptedChunks, iv, salt
           const hasEncryption = !!encryptionResult
           const iv = encryptionResult?.iv
           const salt = encryptionResult?.salt
+          const thumbnailUploadFile = sf.thumbnailUploadFile || null
+
+          if (!thumbnailUploadFile) {
+            try {
+              const filename = filenameFromKey(sf.relativePath)
+              const fileType = getFileType(filename)
+              if (fileType === 'image') {
+                const thumb = await createImageThumbnailBlob(sf.file)
+                if (thumb) {
+                  const encryptedThumb = await encryptThumbnailBlob(thumb, encryptionPassword)
+                  return {
+                    file: sf.uploadFile ?? sf.file,
+                    relativePath: sf.relativePath,
+                    encryptionEnabled: hasEncryption,
+                    encryptionIv: iv,
+                    encryptionSalt: salt,
+                    thumbnailUploadFile: new File([encryptedThumb], `thumb_${sf.relativePath}.bin`, { type: 'application/octet-stream' }),
+                  }
+                }
+              } else if (fileType === 'video') {
+                const thumb = await createVideoThumbnailBlob(sf.file)
+                if (thumb) {
+                  const encryptedThumb = await encryptThumbnailBlob(thumb, encryptionPassword)
+                  return {
+                    file: sf.uploadFile ?? sf.file,
+                    relativePath: sf.relativePath,
+                    encryptionEnabled: hasEncryption,
+                    encryptionIv: iv,
+                    encryptionSalt: salt,
+                    thumbnailUploadFile: new File([encryptedThumb], `thumb_${sf.relativePath}.bin`, { type: 'application/octet-stream' }),
+                  }
+                }
+              }
+            } catch {
+              // ignore thumbnail errors
+            }
+          }
+
           return {
             file: sf.uploadFile ?? sf.file,
             relativePath: sf.relativePath,
             encryptionEnabled: hasEncryption,
             encryptionIv: iv,
             encryptionSalt: salt,
+            thumbnailUploadFile,
           }
         })
 
-      const res = await uploadFilesStreamed(filesToUpload, {
+      const resolvedFilesToUpload = await Promise.all(filesToUpload)
+
+      const res = await uploadFilesStreamed(resolvedFilesToUpload, {
         batchName: explorerPrefix,
         ...(rootFolderName ? { folderName: rootFolderName } : {}),
         skipFiles: completedUploadedFiles,
-        onUploadProgress: () => {}
+        onUploadProgress: (progress) => {
+          // Update upload item states for UI feedback
+          const { currentFileIndex, progressPercent } = progress
+          // Update each file's progress in the state
+          // currentFileIndex is 1-indexed, array is 0-indexed
+          resolvedFilesToUpload.forEach((file, idx) => {
+            const fileKey = `${file.relativePath}_${file.file.size}`
+            if (idx < currentFileIndex - 1) {
+              setUploadItemStates(prev => ({ ...prev, [fileKey]: { fileKey, status: 'completed', progress: 100, fileId: prev[fileKey]?.fileId || '' } }))
+            } else if (idx === currentFileIndex - 1) {
+              setUploadItemStates(prev => ({ ...prev, [fileKey]: { fileKey, status: 'uploading', progress: progressPercent, fileId: prev[fileKey]?.fileId || '' } }))
+            }
+          })
+        }
       })
 
       const uploaded = res.uploaded ?? []
@@ -2243,6 +2517,7 @@ export default function UploadPage() {
           encryptionPassword={encryptionPassword}
           onEncryptionPasswordRequest={() => {}}
           onUploadProgress={() => {}}
+          externalUploadItems={uploadItemStates}
         />
 
         <Box sx={{ mt: 2 }}>

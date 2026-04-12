@@ -65,6 +65,7 @@ export type StreamUploadInputFile = {
   encryptionEnabled?: boolean
   encryptionIv?: string
   encryptionSalt?: string
+  thumbnailUploadFile?: File | null
 }
 
 export type StreamUploadProgress = {
@@ -83,7 +84,81 @@ function isVideoInputFile(file: File, relativePath: string) {
   return ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv', 'm4v'].includes(ext)
 }
 
-async function createVideoThumbnailBlob(file: File): Promise<Blob | null> {
+function isImageInputFile(file: File, relativePath: string) {
+  if (file.type?.toLowerCase().startsWith('image/')) return true
+  const ext = relativePath.split('.').pop()?.toLowerCase() || ''
+  return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'bmp', 'svg', 'ico', 'heic', 'heif'].includes(ext)
+}
+
+function buildImageThumbnailKey(originalKey: string) {
+  const safeKey = String(originalKey || '').replace(/^\/+/, '')
+  if (!safeKey) return ''
+
+  const parts = safeKey.split('/').filter(Boolean)
+  const filename = parts.pop() || 'image'
+  const basename = filename.replace(/\.[^.]+$/, '') || filename
+  const directory = parts.join('/')
+  const thumbnailFilename = `${basename}__thumb.jpg`
+  return directory ? `${directory}/.thumbnails/${thumbnailFilename}` : `.thumbnails/${thumbnailFilename}`
+}
+
+export async function createImageThumbnailBlob(file: File): Promise<Blob | null> {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return null
+
+  return await new Promise((resolve) => {
+    const objectUrl = URL.createObjectURL(file)
+    const img = new Image()
+    img.src = objectUrl
+
+    const cleanup = () => {
+      URL.revokeObjectURL(objectUrl)
+      img.src = ''
+    }
+
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas')
+        const width = img.naturalWidth || 0
+        const height = img.naturalHeight || 0
+        if (width <= 0 || height <= 0) {
+          cleanup()
+          resolve(null)
+          return
+        }
+
+        // Use original dimensions for high quality thumbnail
+        canvas.width = width
+        canvas.height = height
+        const context = canvas.getContext('2d')
+        if (!context) {
+          cleanup()
+          resolve(null)
+          return
+        }
+
+        context.drawImage(img, 0, 0, width, height)
+        canvas.toBlob(
+          (blob) => {
+            cleanup()
+            resolve(blob || null)
+          },
+          'image/jpeg',
+          0.82,
+        )
+      } catch {
+        cleanup()
+        resolve(null)
+      }
+    }
+
+    img.onerror = () => {
+      cleanup()
+      resolve(null)
+    }
+  })
+}
+
+export async function createVideoThumbnailBlob(file: File): Promise<Blob | null> {
   if (typeof window === 'undefined' || typeof document === 'undefined') return null
 
   return await new Promise((resolve) => {
@@ -316,6 +391,9 @@ export async function uploadFilesStreamed(
       activeFile = item
       activeFileIndex = index
 
+      let lastProgressTime = Date.now()
+      let lastProgressLoaded = 0
+
       const response = await api.put('/api/upload/stream', item.file, {
         params: {
           batchName,
@@ -332,6 +410,27 @@ export async function uploadFilesStreamed(
         timeout: 30 * 60 * 1000,
         maxContentLength: Infinity,
         maxBodyLength: Infinity,
+        onUploadProgress: (evt) => {
+          if (!evt.total) return
+          const now = Date.now()
+          const timeDiff = (now - lastProgressTime) / 1000
+          const bytesDiff = evt.loaded - lastProgressLoaded
+          const uploadSpeed = timeDiff > 0 ? bytesDiff / timeDiff : 0
+          const bytesUploaded = completedBytes + evt.loaded
+          const rawPercent = (bytesUploaded * 100) / totalBytes
+          const progressPercent = Math.min(90, Math.floor(rawPercent * 0.9))
+          onUploadProgress?.({
+            progressPercent,
+            bytesUploaded,
+            totalBytes,
+            uploadSpeed,
+            currentFileIndex: index + 1,
+            totalFiles,
+            currentFilePath: item.relativePath,
+          })
+          lastProgressTime = now
+          lastProgressLoaded = evt.loaded
+        },
       })
 
       const data = response.data as UploadResult
@@ -340,7 +439,23 @@ export async function uploadFilesStreamed(
       }
 
       const uploadedKey = data.uploaded?.[0]?.key
-      if (uploadedKey && isVideoInputFile(item.file, item.relativePath)) {
+
+      if (uploadedKey && item.thumbnailUploadFile) {
+        try {
+          if (isImageInputFile(item.file, item.relativePath)) {
+            const thumbnailKey = buildImageThumbnailKey(uploadedKey)
+            if (thumbnailKey) {
+              await uploadImageThumbnail(uploadedKey, thumbnailKey, item.thumbnailUploadFile)
+            }
+          } else if (isVideoInputFile(item.file, item.relativePath)) {
+            await uploadVideoThumbnail(uploadedKey, item.thumbnailUploadFile)
+          }
+        } catch {
+          // Thumbnail upload failures should not fail the primary file upload.
+        }
+      }
+
+      if (uploadedKey && !item.thumbnailUploadFile && isVideoInputFile(item.file, item.relativePath)) {
         try {
           const thumbnailBlob = await createVideoThumbnailBlob(item.file)
           if (thumbnailBlob) {
@@ -349,6 +464,38 @@ export async function uploadFilesStreamed(
         } catch {
           // Thumbnail upload failures should not fail the primary file upload.
         }
+      }
+
+      // Generate and upload thumbnail for non-encrypted images
+      console.debug('[uploadFilesStreamed] deciding on thumbnail generation', {
+        uploadedKey,
+        isImage: isImageInputFile(item.file, item.relativePath),
+        encryptionEnabled: item.encryptionEnabled,
+        relativePath: item.relativePath,
+        fileType: item.file.type,
+      })
+      if (uploadedKey && !item.thumbnailUploadFile && isImageInputFile(item.file, item.relativePath) && !item.encryptionEnabled) {
+        try {
+          const thumbnailBlob = await createImageThumbnailBlob(item.file)
+          console.debug('[uploadFilesStreamed] thumbnail blob created', { uploadedKey, thumbnailBlobSize: thumbnailBlob?.size })
+          if (thumbnailBlob) {
+            const thumbnailKey = buildImageThumbnailKey(uploadedKey)
+            console.debug('[uploadFilesStreamed] thumbnail key built', { uploadedKey, thumbnailKey })
+            if (thumbnailKey) {
+              await uploadImageThumbnail(uploadedKey, thumbnailKey, thumbnailBlob)
+              console.debug('[uploadFilesStreamed] thumbnail upload completed', { uploadedKey, thumbnailKey })
+            }
+          }
+        } catch (err) {
+          console.error('[uploadFilesStreamed] thumbnail generation failed', err)
+          // Thumbnail upload failures should not fail the primary file upload.
+        }
+      } else {
+        console.debug('[uploadFilesStreamed] skipping thumbnail - condition not met', {
+          hasUploadedKey: Boolean(uploadedKey),
+          isImage: isImageInputFile(item.file, item.relativePath),
+          notEncrypted: !item.encryptionEnabled,
+        })
       }
 
       completedBytes += item.file.size

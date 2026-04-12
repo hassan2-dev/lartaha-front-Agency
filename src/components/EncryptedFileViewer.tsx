@@ -27,29 +27,20 @@ import {
 } from '@mui/icons-material'
 
 import { getDownloadUrl } from '../api/uploadApi'
-import { getWorkspaceEncryptionKey } from '../api/workspaceApi'
 import { API_ENV, TOKEN_STORAGE_KEY } from '../config/api'
 import {
   decryptFile,
   decryptFileChunked,
 } from '../lib/encryption'
 
-// Cache for workspace encryption key in sessionStorage
-const WORKSPACE_KEY_CACHE = 'workspace_encryption_key'
+// Cache for client-only encryption key in sessionStorage
+const CLIENT_KEY_CACHE = 'file_encryption_password'
 
-function getCachedWorkspaceKey(): string | null {
+function getCachedClientKey(): string | null {
   try {
-    return sessionStorage.getItem(WORKSPACE_KEY_CACHE)
+    return sessionStorage.getItem(CLIENT_KEY_CACHE)
   } catch {
     return null
-  }
-}
-
-function setCachedWorkspaceKey(key: string): void {
-  try {
-    sessionStorage.setItem(WORKSPACE_KEY_CACHE, key)
-  } catch {
-    // Ignore storage errors
   }
 }
 
@@ -141,20 +132,10 @@ export default function EncryptedFileViewer({
       setError(null)
 
       try {
-        // Step 1: Get workspace key (use cache if available)
-        let key = getCachedWorkspaceKey()
+        // Step 1: Get client-only key (use cache if available)
+        const key = getCachedClientKey()
         if (!key) {
-          console.log('[EncryptedFileViewer] Step 1: Fetching workspace encryption key...')
-          const res = await getWorkspaceEncryptionKey()
-          if (!res.ok || !res.key) {
-            throw new Error('Failed to get encryption key from server')
-          }
-          // Convert Node.js base64 to URL-safe base64
-          key = res.key.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-          setCachedWorkspaceKey(key)
-          console.log('[EncryptedFileViewer] Step 1: Got and cached key:', key.substring(0, 15) + '...')
-        } else {
-          console.log('[EncryptedFileViewer] Step 1: Using cached key:', key.substring(0, 15) + '...')
+          throw new Error('Missing encryption key')
         }
 
         // Step 2: Get download URL
