@@ -10,6 +10,7 @@ const IV_LENGTH = 12;   // 12 bytes = 96 bits (recommended for GCM)
 const KEY_LENGTH = 256; // 256 bits for AES-256-GCM
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks for large file encryption
 const THUMBNAIL_MAGIC = 'E2ETHMB1';
+const CHUNKED_FILE_MAGIC = 'E2ECHUNK'; // Magic bytes for chunked encrypted files
 
 export interface EncryptionResult {
   encryptedData: ArrayBuffer;
@@ -29,6 +30,7 @@ export interface ChunkedEncryptionResult {
   iv: string;
   salt: string;
   totalSize: number;
+  chunkSizes?: number[];
 }
 
 export interface ChunkedDecryptionInput {
@@ -201,6 +203,7 @@ export async function encryptFileChunked(
   const iv = generateRandomBytes(IV_LENGTH);
   const totalSize = file.size;
   const encryptedChunks: ArrayBuffer[] = [];
+  const chunkSizes: number[] = [];
 
   // Derive key once for all chunks
   const key = await deriveKey(password, salt);
@@ -231,6 +234,7 @@ export async function encryptFileChunked(
     ivAndEncrypted.set(new Uint8Array(encryptedChunk), chunkIv.length);
     
     encryptedChunks.push(ivAndEncrypted.buffer);
+    chunkSizes.push(ivAndEncrypted.length);
     
     offset += CHUNK_SIZE;
     chunkIndex++;
@@ -240,11 +244,43 @@ export async function encryptFileChunked(
     }
   }
 
+  // Create a single blob with header for chunk metadata
+  // Header format: [MAGIC(8 bytes)] [NUM_CHUNKS(4 bytes)] [CHUNK_SIZES(num_chunks * 4 bytes)]
+  const magicBytes = textToBytes(CHUNKED_FILE_MAGIC);
+  const numChunks = encryptedChunks.length;
+  const headerSize = magicBytes.length + 4 + (numChunks * 4);
+  const header = new Uint8Array(headerSize);
+  
+  // Write magic bytes
+  header.set(magicBytes, 0);
+  
+  // Write number of chunks (4 bytes, big-endian)
+  const numChunksView = new DataView(header.buffer, magicBytes.length, 4);
+  numChunksView.setUint32(0, numChunks, false);
+  
+  // Write chunk sizes (4 bytes each, big-endian)
+  for (let i = 0; i < numChunks; i++) {
+    const chunkSizeView = new DataView(header.buffer, magicBytes.length + 4 + (i * 4), 4);
+    chunkSizeView.setUint32(0, chunkSizes[i], false);
+  }
+  
+  // Combine header and encrypted chunks into a single blob
+  const totalEncryptedSize = headerSize + encryptedChunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  const combined = new Uint8Array(totalEncryptedSize);
+  combined.set(header, 0);
+  
+  let offset2 = headerSize;
+  for (const chunk of encryptedChunks) {
+    combined.set(new Uint8Array(chunk), offset2);
+    offset2 += chunk.byteLength;
+  }
+  
   return {
-    encryptedChunks,
+    encryptedChunks: [combined.buffer],
     iv: arrayBufferToBase64(iv.buffer),
     salt: arrayBufferToBase64(salt.buffer),
     totalSize,
+    chunkSizes, // Store chunk sizes for later reconstruction
   };
 }
 
@@ -261,29 +297,162 @@ export async function decryptFileChunked(
   const key = await deriveKey(input.password, new Uint8Array(salt));
 
   const decryptedChunks: Uint8Array[] = [];
-  const totalChunks = input.encryptedChunks.length;
-
-  for (let i = 0; i < totalChunks; i++) {
-    const chunkData = new Uint8Array(input.encryptedChunks[i]);
+  
+  // Check if the input is a single blob with header (new format)
+  if (input.encryptedChunks.length === 1) {
+    const data = new Uint8Array(input.encryptedChunks[0]);
+    const magicBytes = textToBytes(CHUNKED_FILE_MAGIC);
     
-    // Extract IV from first 12 bytes
-    const chunkIv = chunkData.slice(0, IV_LENGTH);
-    const encryptedData = chunkData.slice(IV_LENGTH);
-
-    // Decrypt chunk
-    const decryptedChunk = await subtle.decrypt(
-      {
-        name: 'AES-GCM',
-        iv: chunkIv,
-      },
-      key,
-      encryptedData
-    );
-
-    decryptedChunks.push(new Uint8Array(decryptedChunk));
-
-    if (onProgress) {
-      onProgress(Math.min(100, Math.round(((i + 1) / totalChunks) * 100)));
+    // Check if this is the new format with header
+    if (data.length >= magicBytes.length && 
+        data.slice(0, magicBytes.length).every((val, idx) => val === magicBytes[idx])) {
+      // Parse header
+      const numChunks = new DataView(data.buffer, magicBytes.length, 4).getUint32(0, false);
+      const chunkSizes: number[] = [];
+      let offset = magicBytes.length + 4;
+      
+      for (let i = 0; i < numChunks; i++) {
+        const chunkSize = new DataView(data.buffer, offset, 4).getUint32(0, false);
+        chunkSizes.push(chunkSize);
+        offset += 4;
+      }
+      
+      // Now decrypt each chunk
+      let dataOffset = offset;
+      for (let i = 0; i < numChunks; i++) {
+        const chunkSize = chunkSizes[i];
+        const chunkData = data.slice(dataOffset, dataOffset + chunkSize);
+        
+        // Extract IV from first 12 bytes
+        const chunkIv = chunkData.slice(0, IV_LENGTH);
+        const encryptedData = chunkData.slice(IV_LENGTH);
+        
+        // Decrypt chunk
+        const decryptedChunk = await subtle.decrypt(
+          {
+            name: 'AES-GCM',
+            iv: chunkIv,
+          },
+          key,
+          encryptedData
+        );
+        
+        decryptedChunks.push(new Uint8Array(decryptedChunk));
+        dataOffset += chunkSize;
+        
+        if (onProgress) {
+          onProgress(Math.min(100, Math.round(((i + 1) / numChunks) * 100)));
+        }
+      }
+    } else {
+      // Old format: single blob with concatenated encrypted chunks
+      // We need to parse the blob to find chunk boundaries
+      // Each chunk has format: [IV (12 bytes)] + [Encrypted data]
+      // The encrypted data includes the authentication tag at the end (16 bytes for GCM)
+      
+      console.log('[decryptFileChunked] Parsing old format single blob...')
+      
+      let offset = 0;
+      let chunkIndex = 0;
+      
+      while (offset < data.length) {
+        // Each chunk starts with an IV (12 bytes)
+        if (offset + IV_LENGTH > data.length) {
+          throw new Error(`Invalid encrypted data: chunk ${chunkIndex} has incomplete IV`)
+        }
+        
+        // For old format, we need to find the end of each chunk
+        // Since we don't have chunk metadata, we'll try to decrypt each chunk
+        // and see if it succeeds
+        
+        // Try to find the end of the encrypted data by attempting decryption
+        // We'll try different chunk sizes until we find one that works
+        let chunkEnd = offset + IV_LENGTH + 16; // Minimum encrypted data size (IV + auth tag)
+        let foundValidChunk = false;
+        
+        // Try to find a valid chunk by attempting decryption
+        for (let i = chunkEnd; i < Math.min(offset + 10 * 1024 * 1024, data.length); i++) {
+          try {
+            const chunkData = data.slice(offset, i);
+            const chunkIv = chunkData.slice(0, IV_LENGTH);
+            const encryptedData = chunkData.slice(IV_LENGTH);
+            
+            // Try to decrypt to see if this is a valid chunk
+            await subtle.decrypt(
+              {
+                name: 'AES-GCM',
+                iv: chunkIv,
+              },
+              key,
+              encryptedData
+            );
+            
+            // If decryption succeeded, this is a valid chunk
+            chunkEnd = i;
+            foundValidChunk = true;
+            break;
+          } catch (err) {
+            // Decryption failed, try next chunk size
+            continue;
+          }
+        }
+        
+        if (!foundValidChunk) {
+          // If we couldn't find a valid chunk, assume this is the last chunk
+          chunkEnd = data.length;
+        }
+        
+        const chunkData = data.slice(offset, chunkEnd);
+        const chunkIv = chunkData.slice(0, IV_LENGTH);
+        const encryptedData = chunkData.slice(IV_LENGTH);
+        
+        // Decrypt chunk
+        const decryptedChunk = await subtle.decrypt(
+          {
+            name: 'AES-GCM',
+            iv: chunkIv,
+          },
+          key,
+          encryptedData
+        );
+        
+        decryptedChunks.push(new Uint8Array(decryptedChunk));
+        offset = chunkEnd;
+        chunkIndex++;
+        
+        if (onProgress) {
+          onProgress(Math.min(100, Math.round((offset / data.length) * 100)));
+        }
+      }
+      
+      console.log('[decryptFileChunked] Parsed', chunkIndex, 'chunks from old format')
+    }
+  } else {
+    // Old format: each chunk is a separate ArrayBuffer with IV prepended
+    const totalChunks = input.encryptedChunks.length;
+    
+    for (let i = 0; i < totalChunks; i++) {
+      const chunkData = new Uint8Array(input.encryptedChunks[i]);
+      
+      // Extract IV from first 12 bytes
+      const chunkIv = chunkData.slice(0, IV_LENGTH);
+      const encryptedData = chunkData.slice(IV_LENGTH);
+      
+      // Decrypt chunk
+      const decryptedChunk = await subtle.decrypt(
+        {
+          name: 'AES-GCM',
+          iv: chunkIv,
+        },
+        key,
+        encryptedData
+      );
+      
+      decryptedChunks.push(new Uint8Array(decryptedChunk));
+      
+      if (onProgress) {
+        onProgress(Math.min(100, Math.round(((i + 1) / totalChunks) * 100)));
+      }
     }
   }
 
@@ -382,6 +551,119 @@ export async function decryptThumbnailBuffer(buffer: ArrayBuffer, password: stri
   const salt = arrayBufferToBase64(saltBytes.buffer);
   const decrypted = await decryptData({ encryptedData, iv, salt, password });
   return new Blob([decrypted]);
+}
+
+/**
+ * Download and decrypt a file in chunks for streaming playback
+ * This is optimized for large video files
+ * 
+ * Note: This function expects the file size to be passed separately
+ * since pre-signed URLs don't support HEAD requests
+ */
+export async function downloadAndDecryptStream(
+  url: string,
+  iv: string,
+  salt: string,
+  password: string,
+  fileSize: number, // Added file size parameter
+  onProgress?: (progress: number) => void,
+  fileId?: string, // Optional file ID for caching
+  mimeType?: string, // Optional MIME type for caching
+  filename?: string // Optional filename for caching
+): Promise<Blob> {
+  console.log('[downloadAndDecryptStream] Starting streaming download and decryption...');
+  console.log('[downloadAndDecryptStream] File size:', fileSize)
+  
+  if (fileSize === 0) {
+    throw new Error('Invalid file size')
+  }
+  
+  // Check cache first if fileId is provided
+  if (fileId) {
+    const { getFileFromCache, generateCacheKey } = await import('./fileCache');
+    const cacheKey = generateCacheKey(fileId, password);
+    const cachedFile = await getFileFromCache(cacheKey);
+    
+    if (cachedFile) {
+      console.log('[downloadAndDecryptStream] Found file in cache:', fileId);
+      return cachedFile.decryptedBlob;
+    }
+    
+    console.log('[downloadAndDecryptStream] File not in cache, downloading...');
+  }
+  
+  // For encrypted files, we need to download the entire file first
+  // because the encrypted chunks are concatenated together
+  console.log('[downloadAndDecryptStream] Downloading entire encrypted file...')
+  
+  const response = await fetch(url, {
+    headers: {
+      'Origin': window.location.origin,
+    },
+  })
+  
+  if (!response.ok) {
+    throw new Error(`Failed to download file: ${response.status}`)
+  }
+  
+  const encryptedData = await response.arrayBuffer()
+  console.log('[downloadAndDecryptStream] Downloaded encrypted data:', encryptedData.byteLength, 'bytes')
+  
+  // For encrypted files, we need to split into chunks based on the encryption format
+  // Each chunk has format: [IV (12 bytes)] + [Encrypted data]
+  // We need to parse the encrypted data to find chunk boundaries
+  
+  // First, try to decrypt as a single file
+  try {
+    console.log('[downloadAndDecryptStream] Trying to decrypt as single file...')
+    const decrypted = await decryptFile(encryptedData, iv, salt, password)
+    console.log('[downloadAndDecryptStream] Successfully decrypted as single file')
+    
+    // Cache the decrypted file if fileId is provided
+    if (fileId && mimeType && filename) {
+      const { putFileInCache, generateCacheKey } = await import('./fileCache');
+      const cacheKey = generateCacheKey(fileId, password);
+      await putFileInCache(cacheKey, decrypted, {
+        mimeType,
+        filename,
+        size: fileSize,
+      });
+      console.log('[downloadAndDecryptStream] Cached decrypted file:', fileId);
+    }
+    
+    return decrypted
+  } catch (err) {
+    console.log('[downloadAndDecryptStream] Failed to decrypt as single file, trying chunked approach...')
+  }
+  
+  // If that fails, try to decrypt as chunked file
+  // The new format has a header with chunk metadata
+  console.log('[downloadAndDecryptStream] Trying to decrypt as chunked file...')
+  
+  try {
+    const decrypted = await decryptFileChunked(
+      { encryptedChunks: [encryptedData], iv, salt, password },
+      onProgress
+    )
+    console.log('[downloadAndDecryptStream] Successfully decrypted chunked file')
+    
+    // Cache the decrypted file if fileId is provided
+    if (fileId && mimeType && filename) {
+      const { putFileInCache, generateCacheKey } = await import('./fileCache');
+      const cacheKey = generateCacheKey(fileId, password);
+      await putFileInCache(cacheKey, decrypted, {
+        mimeType,
+        filename,
+        size: fileSize,
+      });
+      console.log('[downloadAndDecryptStream] Cached decrypted file:', fileId);
+    }
+    
+    return decrypted
+  } catch (err) {
+    console.error('[downloadAndDecryptStream] Failed to decrypt chunked file:', err)
+    throw err
+  }
 }
 
 /**

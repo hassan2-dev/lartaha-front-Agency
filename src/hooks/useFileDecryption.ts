@@ -171,6 +171,16 @@ export async function decryptFileToBlobUrl(
     throw new Error('Missing encryption key')
   }
 
+  // Check cache first
+  const { getFileFromCache, putFileInCache, generateCacheKey } = await import('../lib/fileCache');
+  const cacheKey = generateCacheKey(fileId, key);
+  const cachedFile = await getFileFromCache(cacheKey);
+  
+  if (cachedFile) {
+    console.log('[decryptFileToBlobUrl] Found file in cache:', fileId);
+    return URL.createObjectURL(cachedFile.decryptedBlob);
+  }
+
   // Get auth token
   const token = localStorage.getItem(TOKEN_STORAGE_KEY)
   const apiBase = API_ENV.apiBaseUrl || 'http://localhost:3030'
@@ -195,6 +205,14 @@ export async function decryptFileToBlobUrl(
         () => {}
       )
     : await decryptFile(encryptedData, encryptionIv, encryptionSalt, key)
+
+  // Cache the decrypted file
+  await putFileInCache(cacheKey, decrypted, {
+    mimeType: 'application/octet-stream',
+    filename: fileId,
+    size: encryptedData.byteLength,
+  });
+  console.log('[decryptFileToBlobUrl] Cached decrypted file:', fileId);
 
   return URL.createObjectURL(decrypted)
 }

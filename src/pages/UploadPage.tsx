@@ -198,13 +198,19 @@ function ImageThumbnail({
   const [protectedThumbnailUrl, setProtectedThumbnailUrl] = useState<string | null>(null)
   
   // Determine which URL to use:
-  // 1. If thumbnailKey is available, use it directly (non-encrypted thumbnail)
-  // 2. Otherwise use the main file URL
+  // 1. If url is provided and looks like a thumbnail URL, use it directly
+  // 2. If thumbnailKey is available, construct URL from it
+  // 3. Otherwise use the main file URL
   // Note: encryptionEnabled doesn't affect whether we show the image - it only affects
   // whether we show a lock icon if there's no thumbnail (encrypted files can't show direct URL)
   const apiBase = API_ENV.apiBaseUrl?.trim() || ''
   const apiBaseNormalized = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase
   const displayUrl = (() => {
+    // If url is provided and looks like a thumbnail URL, use it
+    if (url && url.includes('/api/image/')) {
+      return url
+    }
+    // Otherwise, construct URL from thumbnailKey
     if (thumbnailKey && typeof thumbnailKey === 'string' && thumbnailKey.trim() !== '') {
       const safeKey = thumbnailKey.startsWith('/') ? thumbnailKey.slice(1) : thumbnailKey
       return `${apiBaseNormalized}/api/image/${encodeURIComponent(safeKey)}`
@@ -365,16 +371,22 @@ function VideoThumbnail({
   const [decryptedThumbnailUrl, setDecryptedThumbnailUrl] = useState<string | null>(null)
   const [protectedThumbnailUrl, setProtectedThumbnailUrl] = useState<string | null>(null)
   // Determine which URL to use:
-  // 1. If thumbnailKey is available (non-encrypted thumbnail), use it directly
-  // 2. Otherwise use the main file URL
+  // 1. If url is provided (thumbnail URL), use it directly
+  // 2. If thumbnailKey is available, construct URL from it
+  // 3. Otherwise use empty string (will show placeholder)
   const apiBase = API_ENV.apiBaseUrl?.trim() || ''
   const apiBaseNormalized = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase
   const displayUrl = (() => {
+    // If url is provided and looks like a thumbnail URL, use it
+    if (url && url.includes('/api/image/')) {
+      return url
+    }
+    // Otherwise, construct URL from thumbnailKey
     if (thumbnailKey) {
       const safeKey = thumbnailKey.startsWith('/') ? thumbnailKey.slice(1) : thumbnailKey
       return `${apiBaseNormalized}/api/image/${encodeURIComponent(safeKey)}`
     }
-    return url
+    return ''
   })()
 
   useEffect(() => {
@@ -1567,6 +1579,7 @@ export default function UploadPage() {
   const [selectedForBulk, setSelectedForBulk] = useState<Set<string>>(new Set())
   const [bulkLoading, setBulkLoading] = useState(false)
 
+  const useStreamUpload = false
   const canUpload = useMemo(() => selectedFiles.length > 0 && !uploading, [selectedFiles, uploading])
 
   // Helper function to show toast notifications
@@ -1593,7 +1606,7 @@ export default function UploadPage() {
   const [hasTriggeredUpload, setHasTriggeredUpload] = useState(false)
 
   useEffect(() => {
-    if (canUpload && selectedFiles.length > 0 && !hasTriggeredUpload) {
+    if (useStreamUpload && canUpload && selectedFiles.length > 0 && !hasTriggeredUpload) {
       setHasTriggeredUpload(true)
       void handleUpload()
     } else if (selectedFiles.length === 0) {
@@ -1626,6 +1639,7 @@ export default function UploadPage() {
   const [folderNameError, setFolderNameError] = useState<string | null>(null)
 
   async function handleUpload() {
+    if (!useStreamUpload) return
     setFolderNameError(null)
 
     if (selectedFiles.length === 0) {
@@ -1652,12 +1666,13 @@ export default function UploadPage() {
     setUploading(true)
 
     // Initialize upload item states for all files
-    const initialStates: Record<string, { fileKey: string; fileId: string; status: 'idle' | 'uploading' | 'paused' | 'completed' | 'error'; progress: number }> = {}
+    const initialStates: Record<string, { fileKey: string; fileId: string; status: 'idle' | 'uploading' | 'paused' | 'completed' | 'error'; progress: number; speed?: number; bytesUploaded?: number; totalBytes?: number }> = {}
     selectedFiles.forEach(sf => {
       const fileKey = `${sf.relativePath}_${sf.file.size}`
-      initialStates[fileKey] = { fileKey, fileId: '', status: 'uploading', progress: 0 }
+      initialStates[fileKey] = { fileKey, fileId: '', status: 'uploading', progress: 0, speed: 0, bytesUploaded: 0, totalBytes: sf.file.size }
     })
     setUploadItemStates(initialStates)
+    setUploading(false)
 
     try {
       const hasFolderStructure = selectedFiles.some(sf => sf.relativePath.includes('/'))
@@ -1737,15 +1752,15 @@ export default function UploadPage() {
         skipFiles: completedUploadedFiles,
         onUploadProgress: (progress) => {
           // Update upload item states for UI feedback
-          const { currentFileIndex, progressPercent } = progress
+          const { currentFileIndex, progressPercent, bytesUploaded, totalBytes, uploadSpeed } = progress
           // Update each file's progress in the state
           // currentFileIndex is 1-indexed, array is 0-indexed
           resolvedFilesToUpload.forEach((file, idx) => {
             const fileKey = `${file.relativePath}_${file.file.size}`
             if (idx < currentFileIndex - 1) {
-              setUploadItemStates(prev => ({ ...prev, [fileKey]: { fileKey, status: 'completed', progress: 100, fileId: prev[fileKey]?.fileId || '' } }))
+              setUploadItemStates(prev => ({ ...prev, [fileKey]: { fileKey, status: 'completed', progress: 100, fileId: prev[fileKey]?.fileId || '', speed: 0, bytesUploaded: file.file.size, totalBytes: file.file.size } }))
             } else if (idx === currentFileIndex - 1) {
-              setUploadItemStates(prev => ({ ...prev, [fileKey]: { fileKey, status: 'uploading', progress: progressPercent, fileId: prev[fileKey]?.fileId || '' } }))
+              setUploadItemStates(prev => ({ ...prev, [fileKey]: { fileKey, status: 'uploading', progress: progressPercent, fileId: prev[fileKey]?.fileId || '', speed: uploadSpeed, bytesUploaded: bytesUploaded, totalBytes: totalBytes } }))
             }
           })
         }
@@ -1963,19 +1978,58 @@ export default function UploadPage() {
     setEncryptedViewerFile(null)
   }
 
-  function handleDownloadFile(key: string, filename: string) {
+  async function handleDownloadFile(key: string, filename: string) {
     const fileMeta = filesHere.find(file => file.key === key)
     if (fileMeta?.encryptionEnabled && fileMeta.fileId && fileMeta.encryptionIv && fileMeta.encryptionSalt) {
-      setEncryptedViewerFile({
-        fileId: fileMeta.fileId,
-        filename,
-        mimeType: fileMeta.mimeType,
-        size: fileMeta.size,
-        encryptionEnabled: fileMeta.encryptionEnabled,
-        encryptionIv: fileMeta.encryptionIv,
-        encryptionSalt: fileMeta.encryptionSalt,
-      })
-      setEncryptedViewerOpen(true)
+      try {
+        // Show loading notification
+        showToastNotification('جاري تحميل وفك تشفير الملف...', 'info')
+        
+        // Get client-only key from sessionStorage
+        const CLIENT_KEY_CACHE = 'file_encryption_password'
+        const encryptionKey = sessionStorage.getItem(CLIENT_KEY_CACHE)
+        if (!encryptionKey) {
+          throw new Error('Missing encryption key')
+        }
+        
+        // Get download URL for the encrypted file
+        const { getDownloadUrl } = await import('../api/uploadApi')
+        const result = await getDownloadUrl(fileMeta.fileId)
+        
+        if (!result.ok || !result.url) {
+          throw new Error('Failed to get download URL')
+        }
+        
+        // Download and decrypt the file
+        const { downloadAndDecryptStream } = await import('../lib/encryption')
+        const decryptedBlob = await downloadAndDecryptStream(
+          result.url,
+          fileMeta.encryptionIv,
+          fileMeta.encryptionSalt,
+          encryptionKey,
+          fileMeta.size || 0,
+          undefined,
+          fileMeta.fileId,
+          fileMeta.mimeType,
+          filename
+        )
+        
+        // Create download link for decrypted file
+        const url = URL.createObjectURL(decryptedBlob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = filename
+        a.rel = 'noreferrer'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        
+        showToastNotification('تم تحميل الملف بنجاح', 'success')
+      } catch (error) {
+        console.error('Download encrypted file error:', error)
+        showToastNotification('فشل في تحميل الملف المشفر', 'error')
+      }
       return
     }
 

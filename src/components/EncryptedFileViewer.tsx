@@ -5,7 +5,7 @@
  * Supports images, videos, and other file types.
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Box,
   Button,
@@ -27,11 +27,8 @@ import {
 } from '@mui/icons-material'
 
 import { getDownloadUrl } from '../api/uploadApi'
-import { API_ENV, TOKEN_STORAGE_KEY } from '../config/api'
-import {
-  decryptFile,
-  decryptFileChunked,
-} from '../lib/encryption'
+import { downloadAndDecryptStream } from '../lib/encryption'
+import StreamingVideoPlayer from './StreamingVideoPlayer'
 
 // Cache for client-only encryption key in sessionStorage
 const CLIENT_KEY_CACHE = 'file_encryption_password'
@@ -73,7 +70,7 @@ export default function EncryptedFileViewer({
   const [decryptionProgress, setDecryptionProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
-  const videoRef = useRef<HTMLVideoElement>(null)
+  // videoRef is no longer needed since we use StreamingVideoPlayer
 
   // Reset state when file changes
   useEffect(() => {
@@ -86,6 +83,11 @@ export default function EncryptedFileViewer({
     }
   }, [open, fileId])
 
+  // Determine file type for preview
+  const isImage = mimeType.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(filename)
+  const isVideo = mimeType.startsWith('video/') || /\.(mp4|webm|ogg|mov|avi)$/i.test(filename)
+  const isAudio = mimeType.startsWith('audio/') || /\.(mp3|wav|ogg|m4a)$/i.test(filename)
+
   // Auto-fetch workspace key and decrypt when opening
   useEffect(() => {
     console.log('[EncryptedFileViewer] Props:', { open, encryptionEnabled, encryptionIv, encryptionSalt })
@@ -93,6 +95,31 @@ export default function EncryptedFileViewer({
       console.log('[EncryptedFileViewer] Dialog not open, skipping')
       return
     }
+    
+    // For video files, let StreamingVideoPlayer handle decryption
+    if (isVideo) {
+      console.log('[EncryptedFileViewer] Video file, will let StreamingVideoPlayer handle decryption')
+      console.log('[EncryptedFileViewer] File ID:', fileId)
+      setIsLoading(true)
+      getDownloadUrl(fileId)
+        .then(result => {
+          console.log('[EncryptedFileViewer] Download URL result:', result)
+          if (result.ok && result.url) {
+            console.log('[EncryptedFileViewer] Setting decrypted URL:', result.url.substring(0, 50) + '...')
+            setDecryptedUrl(result.url)
+          } else {
+            console.error('[EncryptedFileViewer] Failed to get file URL:', result)
+            setError('Failed to get file URL')
+          }
+        })
+        .catch((err) => {
+          console.error('[EncryptedFileViewer] Error fetching file:', err)
+          setError('Failed to fetch file')
+        })
+        .finally(() => setIsLoading(false))
+      return
+    }
+    
     if (!encryptionEnabled) {
       console.log('[EncryptedFileViewer] File not encrypted, will show directly')
       // For non-encrypted files, just fetch and show directly
@@ -146,20 +173,13 @@ export default function EncryptedFileViewer({
         }
         console.log('[EncryptedFileViewer] Step 2: Got URL:', result.url.substring(0, 50) + '...')
 
-        // Step 3: Fetch encrypted data through server proxy (bypasses CORS)
-        console.log('[EncryptedFileViewer] Step 3: Fetching encrypted data through server proxy...')
-        // Use API base URL or fallback to localhost:3030 for development
-        const apiBase = API_ENV.apiBaseUrl || 'http://localhost:3030'
-        console.log('[EncryptedFileViewer] API base:', apiBase)
-        
-        // Get auth token for the request
-        const token = localStorage.getItem(TOKEN_STORAGE_KEY)
-        const headers: Record<string, string> = {}
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`
-        }
-        
-        const response = await fetch(`${apiBase}/api/upload/download/${fileId}/data`, { headers })
+        // Step 3: Fetch encrypted data directly from R2 (with CORS)
+        console.log('[EncryptedFileViewer] Step 3: Fetching encrypted data directly from R2...')
+        const response = await fetch(result.url, {
+          headers: {
+            'Origin': window.location.origin,
+          },
+        })
         if (!response.ok) {
           throw new Error('Failed to fetch encrypted file')
         }
@@ -176,12 +196,20 @@ export default function EncryptedFileViewer({
         // Step 4: Decrypt
         console.log('[EncryptedFileViewer] Step 4: Decrypting with IV:', encryptionIv, 'Salt:', encryptionSalt)
         
-        const decrypted = encryptedData.byteLength > 12 * 1024 * 1024
-          ? await decryptFileChunked(
-              { encryptedChunks: splitIntoChunks(encryptedData), iv: encryptionIv!, salt: encryptionSalt!, password: key },
-              (progress) => setDecryptionProgress(progress)
-            )
-          : await decryptFile(encryptedData, encryptionIv!, encryptionSalt!, key)
+        // Use streaming decryption for large files
+        // Note: We need to get the file size from the server response
+        const fileSize = result.size || 0
+        const decrypted = await downloadAndDecryptStream(
+          result.url,
+          encryptionIv!,
+          encryptionSalt!,
+          key,
+          fileSize,
+          (progress) => setDecryptionProgress(progress),
+          fileId, // Pass fileId for caching
+          mimeType, // Pass MIME type for caching
+          filename // Pass filename for caching
+        )
         
         console.log('[EncryptedFileViewer] Step 4: Decryption complete, blob size:', decrypted.size)
 
@@ -219,12 +247,31 @@ export default function EncryptedFileViewer({
     document.body.removeChild(a)
   }
 
-  // Determine file type for preview
-  const isImage = mimeType.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(filename)
-  const isVideo = mimeType.startsWith('video/') || /\.(mp4|webm|ogg|mov|avi)$/i.test(filename)
-  const isAudio = mimeType.startsWith('audio/') || /\.(mp3|wav|ogg|m4a)$/i.test(filename)
-
   const renderPreview = () => {
+    // For video files, let StreamingVideoPlayer handle loading states
+    if (isVideo) {
+      if (!decryptedUrl) {
+        return (
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
+            <CircularProgress />
+          </Box>
+        )
+      }
+      return (
+        <StreamingVideoPlayer
+          url={decryptedUrl}
+          filename={filename}
+          mimeType={mimeType}
+          size={size || 0}
+          encryptionEnabled={encryptionEnabled || false}
+          encryptionIv={encryptionIv}
+          encryptionSalt={encryptionSalt}
+          fileId={fileId}
+          onClose={onClose}
+        />
+      )
+    }
+
     if (isLoading) {
       return (
         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
@@ -267,18 +314,7 @@ export default function EncryptedFileViewer({
       )
     }
 
-    if (isVideo) {
-      return (
-        <Box sx={{ textAlign: 'center' }}>
-          <video
-            ref={videoRef}
-            controls
-            style={{ maxWidth: '100%', maxHeight: '70vh' }}
-            src={decryptedUrl}
-          />
-        </Box>
-      )
-    }
+    // Video rendering is handled above
 
     if (isAudio) {
       return (
@@ -369,12 +405,4 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(value >= 10 || idx === 0 ? 0 : 1)} ${units[idx]}`
 }
 
-function splitIntoChunks(buffer: ArrayBuffer, chunkSize: number = 5 * 1024 * 1024): ArrayBuffer[] {
-  const chunks: ArrayBuffer[] = []
-  let offset = 0
-  while (offset < buffer.byteLength) {
-    chunks.push(buffer.slice(offset, offset + chunkSize))
-    offset += chunkSize
-  }
-  return chunks
-}
+// splitIntoChunks function moved to encryption.ts

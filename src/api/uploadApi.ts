@@ -703,6 +703,21 @@ export async function abortMultipartUpload(params: {
   return res.data as MultipartAbortResult
 }
 
+export async function listMultipartParts(params: {
+  key: string
+  multipartUploadId: string
+}): Promise<{
+  ok?: boolean
+  parts?: Array<{
+    PartNumber?: number
+    ETag?: string
+    Size?: number
+  }>
+}> {
+  const res = await api.post('/api/upload/multipart/list-parts', params)
+  return res.data
+}
+
 /**
  * Confirm upload completion and save file metadata
  */
