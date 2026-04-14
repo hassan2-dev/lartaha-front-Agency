@@ -43,24 +43,22 @@ export async function getFileFromCache(fileId: string): Promise<CachedFile | nul
     if (!cachedFile) {
       return null;
     }
-
-    // Check if expired
+    
+    // Check if the file has expired
     if (Date.now() > cachedFile.expiresAt) {
-      console.log('[FileCache] File expired, removing from cache:', fileId);
-      await removeFileFromCache(fileId);
+      await db.decryptedFiles.delete(fileId);
       return null;
     }
-
-    console.log('[FileCache] Retrieved file from cache:', fileId);
+    
     return cachedFile;
   } catch (error) {
-    console.error('[FileCache] Error retrieving file:', error);
+    console.error('Error getting file from cache:', error);
     return null;
   }
 }
 
 /**
- * Store a file in the cache
+ * Put a file into the cache
  */
 export async function putFileInCache(
   fileId: string,
@@ -72,71 +70,54 @@ export async function putFileInCache(
   }
 ): Promise<void> {
   try {
+    const timestamp = Date.now();
+    const expiresAt = timestamp + SEVEN_DAYS;
+    
     const cachedFile: CachedFile = {
       fileId,
       decryptedBlob,
-      timestamp: Date.now(),
-      expiresAt: Date.now() + SEVEN_DAYS,
+      timestamp,
+      expiresAt,
       mimeType: metadata.mimeType,
       filename: metadata.filename,
       size: metadata.size,
     };
-
+    
     await db.decryptedFiles.put(cachedFile);
-    console.log('[FileCache] Stored file in cache:', fileId);
+    
+    // Clean up expired files
+    await cleanupExpiredFiles();
   } catch (error) {
-    console.error('[FileCache] Error storing file:', error);
-  }
-}
-
-/**
- * Remove a specific file from the cache
- */
-export async function removeFileFromCache(fileId: string): Promise<void> {
-  try {
-    await db.decryptedFiles.delete(fileId);
-    console.log('[FileCache] Removed file from cache:', fileId);
-  } catch (error) {
-    console.error('[FileCache] Error removing file:', error);
+    console.error('Error putting file in cache:', error);
   }
 }
 
 /**
  * Clean up expired files from the cache
  */
-export async function cleanupExpiredCache(): Promise<number> {
+async function cleanupExpiredFiles(): Promise<void> {
   try {
-    const now = Date.now();
-    
-    // Get all expired files
     const expiredFiles = await db.decryptedFiles
       .where('expiresAt')
-      .below(now)
+      .below(Date.now())
       .toArray();
     
-    // Delete expired files
-    const fileIds = expiredFiles.map(file => file.fileId);
-    if (fileIds.length > 0) {
-      await db.decryptedFiles.bulkDelete(fileIds);
-      console.log(`[FileCache] Cleaned up ${fileIds.length} expired files`);
+    for (const file of expiredFiles) {
+      await db.decryptedFiles.delete(file.fileId);
     }
-    
-    return fileIds.length;
   } catch (error) {
-    console.error('[FileCache] Error cleaning up expired files:', error);
-    return 0;
+    console.error('Error cleaning up expired files:', error);
   }
 }
 
 /**
- * Clear all files from the cache
+ * Clear all entries from the cache
  */
-export async function clearAllCache(): Promise<void> {
+export async function clearCache(): Promise<void> {
   try {
     await db.decryptedFiles.clear();
-    console.log('[FileCache] Cleared all files from cache');
   } catch (error) {
-    console.error('[FileCache] Error clearing cache:', error);
+    console.error('Error clearing cache:', error);
   }
 }
 
@@ -144,60 +125,48 @@ export async function clearAllCache(): Promise<void> {
  * Get cache statistics
  */
 export async function getCacheStats(): Promise<{
-  totalFiles: number;
+  entryCount: number;
   totalSize: number;
-  expiredFiles: number;
+  oldestEntry: number | null;
+  newestEntry: number | null;
 }> {
   try {
-    const now = Date.now();
     const allFiles = await db.decryptedFiles.toArray();
     
-    let totalFiles = 0;
-    let totalSize = 0;
-    let expiredFiles = 0;
-    
-    for (const file of allFiles) {
-      totalFiles++;
-      totalSize += file.size;
-      
-      if (now > file.expiresAt) {
-        expiredFiles++;
-      }
+    if (allFiles.length === 0) {
+      return {
+        entryCount: 0,
+        totalSize: 0,
+        oldestEntry: null,
+        newestEntry: null,
+      };
     }
     
+    const timestamps = allFiles.map(f => f.timestamp);
+    const totalSize = allFiles.reduce((sum, f) => sum + f.size, 0);
+    
     return {
-      totalFiles,
+      entryCount: allFiles.length,
       totalSize,
-      expiredFiles,
+      oldestEntry: Math.min(...timestamps),
+      newestEntry: Math.max(...timestamps),
     };
   } catch (error) {
-    console.error('[FileCache] Error getting cache stats:', error);
-    return { totalFiles: 0, totalSize: 0, expiredFiles: 0 };
+    console.error('Error getting cache stats:', error);
+    return {
+      entryCount: 0,
+      totalSize: 0,
+      oldestEntry: null,
+      newestEntry: null,
+    };
   }
 }
 
 /**
- * Initialize cache cleanup on app startup
- */
-export function initializeCacheCleanup(): void {
-  // Clean up expired files on app startup
-  cleanupExpiredCache().then((removedCount) => {
-    if (removedCount > 0) {
-      console.log(`[FileCache] Cleaned up ${removedCount} expired files on startup`);
-    }
-  });
-
-  // Set up periodic cleanup (every hour)
-  setInterval(() => {
-    cleanupExpiredCache();
-  }, 60 * 60 * 1000); // Every hour
-}
-
-/**
- * Generate a cache key for a file
+ * Generate a cache key based on file ID and password
  */
 export function generateCacheKey(fileId: string, password: string): string {
-  // Combine fileId and password hash to create a unique cache key
-  // This ensures that different passwords for the same file are cached separately
-  return `${fileId}_${btoa(password).substring(0, 16)}`;
+  // In a real implementation, you might want to use a more secure method
+  // For now, we'll use a simple combination
+  return `${fileId}-${password.substring(0, 8)}`;
 }

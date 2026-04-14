@@ -113,6 +113,7 @@ interface EncryptedUploadDropzoneProps {
     currentFilePath: string
   }) => void
   externalUploadItems?: Record<string, UploadItemState>
+  currentPath?: string // Current folder path in UploadPage (e.g., "folder1/subfolder")
 }
 
 // Simple file selection (without Uppy) for initial selection
@@ -147,6 +148,7 @@ export default function EncryptedUploadDropzone({
   encryptionPassword,
   onUploadProgress,
   externalUploadItems,
+  currentPath = '',
 }: EncryptedUploadDropzoneProps) {
   const [dragOver, setDragOver] = useState(false)
   const [pendingFolderFiles, setPendingFolderFiles] = useState<SelectedUploadFile[] | null>(null)
@@ -318,12 +320,20 @@ export default function EncryptedUploadDropzone({
 
   // Handle file selection with encryption
   const handleFileSelection = async (selectedFiles: SelectedUploadFile[]) => {
+    // Prepend currentPath to relativePath for each file if currentPath is set
+    const filesWithPath = currentPath
+      ? selectedFiles.map((sf) => ({
+          ...sf,
+          relativePath: `${currentPath}/${sf.relativePath}`.replace(/\/+/g, '/'),
+        }))
+      : selectedFiles
+
     // If encryption is enabled and we have a password, encrypt files first
     if (encryptEnabled && encryptionPasswordRef.current) {
-      const encrypted = await encryptFiles(selectedFiles)
+      const encrypted = await encryptFiles(filesWithPath)
       onFilesChange(encrypted)
     } else {
-      onFilesChange(selectedFiles)
+      onFilesChange(filesWithPath)
     }
   }
 

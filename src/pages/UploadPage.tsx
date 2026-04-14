@@ -596,7 +596,7 @@ function FileItem({
   return (
     <ListItem
       key={obj.key}
-      onClick={() => hasAccess && url && onPreview(obj.key, url)}
+      onClick={() => hasAccess && onPreview(obj.key, url)}
       sx={{
         py: 1.5,
         px: 2,
@@ -610,7 +610,7 @@ function FileItem({
           ? (isDark ? 'rgba(255,0,0,0.02)' : 'rgba(211, 47, 47, 0.04)')
           : (isDark ? 'rgba(255,255,255,0.02)' : theme.palette.background.paper),
         boxShadow: !isDark ? '0 2px 4px rgba(0,0,0,0.02)' : 'none',
-        cursor: hasAccess && url ? 'pointer' : 'default',
+        cursor: hasAccess ? 'pointer' : 'default',
         opacity: isRestricted && !hasAccess ? 0.6 : 1,
         '&:hover': {
           backgroundColor: hasAccess
@@ -792,7 +792,7 @@ function FileItemGrid({
 
   return (
     <Card
-      onClick={() => hasAccess && url && onPreview(obj.key, url)}
+      onClick={() => hasAccess && onPreview(obj.key, url)}
       sx={{
         display: 'flex',
         flexDirection: 'column',
@@ -803,7 +803,7 @@ function FileItemGrid({
           ? (isDark ? 'rgba(211, 47, 47, 0.12)' : 'rgba(211, 47, 47, 0.08)')
           : (isDark ? 'rgba(255,255,255,0.02)' : theme.palette.background.paper),
         boxShadow: !isDark ? '0 2px 8px rgba(0,0,0,0.04)' : 'none',
-        cursor: hasAccess && url ? 'pointer' : 'default',
+        cursor: hasAccess ? 'pointer' : 'default',
         opacity: isRestricted && !hasAccess ? 0.6 : 1,
         '&:hover': {
           backgroundColor: hasAccess
@@ -2572,6 +2572,7 @@ export default function UploadPage() {
           onEncryptionPasswordRequest={() => {}}
           onUploadProgress={() => {}}
           externalUploadItems={uploadItemStates}
+          currentPath={currentPath}
         />
 
         <Box sx={{ mt: 2 }}>
