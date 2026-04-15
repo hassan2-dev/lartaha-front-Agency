@@ -49,7 +49,7 @@ export function AppThemeProvider({ children }: { children: React.ReactNode }) {
         direction: 'rtl',
         palette: {
           mode,
-          primary: { main: mode === 'dark' ? '#a78bfa' : '#6d28d9' },
+          primary: { main: mode === 'dark' ? '#818cf8' : '#4f46e5' },
           background: {
             default: mode === 'dark' ? '#0b0b12' : '#f8fafc',
             paper: mode === 'dark' ? '#12121a' : '#ffffff',

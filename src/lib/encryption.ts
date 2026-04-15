@@ -264,24 +264,45 @@ export async function encryptFileChunked(
     chunkSizeView.setUint32(0, chunkSizes[i], false);
   }
   
-  // Combine header and encrypted chunks into a single blob
+  // Combine header and encrypted chunks into a blob array to avoid memory allocation issues
+  // For very large files, we return chunks separately instead of combining into one array
   const totalEncryptedSize = headerSize + encryptedChunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
-  const combined = new Uint8Array(totalEncryptedSize);
-  combined.set(header, 0);
   
-  let offset2 = headerSize;
-  for (const chunk of encryptedChunks) {
-    combined.set(new Uint8Array(chunk), offset2);
-    offset2 += chunk.byteLength;
+  // Only combine into a single array if total size is reasonable (< 1GB)
+  if (totalEncryptedSize < 1024 * 1024 * 1024) {
+    try {
+      const combined = new Uint8Array(totalEncryptedSize);
+      combined.set(header, 0);
+      
+      let offset2 = headerSize;
+      for (const chunk of encryptedChunks) {
+        combined.set(new Uint8Array(chunk), offset2);
+        offset2 += chunk.byteLength;
+      }
+      return {
+        encryptedChunks: [combined.buffer],
+        iv: arrayBufferToBase64(iv.buffer),
+        salt: arrayBufferToBase64(salt.buffer),
+        totalSize,
+        chunkSizes,
+      };
+    } catch (err) {
+      console.warn('[encryptFileChunked] Failed to combine chunks into single array:', err);
+      // Fall through to chunked return below
+    }
   }
   
+  // For very large files, return the header and chunks separately
+  const allChunks = [header.buffer as ArrayBuffer, ...encryptedChunks];
   return {
-    encryptedChunks: [combined.buffer],
+    encryptedChunks: allChunks,
     iv: arrayBufferToBase64(iv.buffer),
     salt: arrayBufferToBase64(salt.buffer),
     totalSize,
-    chunkSizes, // Store chunk sizes for later reconstruction
+    chunkSizes,
   };
+  
+
 }
 
 /**
@@ -297,8 +318,71 @@ export async function decryptFileChunked(
   const key = await deriveKey(input.password, new Uint8Array(salt));
 
   const decryptedChunks: Uint8Array[] = [];
+  const magicBytes = textToBytes(CHUNKED_FILE_MAGIC);
   
-  // Check if the input is a single blob with header (new format)
+  // Check if the input is multiple chunks with header as first chunk (new format for large files)
+  if (input.encryptedChunks.length > 1) {
+    const headerData = new Uint8Array(input.encryptedChunks[0]);
+    
+    // Check if this is the new format with header
+    if (headerData.length >= magicBytes.length && 
+        headerData.slice(0, magicBytes.length).every((val, idx) => val === magicBytes[idx])) {
+      // Parse header
+      const numChunks = new DataView(headerData.buffer, magicBytes.length, 4).getUint32(0, false);
+      const chunkSizes: number[] = [];
+      let offset = magicBytes.length + 4;
+      
+      for (let i = 0; i < numChunks; i++) {
+        const chunkSize = new DataView(headerData.buffer, offset, 4).getUint32(0, false);
+        chunkSizes.push(chunkSize);
+        offset += 4;
+      }
+      
+      // Now decrypt each chunk (skipping the header chunk at index 0)
+      const totalChunks = Math.min(numChunks, input.encryptedChunks.length - 1);
+      for (let i = 0; i < totalChunks; i++) {
+        const chunkData = new Uint8Array(input.encryptedChunks[i + 1]);
+        
+        // Extract IV from first 12 bytes
+        const chunkIv = chunkData.slice(0, IV_LENGTH);
+        const encryptedData = chunkData.slice(IV_LENGTH);
+        
+        // Decrypt chunk
+        try {
+          const decryptedChunk = await subtle.decrypt(
+            {
+              name: 'AES-GCM',
+              iv: chunkIv,
+            },
+            key,
+            encryptedData
+          );
+          
+          decryptedChunks.push(new Uint8Array(decryptedChunk));
+        } catch (err) {
+          console.error('[decryptFileChunked] Failed to decrypt chunk', i, ':', err);
+          throw new Error(`Failed to decrypt chunk ${i}: ${err instanceof Error ? err.message : String(err)}`)
+        }
+        
+        if (onProgress) {
+          onProgress(Math.min(100, Math.round(((i + 1) / totalChunks) * 100)));
+        }
+      }
+      
+      // Combine all decrypted chunks
+      const totalLength = decryptedChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+      const combined = new Uint8Array(totalLength);
+      let combinedOffset = 0;
+      for (const chunk of decryptedChunks) {
+        combined.set(chunk, combinedOffset);
+        combinedOffset += chunk.length;
+      }
+      
+      return new Blob([combined]);
+    }
+  }
+  
+  // Check if the input is a single blob with header (old new format)
   if (input.encryptedChunks.length === 1) {
     const data = new Uint8Array(input.encryptedChunks[0]);
     const magicBytes = textToBytes(CHUNKED_FILE_MAGIC);
@@ -736,24 +820,43 @@ export async function verifyPassword(
 }
 
 /**
- * Generate a small thumbnail from an image file (not encrypted)
+ * Generate a small thumbnail from an image or video file (not encrypted)
  * Returns a Blob of the thumbnail
  */
 export async function generateThumbnail(
   file: File,
   maxSize: number = 200
 ): Promise<Blob | null> {
-  // Only process images
-  if (!file.type.startsWith('image/')) {
-    console.log('[DEBUG] generateThumbnail: not an image', file.type)
-    return null
+  console.log('[DEBUG] generateThumbnail: starting for', file.name, file.type, file.size)
+
+  // Handle images
+  if (file.type.startsWith('image/')) {
+    return await generateImageThumbnail(file, maxSize)
   }
 
-  console.log('[DEBUG] generateThumbnail: starting for', file.name, file.type, file.size)
+  // Handle videos - check MIME type and file extension
+  const isVideo = file.type.startsWith('video/') || 
+    file.name.toLowerCase().match(/\.(mp4|webm|mov|avi|mkv|flv|wmv|m4v|3gp|ogv|ts|m3u8)$/i);
+  
+  if (isVideo) {
+    return await generateVideoThumbnail(file, maxSize)
+  }
+
+  console.log('[DEBUG] generateThumbnail: unsupported file type', file.type, 'for', file.name)
+  return null
+}
+
+/**
+ * Generates a thumbnail from an image file
+ */
+async function generateImageThumbnail(
+  file: File,
+  maxSize: number
+): Promise<Blob | null> {
   try {
     // Load the image
     const bitmap = await createImageBitmap(file)
-    console.log('[DEBUG] generateThumbnail: bitmap created', bitmap.width, 'x', bitmap.height)
+    console.log('[DEBUG] generateImageThumbnail: bitmap created', bitmap.width, 'x', bitmap.height)
 
     // Calculate thumbnail dimensions maintaining aspect ratio
     let width = bitmap.width
@@ -790,10 +893,169 @@ export async function generateThumbnail(
       )
     })
 
-    console.log('[DEBUG] generateThumbnail: blob created', blob?.size, 'bytes')
+    console.log('[DEBUG] generateImageThumbnail: blob created', blob?.size, 'bytes')
     return blob
   } catch (err) {
-    console.error('[DEBUG] Failed to generate thumbnail:', err)
+    console.error('[DEBUG] Failed to generate image thumbnail:', err)
     return null
   }
+}
+
+/**
+ * Generates a thumbnail from a video file by extracting the first frame
+ * Skips videos over 100MB to prevent browser crashes from memory exhaustion
+ */
+async function generateVideoThumbnail(
+  file: File,
+  maxSize: number
+): Promise<Blob | null> {
+  // Skip very large video files to prevent browser crashes
+  // Video elements try to buffer the entire file when preload='auto'/'metadata'
+  const MAX_VIDEO_SIZE = 100 * 1024 * 1024 // 100MB limit
+  if (file.size > MAX_VIDEO_SIZE) {
+    console.log('[DEBUG] generateVideoThumbnail: skipping large video', file.name, Math.round(file.size / 1024 / 1024), 'MB (limit: 100MB)')
+    return null
+  }
+  
+  return new Promise((resolve) => {
+    const video = document.createElement('video')
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+
+    if (!ctx) {
+      console.error('[DEBUG] Failed to get canvas context for video thumbnail')
+      resolve(null)
+      return
+    }
+
+    const url = URL.createObjectURL(file)
+    
+    // Configure video element for better compatibility
+    video.src = url
+    video.preload = 'metadata'
+    video.crossOrigin = 'anonymous'
+    video.muted = true
+    
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+    let hasResolved = false
+
+    const cleanup = () => {
+      hasResolved = true
+      if (timeoutId !== null) clearTimeout(timeoutId)
+      URL.revokeObjectURL(url)
+    }
+
+    // Extract frame at 1 second or 10% into the video
+    video.onloadedmetadata = () => {
+      try {
+        // Seek to 1 second or 10% into the video, whichever is smaller
+        const seekTime = Math.min(1, video.duration * 0.1)
+        video.currentTime = seekTime
+        console.log('[DEBUG] generateVideoThumbnail: video metadata loaded', {
+          duration: video.duration,
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+          seekTime,
+        })
+      } catch (err) {
+        console.error('[DEBUG] Error seeking video:', err)
+        cleanup()
+        resolve(null)
+      }
+    }
+
+    video.onseeked = () => {
+      if (hasResolved) return
+      
+      try {
+        // Set canvas size to video dimensions
+        let width = video.videoWidth
+        let height = video.videoHeight
+
+        console.log('[DEBUG] generateVideoThumbnail: frame ready', { width, height })
+
+        // If dimensions are still 0, the video might not be properly loaded
+        if (width === 0 || height === 0) {
+          console.warn('[DEBUG] Video dimensions are 0, video may not be loadable')
+          cleanup()
+          resolve(null)
+          return
+        }
+
+        // Scale to maxSize
+        if (width > height) {
+          if (width > maxSize) {
+            height = Math.round((height * maxSize) / width)
+            width = maxSize
+          }
+        } else {
+          if (height > maxSize) {
+            width = Math.round((width * maxSize) / height)
+            height = maxSize
+          }
+        }
+
+        canvas.width = width
+        canvas.height = height
+
+        // Draw the video frame to canvas
+        ctx.drawImage(video, 0, 0, width, height)
+
+        // Convert to JPEG blob
+        canvas.toBlob(
+          (blob) => {
+            if (hasResolved) return
+            cleanup()
+            if (blob) {
+              console.log('[DEBUG] generateVideoThumbnail: blob created', blob.size, 'bytes')
+              hasResolved = true
+              resolve(blob)
+            } else {
+              console.error('[DEBUG] Failed to create blob from video frame')
+              hasResolved = true
+              resolve(null)
+            }
+          },
+          'image/jpeg',
+          0.6 // 60% quality
+        )
+      } catch (err) {
+        if (hasResolved) return
+        console.error('[DEBUG] Error generating video thumbnail:', err)
+        cleanup()
+        resolve(null)
+      }
+    }
+
+    video.onerror = () => {
+      if (hasResolved) return
+      console.error('[DEBUG] Error loading video for thumbnail, error:', video.error)
+      cleanup()
+      resolve(null)
+    }
+
+    // Set a longer timeout fallback in case video doesn't load
+    timeoutId = setTimeout(() => {
+      if (!hasResolved) {
+        console.warn('[DEBUG] Video thumbnail generation timeout')
+        cleanup()
+        hasResolved = true
+        resolve(null)
+      }
+    }, 5000)
+    setTimeout(() => {
+      if (video.readyState >= 2) {
+        // HAVE_CURRENT_DATA or better
+        const event = new Event('seeked')
+        video.dispatchEvent(event)
+      } else {
+        console.warn('[DEBUG] Video readyState insufficient for thumbnail')
+        if (!hasResolved) {
+          cleanup()
+          hasResolved = true
+          resolve(null)
+        }
+      }
+    }, 5000)
+  })
 }

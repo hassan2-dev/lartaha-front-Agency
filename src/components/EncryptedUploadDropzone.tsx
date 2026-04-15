@@ -32,6 +32,7 @@ import {
   Close as CloseIcon,
   Pause as PauseIcon,
   PlayArrow as PlayArrowIcon,
+  Minimize as MinimizeIcon,
 } from '@mui/icons-material'
 
 import Uppy from '@uppy/core'
@@ -61,6 +62,7 @@ import {
   requestUploadUrl,
   uploadImageThumbnail,
 } from '../api/uploadApi'
+import { useUpload, type UploadItemState } from '../contexts/UploadContext'
 
 // Build thumbnail key following server naming convention
 function buildImageThumbnailKey(originalKey: string): string {
@@ -82,19 +84,10 @@ export type SelectedUploadFile = {
   encryptionResult?: EncryptionResult | ChunkedEncryptionResult
   uploadFile?: File
   thumbnailUploadFile?: File | null // Encrypted thumbnail to upload separately
+  thumbnailPreviewUrl?: string // URL for thumbnail preview display
 }
 
-export type UploadItemState = {
-  fileKey: string
-  fileId: string
-  relativePath?: string
-  source?: 'uppy' | 'external'
-  status: 'idle' | 'uploading' | 'paused' | 'completed' | 'error'
-  progress: number
-  speed?: number // bytes per second
-  bytesUploaded?: number
-  totalBytes?: number
-}
+// UploadItemState is now imported from UploadContext
 
 interface EncryptedUploadDropzoneProps {
   files: SelectedUploadFile[]
@@ -150,6 +143,18 @@ export default function EncryptedUploadDropzone({
   externalUploadItems,
   currentPath = '',
 }: EncryptedUploadDropzoneProps) {
+  // Use global upload context for persistent state across pages
+  const {
+    uploadItems,
+    setUploadItems,
+    showUploadModal,
+    setShowUploadModal,
+    isMinimized,
+    setIsMinimized,
+    showSuccess,
+    setShowSuccess,
+  } = useUpload()
+
   const [dragOver, setDragOver] = useState(false)
   const [pendingFolderFiles, setPendingFolderFiles] = useState<SelectedUploadFile[] | null>(null)
   const [pendingFolderName, setPendingFolderName] = useState('')
@@ -158,9 +163,8 @@ export default function EncryptedUploadDropzone({
   const [encryptionProgress, setEncryptionProgress] = useState(0)
   const [showUppyDashboard, setShowUppyDashboard] = useState(false)
   const [_currentUploadId, setCurrentUploadId] = useState<string | null>(null)
-  const [uploadItems, setUploadItems] = useState<Record<string, UploadItemState>>({})
   const uppyInstancesRef = useRef<Map<string, Uppy>>(new Map())
-  
+
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const folderInputRef = useRef<HTMLInputElement | null>(null)
   const uppyRef = useRef<Uppy | null>(null)
@@ -271,6 +275,12 @@ export default function EncryptedUploadDropzone({
           ? await encryptThumbnailBlob(rawThumbnailBlob, encryptionPasswordRef.current)
           : null
 
+        // Create a preview URL from the raw thumbnail for display
+        let thumbnailPreviewUrl: string | undefined
+        if (rawThumbnailBlob) {
+          thumbnailPreviewUrl = URL.createObjectURL(rawThumbnailBlob)
+        }
+
         const encryptionResult = await encryptSingleFile(
           sf.file,
           encryptionPasswordRef.current,
@@ -289,13 +299,30 @@ export default function EncryptedUploadDropzone({
             type: 'application/octet-stream',
           })
         } else if (Array.isArray(encryptionResult.encryptedChunks)) {
+          // For very large files, creating a blob from all chunks causes memory exhaustion
+          // Skip encryption to prevent browser crash
+          const MAX_BLOB_SIZE = 200 * 1024 * 1024 // 200MB
+          const estimatedSize = encryptionResult.encryptedChunks.reduce((sum, chunk) => sum + chunk.byteLength, 0)
+          
+          if (estimatedSize > MAX_BLOB_SIZE) {
+            console.warn('[DEBUG] encryptFiles: file too large for in-memory encryption, uploading unencrypted:', sf.relativePath, estimatedSize)
+            encryptedFiles.push({
+              ...sf,
+              encrypted: false,
+              uploadFile: sf.file,
+              thumbnailUploadFile: null,
+              thumbnailPreviewUrl,
+            })
+            continue
+          }
+          
           const blob = new Blob(encryptionResult.encryptedChunks, {
             type: 'application/octet-stream',
           })
           uploadFile = new File([blob], sf.relativePath, { type: 'application/octet-stream' })
         }
 
-        console.log('[DEBUG] encryptFiles: thumbnailBlob for', sf.relativePath, encryptedThumbnailBlob?.size, 'bytes')
+        console.log('[DEBUG] encryptFiles: thumbnailBlob for', sf.relativePath, encryptedThumbnailBlob?.size, 'bytes', 'preview:', thumbnailPreviewUrl)
         encryptedFiles.push({
           ...sf,
           encrypted: true,
@@ -304,6 +331,7 @@ export default function EncryptedUploadDropzone({
           thumbnailUploadFile: encryptedThumbnailBlob
             ? new File([encryptedThumbnailBlob], `thumb_${sf.relativePath}.bin`, { type: 'application/octet-stream' })
             : null,
+          thumbnailPreviewUrl, // Add preview URL for display
         })
       } catch (err) {
         console.error(`Failed to encrypt ${sf.relativePath}:`, err)
@@ -328,12 +356,35 @@ export default function EncryptedUploadDropzone({
         }))
       : selectedFiles
 
+    // Auto-open the upload modal when files are selected
+    if (filesWithPath.length > 0) {
+      setShowUploadModal(true)
+      setIsMinimized(false)
+      setShowSuccess(false)
+    }
+
     // If encryption is enabled and we have a password, encrypt files first
     if (encryptEnabled && encryptionPasswordRef.current) {
       const encrypted = await encryptFiles(filesWithPath)
       onFilesChange(encrypted)
+      // Auto-start upload after encryption
+      for (const file of encrypted) {
+        try {
+          await initUppy(file)
+        } catch (err) {
+          console.error('Upload failed:', err)
+        }
+      }
     } else {
       onFilesChange(filesWithPath)
+      // Auto-start upload without encryption
+      for (const file of filesWithPath) {
+        try {
+          await initUppy(file)
+        } catch (err) {
+          console.error('Upload failed:', err)
+        }
+      }
     }
   }
 
@@ -486,6 +537,11 @@ export default function EncryptedUploadDropzone({
         headers: {
           'Content-Type': dataFile.type || 'application/octet-stream',
         },
+        // S3/R2 returns empty response on successful PUT, so we need to handle that
+        getResponseData: () => {
+          // Return a fake response with the upload URL as the file URL
+          return { url: uploadUrl }
+        },
       })
     }
 
@@ -518,6 +574,10 @@ export default function EncryptedUploadDropzone({
           relativePath: fileToUpload.relativePath,
           source: 'uppy',
           totalBytes: dataFile.size,
+          ...(fileToUpload.thumbnailPreviewUrl ? {
+            thumbnailPreviewUrl: fileToUpload.thumbnailPreviewUrl,
+            'has-thumbnail': true,
+          } : {}),
         },
       }))
     } else {
@@ -570,44 +630,78 @@ export default function EncryptedUploadDropzone({
       })
     })
 
-    uppy.on('complete', async () => {
-      await confirmUpload({
-        uploadId,
-        key: uploadKey,
-        filename: fileToUpload.relativePath,
-        mimeType: dataFile.type || undefined,
-        size: dataFile.size,
-        encryptionEnabled: encryptEnabled,
-        encryptionIv: fileToUpload.encryptionResult?.iv,
-        encryptionSalt: fileToUpload.encryptionResult?.salt,
-      })
+    uppy.on('complete', async (result) => {
+      // Check if upload actually succeeded (failed files will be in result.failed)
+      const hasFailedFiles = result.failed && result.failed.length > 0
+      const hasSuccessfulFiles = result.successful && result.successful.length > 0
 
-      // Upload non-encrypted thumbnail for encrypted images
-      console.log('[DEBUG] thumbnail check:', { hasThumbnailUploadFile: !!fileToUpload.thumbnailUploadFile, isEncrypted: fileToUpload.encrypted, thumbnailFileSize: fileToUpload.thumbnailUploadFile?.size })
-      if (fileToUpload.thumbnailUploadFile && fileToUpload.encrypted) {
-        const thumbnailKey = buildImageThumbnailKey(uploadKey)
-        console.log('[DEBUG] Uploading thumbnail:', { uploadKey, thumbnailKey, hasFile: !!fileToUpload.thumbnailUploadFile, size: fileToUpload.thumbnailUploadFile.size })
-        try {
-          const result = await uploadImageThumbnail(uploadKey, thumbnailKey, fileToUpload.thumbnailUploadFile)
-          console.log('[DEBUG] Thumbnail upload success:', result)
-        } catch (err) {
-          console.error('[DEBUG] Failed to upload thumbnail:', err)
-          // Continue without thumbnail - not critical
+      // Only mark as completed if at least one file succeeded
+      if (hasSuccessfulFiles) {
+        await confirmUpload({
+          uploadId,
+          key: uploadKey,
+          filename: fileToUpload.relativePath,
+          mimeType: dataFile.type || undefined,
+          size: dataFile.size,
+          encryptionEnabled: encryptEnabled,
+          encryptionIv: fileToUpload.encryptionResult?.iv,
+          encryptionSalt: fileToUpload.encryptionResult?.salt,
+        })
+
+        // Upload non-encrypted thumbnail for encrypted images
+        console.log('[DEBUG] thumbnail check:', { hasThumbnailUploadFile: !!fileToUpload.thumbnailUploadFile, isEncrypted: fileToUpload.encrypted, thumbnailFileSize: fileToUpload.thumbnailUploadFile?.size })
+        if (fileToUpload.thumbnailUploadFile && fileToUpload.encrypted) {
+          const thumbnailKey = buildImageThumbnailKey(uploadKey)
+          console.log('[DEBUG] Uploading thumbnail:', { uploadKey, thumbnailKey, hasFile: !!fileToUpload.thumbnailUploadFile, size: fileToUpload.thumbnailUploadFile.size })
+          try {
+            const result = await uploadImageThumbnail(uploadKey, thumbnailKey, fileToUpload.thumbnailUploadFile)
+            console.log('[DEBUG] Thumbnail upload success:', result)
+          } catch (err) {
+            console.error('[DEBUG] Failed to upload thumbnail:', err)
+            // Continue without thumbnail - not critical
+          }
         }
+
+        setUploadItems((prev) => {
+          const existing = prev[fileKey]
+          if (!existing) return prev
+          return {
+            ...prev,
+            [fileKey]: {
+              ...existing,
+              status: 'completed',
+              progress: 100,
+            },
+          }
+        })
+
+        // Check if all uploads are now complete
+        setUploadItems((prev) => {
+          const allItems = Object.values(prev)
+          const completedCount = allItems.filter(item => item.status === 'completed').length
+          const totalCount = allItems.filter(item => item.status !== 'idle').length
+          if (totalCount > 0 && completedCount === totalCount) {
+            setShowSuccess(true)
+          }
+          return prev
+        })
       }
-      
-      setUploadItems((prev) => {
-        const existing = prev[fileKey]
-        if (!existing) return prev
-        return {
-          ...prev,
-          [fileKey]: {
-            ...existing,
-            status: 'completed',
-            progress: 100,
-          },
-        }
-      })
+
+      // Only mark as error if all files failed
+      if (hasFailedFiles && !hasSuccessfulFiles) {
+        setUploadItems((prev) => {
+          const existing = prev[fileKey]
+          if (!existing) return prev
+          return {
+            ...prev,
+            [fileKey]: {
+              ...existing,
+              status: 'error',
+              progress: existing.progress ?? 0,
+            },
+          }
+        })
+      }
 
       setCurrentUploadId(null)
       const current = uppyInstancesRef.current.get(fileKey)
@@ -616,14 +710,7 @@ export default function EncryptedUploadDropzone({
         current.destroy()
       }
 
-      // Clean up completed upload item after 3 seconds
-      setTimeout(() => {
-        setUploadItems((prev) => {
-          const updated = { ...prev }
-          delete updated[fileKey]
-          return updated
-        })
-      }, 3000)
+      // Don't auto-remove completed items - let user see and close them manually
     })
 
     uppy.on('error', (err: Error) => {
@@ -870,12 +957,6 @@ export default function EncryptedUploadDropzone({
     return result
   }, [externalUploadItems, uploadItems, files])
 
-  const hasActiveUploads =
-    Object.values(mergedUploadItems).some(
-      (item) => item.status === 'uploading' || item.status === 'paused' || item.status === 'error'
-    ) ||
-    uppyInstancesRef.current.size > 0
-
   return (
     <>
       <Paper
@@ -936,7 +1017,7 @@ export default function EncryptedUploadDropzone({
 
         {/* Upload Progress Modal */}
         <Dialog
-          open={hasActiveUploads}
+          open={showUploadModal && !isMinimized && Object.keys(mergedUploadItems).length > 0}
           maxWidth="sm"
           fullWidth
           disableEscapeKeyDown
@@ -1000,22 +1081,48 @@ export default function EncryptedUploadDropzone({
               </Box>
               <Box sx={{ flex: 1 }}>
                 <Typography variant="h6" sx={{ color: 'white', fontWeight: 700, mb: 0.5 }}>
-                  جاري رفع الملفات
+                  {showSuccess ? 'تم رفع جميع الملفات بنجاح!' : 'جاري رفع الملفات'}
                 </Typography>
                 <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.8)' }}>
-                  {Object.values(mergedUploadItems).filter(item => item.status === 'completed').length} من {Object.values(mergedUploadItems).length} ملفات اكتملت
+                  {showSuccess ? (
+                    <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Box component="span" sx={{ color: 'success.main', fontSize: '1.2em' }}>✓</Box>
+                      {Object.values(mergedUploadItems).length} من {Object.values(mergedUploadItems).length} ملفات اكتملت
+                    </Box>
+                  ) : (
+                    `${Object.values(mergedUploadItems).filter(item => item.status === 'completed').length} من ${Object.values(mergedUploadItems).length} ملفات اكتملت`
+                  )}
                 </Typography>
               </Box>
               <IconButton
+                onClick={() => setIsMinimized(true)}
+                sx={{
+                  color: 'white',
+                  opacity: 0.8,
+                  '&:hover': {
+                    opacity: 1,
+                    background: 'rgba(255,255,255,0.1)',
+                  },
+                }}
+              >
+                <MinimizeIcon />
+              </IconButton>
+              <IconButton
                 onClick={() => {
-                  // Only allow closing if there are no active uploads (uploading/paused)
-                  const hasActive = Object.values(mergedUploadItems).some(
-                    (item) => item.status === 'uploading' || item.status === 'paused'
+                  // Only allow closing if no active uploads
+                  const hasActiveUploads = Object.values(uploadItems).some(
+                    item => item.status === 'uploading' || item.status === 'paused'
                   )
-                  if (!hasActive) {
-                    // Clear all upload items when closing
-                    setUploadItems({})
+                  if (hasActiveUploads) {
+                    // Minimize instead of closing during active uploads
+                    setIsMinimized(true)
+                    return
                   }
+                  // Allow closing at any time - will clean up completed uploads
+                  setUploadItems({})
+                  setShowUploadModal(false)
+                  setShowSuccess(false)
+                  onFilesChange([])
                 }}
                 sx={{
                   color: 'white',
@@ -1031,108 +1138,146 @@ export default function EncryptedUploadDropzone({
             </Box>
           </Box>
 
-          <DialogContent sx={{ p: 3, pt: 3 }}>
+          <DialogContent sx={{ p: 3, pt: 3, display: isMinimized ? 'none' : 'block' }}>
             <Box>
-              {/* Overall Progress Card */}
-              <Box
-                sx={{
-                  mb: 3,
-                  p: 2.5,
-                  borderRadius: 2,
-                  background: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
-                  border: (theme) => `1px solid ${theme.palette.divider}`,
-                }}
-              >
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 500, opacity: 0.9 }}>
-                    التقدم الإجمالي
-                  </Typography>
-                  <Typography
-                    variant="h6"
+              {/* Success Message - shown when all uploads complete */}
+              {showSuccess && (
+                <Box
+                  sx={{
+                    mb: 3,
+                    p: 3,
+                    borderRadius: 2,
+                    background: (theme) => theme.palette.mode === 'dark' ? 'rgba(76, 175, 80, 0.15)' : 'rgba(76, 175, 80, 0.1)',
+                    border: (theme) => `1px solid ${theme.palette.success.main}`,
+                    textAlign: 'center',
+                  }}
+                >
+                  <Box
                     sx={{
-                      fontWeight: 700,
-                      color: 'primary.main',
-                      fontSize: '1.5rem',
+                      width: 60,
+                      height: 60,
+                      borderRadius: '50%',
+                      backgroundColor: 'success.main',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      mx: 'auto',
+                      mb: 2,
                     }}
                   >
-                    {(() => {
-                      const allItems = Object.values(mergedUploadItems).filter(item => item.status !== 'idle')
-                      if (allItems.length === 0) return '0%'
-                      const avgProgress = Math.round(allItems.reduce((sum, item) => sum + item.progress, 0) / allItems.length)
-                      return `${avgProgress}%`
-                    })()}
+                    <Typography sx={{ color: 'white', fontSize: 28, fontWeight: 700 }}>✓</Typography>
+                  </Box>
+                  <Typography variant="h6" sx={{ color: 'success.main', fontWeight: 700, mb: 1 }}>
+                    تم رفع جميع الملفات بنجاح!
+                  </Typography>
+                  <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                    {Object.values(mergedUploadItems).length} ملفات تم رفعها بنجاح
                   </Typography>
                 </Box>
-                
-                <Box sx={{ position: 'relative' }}>
-                  <LinearProgress
-                    variant="determinate"
-                    value={(() => {
-                      const allItems = Object.values(mergedUploadItems).filter(item => item.status !== 'idle')
-                      if (allItems.length === 0) return 0
-                      return Math.round(allItems.reduce((sum, item) => sum + item.progress, 0) / allItems.length)
-                    })()}
-                    sx={{
-                      height: 10,
-                      borderRadius: 5,
-                      backgroundColor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
-                      '& .MuiLinearProgress-bar': {
-                        borderRadius: 5,
-                        background: (theme) => `linear-gradient(90deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.light} 100%)`,
-                      }
-                    }}
-                  />
-                </Box>
+              )}
 
-                {/* Stats row */}
-                {(() => {
-                  const uploadingItems = Object.values(mergedUploadItems).filter(item => item.status === 'uploading')
-                  const totalSpeed = uploadingItems.reduce((sum, item) => sum + (item.speed || 0), 0)
-                  const totalUploaded = Object.values(mergedUploadItems).reduce((sum, item) => {
-                    if (item.status === 'completed') return sum + (item.totalBytes || 0)
-                    return sum + (item.bytesUploaded || 0)
-                  }, 0)
-                  const totalSize = Object.values(mergedUploadItems).reduce((sum, item) => sum + (item.totalBytes || 0), 0)
+              {/* Overall Progress Card - hidden when complete */}
+              {!showSuccess && (
+                <Box
+                  sx={{
+                    mb: 3,
+                    p: 2.5,
+                    borderRadius: 2,
+                    background: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+                    border: (theme) => `1px solid ${theme.palette.divider}`,
+                  }}
+                >
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 500, opacity: 0.9 }}>
+                      التقدم الإجمالي
+                    </Typography>
+                    <Typography
+                      variant="h6"
+                      sx={{
+                        fontWeight: 700,
+                        color: 'primary.main',
+                        fontSize: '1.5rem',
+                      }}
+                    >
+                      {(() => {
+                        const allItems = Object.values(mergedUploadItems).filter(item => item.status !== 'idle')
+                        if (allItems.length === 0) return '0%'
+                        const avgProgress = Math.round(allItems.reduce((sum, item) => sum + item.progress, 0) / allItems.length)
+                        return `${avgProgress}%`
+                      })()}
+                    </Typography>
+                  </Box>
                   
-                  return (
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2, flexWrap: 'wrap', gap: 1 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Box
-                          sx={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: '50%',
-                            backgroundColor: 'success.main',
-                            animation: 'pulse 2s infinite',
-                            '@keyframes pulse': {
-                              '0%, 100%': { opacity: 1 },
-                              '50%': { opacity: 0.5 },
-                            }
-                          }}
-                        />
-                        <Typography variant="caption" sx={{ opacity: 0.8, fontWeight: 500 }}>
-                          {totalSize > 0 ? `${fmtBytes(totalUploaded)} / ${fmtBytes(totalSize)}` : 'جاري التحضير...'}
-                        </Typography>
+                  <Box sx={{ position: 'relative' }}>
+                    <LinearProgress
+                      variant="determinate"
+                      value={(() => {
+                        const allItems = Object.values(mergedUploadItems).filter(item => item.status !== 'idle')
+                        if (allItems.length === 0) return 0
+                        return Math.round(allItems.reduce((sum, item) => sum + item.progress, 0) / allItems.length)
+                      })()}
+                      sx={{
+                        height: 10,
+                        borderRadius: 5,
+                        backgroundColor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+                        '& .MuiLinearProgress-bar': {
+                          borderRadius: 5,
+                          background: (theme) => `linear-gradient(90deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.light} 100%)`,
+                        }
+                      }}
+                    />
+                  </Box>
+
+                  {/* Stats row */}
+                  {(() => {
+                    const uploadingItems = Object.values(mergedUploadItems).filter(item => item.status === 'uploading')
+                    const totalSpeed = uploadingItems.reduce((sum, item) => sum + (item.speed || 0), 0)
+                    const totalUploaded = Object.values(mergedUploadItems).reduce((sum, item) => {
+                      if (item.status === 'completed') return sum + (item.totalBytes || 0)
+                      return sum + (item.bytesUploaded || 0)
+                    }, 0)
+                    const totalSize = Object.values(mergedUploadItems).reduce((sum, item) => sum + (item.totalBytes || 0), 0)
+                    
+                    return (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2, flexWrap: 'wrap', gap: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Box
+                            sx={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: '50%',
+                              backgroundColor: 'success.main',
+                              animation: 'pulse 2s infinite',
+                              '@keyframes pulse': {
+                                '0%, 100%': { opacity: 1 },
+                                '50%': { opacity: 0.5 },
+                              }
+                            }}
+                          />
+                          <Typography variant="caption" sx={{ opacity: 0.8, fontWeight: 500 }}>
+                            {totalSize > 0 ? `${fmtBytes(totalUploaded)} / ${fmtBytes(totalSize)}` : 'جاري التحضير...'}
+                          </Typography>
+                        </Box>
+                        {totalSpeed > 0 && (
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              color: 'primary.main',
+                              fontWeight: 600,
+                              background: (theme) => `linear-gradient(135deg, ${theme.palette.primary.main}15, ${theme.palette.primary.light}10)`,
+                              px: 1.5,
+                              py: 0.5,
+                              borderRadius: 5,
+                            }}
+                          >
+                            {fmtBytes(totalSpeed)}/ث
+                          </Typography>
+                        )}
                       </Box>
-                      {totalSpeed > 0 && (
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            color: 'primary.main',
-                            fontWeight: 600,
-                            background: (theme) => `linear-gradient(135deg, ${theme.palette.primary.main}15, ${theme.palette.primary.light}10)`,
-                            px: 1.5,
-                            py: 0.5,
-                            borderRadius: 5,
-                          }}
-                        >
-                          {fmtBytes(totalSpeed)}/ث
-                        </Typography>
-                      )}
-                    </Box>
-                  )
-                })()}
-              </Box>
+                    )
+                  })()}
+                </Box>
+              )}
 
               {/* Individual Files List - Thumbnails are hidden (uploaded in background) */}
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
@@ -1168,24 +1313,62 @@ export default function EncryptedUploadDropzone({
                       }}
                     >
                       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 1.5 }}>
-                        {/* File icon/status */}
+                        {/* Thumbnail or File Icon */}
                         <Box
                           sx={{
-                            width: 40,
-                            height: 40,
+                            minWidth: 50,
+                            width: 50,
+                            height: 50,
                             borderRadius: 2,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             flexShrink: 0,
-                            background: item.status === 'completed'
+                            background: item.thumbnailPreviewUrl
+                              ? 'transparent'
+                              : item.status === 'completed'
                               ? (theme) => `linear-gradient(135deg, ${theme.palette.success.main}20, ${theme.palette.success.dark}10)`
                               : item.status === 'error'
                               ? (theme) => `linear-gradient(135deg, ${theme.palette.error.main}20, ${theme.palette.error.dark}10)`
                               : (theme) => `linear-gradient(135deg, ${theme.palette.primary.main}15, ${theme.palette.primary.light}10)`,
+                            overflow: 'hidden',
+                            border: item.thumbnailPreviewUrl ? (theme) => `1px solid ${theme.palette.divider}` : 'none',
+                            position: 'relative',
                           }}
                         >
-                          {item.status === 'completed' ? (
+                          {item.thumbnailPreviewUrl ? (
+                            <>
+                              <Box
+                                component="img"
+                                src={item.thumbnailPreviewUrl}
+                                alt="Thumbnail"
+                                sx={{
+                                  width: '100%',
+                                  height: '100%',
+                                  objectFit: 'cover',
+                                }}
+                              />
+                              {item.status === 'completed' && (
+                                <Box
+                                  sx={{
+                                    position: 'absolute',
+                                    top: 0,
+                                    right: 0,
+                                    width: 20,
+                                    height: 20,
+                                    borderRadius: '50%',
+                                    backgroundColor: 'success.main',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    border: '2px solid white',
+                                  }}
+                                >
+                                  <Typography sx={{ color: 'white', fontSize: 10, fontWeight: 700 }}>✓</Typography>
+                                </Box>
+                              )}
+                            </>
+                          ) : item.status === 'completed' ? (
                             <Box
                               sx={{
                                 width: 20,
@@ -1361,6 +1544,8 @@ export default function EncryptedUploadDropzone({
             </Box>
           </DialogContent>
         </Dialog>
+
+        {/* Note: Minimized upload toast is now handled globally in SideNav */}
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
           <Box sx={{ color: 'primary.main', display: 'flex' }}>

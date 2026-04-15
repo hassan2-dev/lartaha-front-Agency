@@ -5,6 +5,8 @@ import App from './App.tsx'
 import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { AppThemeProvider } from './contexts/ThemeContext'
+import { UploadProvider } from './contexts/UploadContext'
+import { DownloadProvider } from './contexts/DownloadContext'
 import { CssBaseline } from '@mui/material'
 
 createRoot(document.getElementById('root')!).render(
@@ -12,9 +14,13 @@ createRoot(document.getElementById('root')!).render(
     <AppThemeProvider>
       <CssBaseline />
       <AuthProvider>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
+        <UploadProvider>
+          <DownloadProvider>
+            <BrowserRouter>
+              <App />
+            </BrowserRouter>
+          </DownloadProvider>
+        </UploadProvider>
       </AuthProvider>
     </AppThemeProvider>
   </StrictMode>,

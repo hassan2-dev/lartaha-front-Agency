@@ -25,6 +25,7 @@ import {
   Select,
   ListItemIcon,
   Checkbox,
+  LinearProgress,
 } from '@mui/material'
 import FolderIcon from '@mui/icons-material/Folder'
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile'
@@ -32,18 +33,21 @@ import ImageIcon from '@mui/icons-material/Image'
 import VideoFileIcon from '@mui/icons-material/VideoFile'
 import AudioFileIcon from '@mui/icons-material/AudioFile'
 import DescriptionIcon from '@mui/icons-material/Description'
-import ViewListIcon from '@mui/icons-material/ViewList'
-import ViewModuleIcon from '@mui/icons-material/ViewModule'
 import DeleteIcon from '@mui/icons-material/Delete'
 import RestoreIcon from '@mui/icons-material/Restore'
 import CloseIcon from '@mui/icons-material/Close'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
+import PauseIcon from '@mui/icons-material/Pause'
+import MinimizeIcon from '@mui/icons-material/Minimize'
 import DownloadIcon from '@mui/icons-material/Download'
 import LinkIcon from '@mui/icons-material/Link'
 import CheckIcon from '@mui/icons-material/Check'
 import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder'
 import SelectAllIcon from '@mui/icons-material/SelectAll'
 import LockIcon from '@mui/icons-material/Lock'
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import ReplayIcon from '@mui/icons-material/Replay'
 import EncryptedUploadDropzone, { type SelectedUploadFile } from '../components/EncryptedUploadDropzone'
 import EncryptedFileViewer from '../components/EncryptedFileViewer'
 import { useAuth } from '../contexts/AuthContext'
@@ -54,6 +58,9 @@ import { subscribeRealtime } from '../api/realtimeApi'
 import { api } from '../api/http'
 import { FileItemSkeleton, FileItemGridSkeleton, FolderItemSkeleton, FolderItemGridSkeleton } from '../components/SkeletonLoaders'
 import Toast from '../components/Toast'
+import { ServerMinimalistic, Widget } from '@solar-icons/react'
+import { useDownload } from '../contexts/DownloadContext'
+import type { DownloadItem } from '../contexts/DownloadContext'
 
 function fmtBytes(bytes: number | undefined) {
   if (!bytes || !Number.isFinite(bytes) || bytes <= 0) return ''
@@ -1495,35 +1502,452 @@ function CopyLinkButton({ url }: { url: string }) {
   )
 }
 
-async function handleDownload(key: string, filename: string) {
-  try {
-    const base = API_ENV.apiBaseUrl?.trim() || ''
-    const token = localStorage.getItem('larthaa_auth_token')
+// Download progress types — kept for legacy non-encrypted downloads
+// The primary state is now in DownloadContext (DownloadItem)
+type DownloadProgress = DownloadItem
 
-    if (!base) {
-      throw new Error('Missing API base URL')
+const MAX_DOWNLOAD_RETRIES = 3
+
+function formatSpeed(bytesPerSecond: number): string {
+  if (!Number.isFinite(bytesPerSecond) || bytesPerSecond <= 0) return '0 B/s'
+  const units = ['B/s', 'KB/s', 'MB/s', 'GB/s']
+  const idx = Math.min(units.length - 1, Math.floor(Math.log(bytesPerSecond) / Math.log(1024)))
+  const value = bytesPerSecond / Math.pow(1024, idx)
+  return `${value.toFixed(value >= 10 || idx === 0 ? 0 : 1)} ${units[idx]}`
+}
+
+function formatTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '--'
+  if (seconds < 60) return `${Math.round(seconds)} ثانية`
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} دقيقة`
+  return `${Math.floor(seconds / 3600)} ساعة ${Math.floor((seconds % 3600) / 60)} دقيقة`
+}
+
+// Download progress dialog — uses global DownloadContext
+function DownloadProgressDialog() {
+  const theme = useTheme()
+  const isDark = theme.palette.mode === 'dark'
+  const { downloads, updateDownload, removeDownload, clearCompleted, abortControllers, pausedChunks, isMinimized, setIsMinimized, showDialog, setShowDialog } = useDownload()
+
+  const list = Array.from(downloads.values())
+  const activeList = list.filter(d => d.status === 'downloading' || d.status === 'decrypting' || d.status === 'pending' || d.status === 'paused')
+  const completedList = list.filter(d => d.status === 'completed')
+  const failedList = list.filter(d => d.status === 'failed' || d.status === 'cancelled')
+  const allDone = list.length > 0 && list.every(d => d.status !== 'downloading' && d.status !== 'decrypting' && d.status !== 'pending' && d.status !== 'paused')
+
+  const overallProgress = list.length > 0
+    ? Math.round(list.reduce((sum, d) => sum + d.progress, 0) / list.length)
+    : 0
+
+  const handleCancel = (key: string) => {
+    const ac = abortControllers.current.get(key)
+    if (ac) { ac.abort(); abortControllers.current.delete(key) }
+    updateDownload(key, { status: 'cancelled', error: 'تم الإلغاء' })
+  }
+
+  const handlePauseResume = (key: string, current: DownloadProgress) => {
+    if (current.status === 'paused') {
+      // Resume: re-trigger — handlers will pick up pausedChunks and continue with Range
+      const [s3Key, ...filenameParts] = current.key.split(':')
+      const filename = filenameParts.join(':')
+      window.dispatchEvent(new CustomEvent('retry-download', { detail: { key: s3Key, filename } }))
+    } else {
+      // Pause: abort — the download handler's abort branch saves chunks to pausedChunks
+      const ac = abortControllers.current.get(key)
+      if (ac) ac.abort()
+      // Status is set to 'paused' inside the handler's AbortError catch
     }
+  }
 
-    if (!token) {
-      throw new Error('Missing auth token')
+  const handleRetry = (key: string) => {
+    const d = downloads.get(key)
+    if (!d) return
+    removeDownload(key)
+    // Re-trigger download by dispatching a custom event that UploadPage listens to
+    window.dispatchEvent(new CustomEvent('retry-download', { detail: { key: d.key, filename: d.filename } }))
+  }
+
+  if (!showDialog || list.length === 0) return null
+
+  return (
+    <Dialog
+      open={!isMinimized}
+      maxWidth="sm"
+      fullWidth
+      disableEscapeKeyDown
+      onClose={() => setIsMinimized(true)}
+      PaperProps={{
+        sx: {
+          borderRadius: 3,
+          background: (t) => `linear-gradient(145deg, ${t.palette.background.paper} 0%, ${t.palette.background.default} 100%)`,
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+          overflow: 'hidden',
+        }
+      }}
+    >
+      {/* Gradient header */}
+      <Box
+        sx={{
+          background: (t) => `linear-gradient(135deg, ${t.palette.info.dark} 0%, ${t.palette.info.main} 100%)`,
+          p: 3,
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Decorative circles */}
+        <Box sx={{ position: 'absolute', top: -20, right: -20, width: 100, height: 100, borderRadius: '50%', background: 'rgba(255,255,255,0.1)' }} />
+        <Box sx={{ position: 'absolute', bottom: -30, left: -30, width: 80, height: 80, borderRadius: '50%', background: 'rgba(255,255,255,0.05)' }} />
+
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, position: 'relative', zIndex: 1 }}>
+          <Box sx={{ width: 56, height: 56, borderRadius: 2.5, background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+            <DownloadIcon sx={{ fontSize: 28, color: 'white' }} />
+          </Box>
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="h6" sx={{ color: 'white', fontWeight: 700, mb: 0.5 }}>
+              {allDone ? 'اكتملت التنزيلات!' : 'جاري التنزيل'}
+            </Typography>
+            <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.8)' }}>
+              {completedList.length} من {list.length} ملفات اكتملت
+            </Typography>
+          </Box>
+          <IconButton onClick={() => setIsMinimized(true)} sx={{ color: 'white', opacity: 0.8, '&:hover': { opacity: 1, background: 'rgba(255,255,255,0.1)' } }}>
+            <MinimizeIcon />
+          </IconButton>
+          <IconButton
+            onClick={() => {
+              clearCompleted()
+              if (list.every(d => d.status === 'completed' || d.status === 'failed' || d.status === 'cancelled')) {
+                setShowDialog(false)
+              } else {
+                setIsMinimized(true)
+              }
+            }}
+            sx={{ color: 'white', opacity: 0.8, '&:hover': { opacity: 1, background: 'rgba(255,255,255,0.1)' } }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </Box>
+      </Box>
+
+      <DialogContent sx={{ p: 3 }}>
+        {/* Overall progress */}
+        {!allDone && (
+          <Box sx={{ mb: 3, p: 2.5, borderRadius: 2, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', border: (t) => `1px solid ${t.palette.divider}` }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="body2" sx={{ fontWeight: 500, opacity: 0.9 }}>التقدم الإجمالي</Typography>
+              <Typography variant="h6" sx={{ fontWeight: 700, color: 'info.main', fontSize: '1.5rem' }}>{overallProgress}%</Typography>
+            </Box>
+            <LinearProgress
+              variant="determinate"
+              value={overallProgress}
+              sx={{ height: 10, borderRadius: 5, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', '& .MuiLinearProgress-bar': { borderRadius: 5, background: (t) => `linear-gradient(90deg, ${t.palette.info.main} 0%, ${t.palette.info.light} 100%)` } }}
+            />
+          </Box>
+        )}
+
+        {/* All done success banner */}
+        {allDone && (
+          <Box sx={{ mb: 3, p: 3, borderRadius: 2, background: isDark ? 'rgba(76,175,80,0.15)' : 'rgba(76,175,80,0.1)', border: (t) => `1px solid ${t.palette.success.main}`, textAlign: 'center' }}>
+            <Box sx={{ width: 60, height: 60, borderRadius: '50%', backgroundColor: 'success.main', display: 'flex', alignItems: 'center', justifyContent: 'center', mx: 'auto', mb: 2 }}>
+              <Typography sx={{ color: 'white', fontSize: 28, fontWeight: 700 }}>✓</Typography>
+            </Box>
+            <Typography variant="h6" sx={{ color: 'success.main', fontWeight: 700 }}>اكتملت جميع التنزيلات!</Typography>
+          </Box>
+        )}
+
+        {/* Active / paused downloads */}
+        <Box sx={{ maxHeight: 320, overflow: 'auto', borderRadius: 2, border: (t) => `1px solid ${t.palette.divider}` }}>
+          {activeList.map((download, idx) => {
+            const remaining = download.speed > 0 ? (download.totalBytes - download.bytesDownloaded) / download.speed : 0
+            const eta = download.progress < 100 && download.speed > 0 ? formatTime(remaining) : ''
+            const isDecrypting = download.status === 'decrypting'
+            const isPaused = download.status === 'paused'
+
+            return (
+              <Box
+                key={download.key}
+                sx={{
+                  p: 2,
+                  borderBottom: idx < activeList.length - 1 ? (t) => `1px solid ${t.palette.divider}` : 'none',
+                  background: isPaused ? (isDark ? 'rgba(255,152,0,0.06)' : 'rgba(255,152,0,0.04)') : 'transparent',
+                  transition: 'background-color 0.2s',
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 1.5 }}>
+                  {/* Icon */}
+                  <Box sx={{ width: 40, height: 40, borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: isPaused ? 'rgba(255,152,0,0.15)' : (t) => `${t.palette.info.main}15` }}>
+                    {isPaused ? <PauseIcon sx={{ fontSize: 20, color: 'warning.main' }} /> : <DownloadIcon sx={{ fontSize: 20, color: 'info.main' }} />}
+                  </Box>
+
+                  {/* Info */}
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5, wordBreak: 'break-word', lineHeight: 1.4 }}>
+                      {download.filename}
+                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+                      {download.totalBytes > 0 && (
+                        <Typography variant="caption" sx={{ opacity: 0.6 }}>
+                          {fmtBytes(download.bytesDownloaded)} / {fmtBytes(download.totalBytes)}
+                        </Typography>
+                      )}
+                      {!isDecrypting && download.speed > 0 && (
+                        <Typography variant="caption" sx={{ color: 'info.main', fontWeight: 500 }}>
+                          {formatSpeed(download.speed)}
+                        </Typography>
+                      )}
+                      <Typography variant="caption" sx={{ fontWeight: 600, color: isPaused ? 'warning.main' : isDecrypting ? 'secondary.main' : 'info.main' }}>
+                        {isPaused ? 'متوقف' : isDecrypting ? `فك تشفير ${download.decryptionProgress ?? download.progress}%` : `${download.progress}%`}
+                      </Typography>
+                      {eta && !isPaused && (
+                        <Typography variant="caption" sx={{ opacity: 0.6 }}>المتبقي: {eta}</Typography>
+                      )}
+                    </Box>
+                  </Box>
+
+                  {/* Controls */}
+                  {!isDecrypting && (
+                    <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+                      <Tooltip title={isPaused ? 'استئناف' : 'إيقاف مؤقت'}>
+                        <IconButton
+                          size="small"
+                          onClick={() => handlePauseResume(download.key, download)}
+                          sx={{ width: 32, height: 32, color: isPaused ? 'success.main' : 'warning.main', backgroundColor: isPaused ? 'rgba(76,175,80,0.12)' : 'rgba(255,152,0,0.12)', '&:hover': { backgroundColor: isPaused ? 'rgba(76,175,80,0.22)' : 'rgba(255,152,0,0.22)' } }}
+                        >
+                          {isPaused ? <PlayArrowIcon sx={{ fontSize: 18 }} /> : <PauseIcon sx={{ fontSize: 18 }} />}
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="إلغاء">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleCancel(download.key)}
+                          sx={{ width: 32, height: 32, color: 'error.main', backgroundColor: 'rgba(244,67,54,0.12)', '&:hover': { backgroundColor: 'rgba(244,67,54,0.22)' } }}
+                        >
+                          <CloseIcon sx={{ fontSize: 18 }} />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  )}
+                </Box>
+
+                {/* Progress bar */}
+                <Box sx={{ ml: 7 }}>
+                  <LinearProgress
+                    variant="determinate"
+                    value={isDecrypting ? (download.decryptionProgress ?? download.progress) : download.progress}
+                    sx={{
+                      height: 6, borderRadius: 3,
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                      '& .MuiLinearProgress-bar': {
+                        borderRadius: 3,
+                        background: isPaused
+                          ? (t) => `linear-gradient(90deg, ${t.palette.warning.main} 0%, ${t.palette.warning.light} 100%)`
+                          : isDecrypting
+                          ? (t) => `linear-gradient(90deg, ${t.palette.secondary.main} 0%, ${t.palette.secondary.light} 100%)`
+                          : (t) => `linear-gradient(90deg, ${t.palette.info.main} 0%, ${t.palette.info.light} 100%)`,
+                      }
+                    }}
+                  />
+                </Box>
+              </Box>
+            )
+          })}
+
+          {/* Completed */}
+          {completedList.map((download) => (
+            <Box key={download.key} sx={{ p: 2, background: isDark ? 'rgba(76,175,80,0.08)' : 'rgba(76,175,80,0.04)', display: 'flex', alignItems: 'center', gap: 2, borderBottom: (t) => `1px solid ${t.palette.divider}` }}>
+              <Box sx={{ width: 40, height: 40, borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: 'rgba(76,175,80,0.15)' }}>
+                <CheckCircleIcon sx={{ fontSize: 20, color: 'success.main' }} />
+              </Box>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="body2" sx={{ fontWeight: 500, wordBreak: 'break-word' }}>{download.filename}</Typography>
+                <Typography variant="caption" sx={{ opacity: 0.6 }}>
+                  اكتمل • {download.totalBytes > 0 ? fmtBytes(download.totalBytes) : ''}
+                  {download.speed > 0 ? ` • ${formatSpeed(download.speed)}` : ''}
+                </Typography>
+              </Box>
+              <Tooltip title="إزالة">
+                <IconButton size="small" onClick={() => removeDownload(download.key)} sx={{ color: 'text.secondary' }}>
+                  <CloseIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          ))}
+
+          {/* Failed / cancelled */}
+          {failedList.map((download) => (
+            <Box key={download.key} sx={{ p: 2, background: isDark ? 'rgba(244,67,54,0.08)' : 'rgba(244,67,54,0.04)', display: 'flex', alignItems: 'center', gap: 2, borderBottom: (t) => `1px solid ${t.palette.divider}` }}>
+              <Box sx={{ width: 40, height: 40, borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: 'rgba(244,67,54,0.15)' }}>
+                <ErrorOutlineIcon sx={{ fontSize: 20, color: 'error.main' }} />
+              </Box>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="body2" sx={{ fontWeight: 500, wordBreak: 'break-word' }}>{download.filename}</Typography>
+                <Typography variant="caption" sx={{ color: 'error.main', opacity: 0.9 }}>{download.error || 'فشل التنزيل'}</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                {download.status !== 'cancelled' && download.retries < MAX_DOWNLOAD_RETRIES && (
+                  <Tooltip title="إعادة المحاولة">
+                    <IconButton size="small" onClick={() => handleRetry(download.key)} sx={{ color: 'warning.main' }}>
+                      <ReplayIcon sx={{ fontSize: 18 }} />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                <Tooltip title="إزالة">
+                  <IconButton size="small" onClick={() => removeDownload(download.key)} sx={{ color: 'text.secondary' }}>
+                    <CloseIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+            </Box>
+          ))}
+        </Box>
+      </DialogContent>
+
+      {allDone && (
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => { clearCompleted(); setShowDialog(false) }} variant="contained" color="info" sx={{ borderRadius: 999 }}>
+            إغلاق
+          </Button>
+        </DialogActions>
+      )}
+    </Dialog>
+  )
+}
+
+// Download progress tracking functions - must be used within component context
+export default function UploadPage() {
+  const { user } = useAuth()
+
+  // Download progress — backed by global DownloadContext
+  const { addDownload, updateDownload, downloads, abortControllers, pausedChunks } = useDownload()
+
+  // Non-encrypted direct download with AbortController + streaming progress + pause/resume via Range
+  const handleDownload = useCallback(async (key: string, filename: string, retryCount = 0) => {
+    const downloadKey = `${key}:${filename}`
+    const base = API_ENV.apiBaseUrl?.trim() || ''
+    const token = localStorage.getItem(TOKEN_STORAGE_KEY)
+
+    if (!base || !token) {
+      addDownload({ key: downloadKey, filename, status: 'failed', progress: 0, bytesDownloaded: 0, totalBytes: 0, speed: 0, startTime: Date.now(), error: !base ? 'Missing API base URL' : 'Missing auth token', retries: retryCount })
+      return
     }
 
     const normalized = base.endsWith('/') ? base.slice(0, -1) : base
     const downloadUrl = `${normalized}/api/download/direct?key=${encodeURIComponent(key)}&token=${encodeURIComponent(token)}`
-    const a = document.createElement('a')
-    a.href = downloadUrl
-    a.download = filename
-    a.rel = 'noreferrer'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-  } catch (error) {
-    console.error('Download error:', error)
-  }
-}
 
-export default function UploadPage() {
-  const { user } = useAuth()
+    // Check if we have saved chunks from a previous pause
+    const saved = pausedChunks.current.get(downloadKey)
+    const resumeFrom = saved ? saved.bytesDownloaded : 0
+    const chunks: ArrayBuffer[] = saved ? [...saved.chunks] : []
+    let bytesDownloaded = resumeFrom
+
+    // Remove saved state now that we're resuming
+    pausedChunks.current.delete(downloadKey)
+
+    const ac = new AbortController()
+    abortControllers.current.set(downloadKey, ac)
+
+    // If resuming, update existing entry; otherwise add fresh
+    if (saved) {
+      updateDownload(downloadKey, { status: 'downloading', speed: 0 })
+    } else {
+      addDownload({ key: downloadKey, filename, status: 'downloading', progress: 0, bytesDownloaded: 0, totalBytes: 0, speed: 0, startTime: Date.now(), retries: retryCount })
+    }
+
+    let lastBytesReported = bytesDownloaded
+    let lastSpeedCheckTime = Date.now()
+    let lastSpeed = 0
+    let speedSampleCount = 0
+
+    const tickProgress = (downloaded: number, totalBytes: number) => {
+      const now = Date.now()
+      const timeDiff = (now - lastSpeedCheckTime) / 1000
+      if (timeDiff >= 0.4) {
+        const diff = downloaded - lastBytesReported
+        if (diff > 0) {
+          lastSpeed = diff / timeDiff
+          lastBytesReported = downloaded
+          lastSpeedCheckTime = now
+          speedSampleCount++
+        }
+      }
+      const progress = totalBytes > 0 ? Math.round((downloaded / totalBytes) * 100) : 0
+      updateDownload(downloadKey, { bytesDownloaded: downloaded, totalBytes, progress, speed: speedSampleCount > 0 ? lastSpeed : 0 })
+    }
+
+    try {
+      const headers: Record<string, string> = {}
+      if (resumeFrom > 0) headers['Range'] = `bytes=${resumeFrom}-`
+
+      const response = await fetch(downloadUrl, { signal: ac.signal, headers })
+      if (!response.ok && response.status !== 206) throw new Error(`Download failed: ${response.status} ${response.statusText}`)
+
+      const contentLength = response.headers.get('content-length')
+      const rangeTotal = response.headers.get('content-range')?.match(/\/([0-9]+)$/)?.[1]
+      const totalBytes = rangeTotal ? parseInt(rangeTotal, 10) : (contentLength ? resumeFrom + parseInt(contentLength, 10) : 0)
+
+      if (!response.body) {
+        const blob = await response.blob()
+        chunks.push(await blob.arrayBuffer())
+        const finalBlob = new Blob(chunks)
+        const url = URL.createObjectURL(finalBlob)
+        const a = document.createElement('a')
+        a.href = url; a.download = filename
+        document.body.appendChild(a); a.click(); document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        updateDownload(downloadKey, { status: 'completed', progress: 100, bytesDownloaded: finalBlob.size, totalBytes: finalBlob.size })
+        abortControllers.current.delete(downloadKey)
+        return
+      }
+
+      const reader = response.body.getReader()
+
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        if (ac.signal.aborted) {
+          // Paused — save what we have so far
+          reader.cancel()
+          chunks.push(value.buffer)
+          bytesDownloaded += value.length
+          pausedChunks.current.set(downloadKey, { chunks, bytesDownloaded, totalBytes, isEncrypted: false, s3Key: key })
+          updateDownload(downloadKey, { status: 'paused', bytesDownloaded, totalBytes })
+          abortControllers.current.delete(downloadKey)
+          return
+        }
+        chunks.push(value.buffer)
+        bytesDownloaded += value.length
+        tickProgress(bytesDownloaded, totalBytes)
+      }
+
+      const blob = new Blob(chunks)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = filename
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+
+      const elapsed = (Date.now() - (downloads.get(downloadKey)?.startTime ?? Date.now())) / 1000
+      updateDownload(downloadKey, { status: 'completed', progress: 100, bytesDownloaded, totalBytes, speed: elapsed > 0 ? bytesDownloaded / elapsed : 0 })
+      abortControllers.current.delete(downloadKey)
+    } catch (error) {
+      abortControllers.current.delete(downloadKey)
+      if ((error as Error).name === 'AbortError') {
+        // Aborted without reaching the read loop (e.g. paused during fetch itself)
+        pausedChunks.current.set(downloadKey, { chunks, bytesDownloaded, totalBytes: downloads.get(downloadKey)?.totalBytes ?? 0, isEncrypted: false, s3Key: key })
+        updateDownload(downloadKey, { status: 'paused', bytesDownloaded })
+        return
+      }
+
+      const errorMessage = error instanceof Error ? error.message : 'Download failed'
+      if (retryCount < MAX_DOWNLOAD_RETRIES) {
+        console.warn(`Download failed, retrying (${retryCount + 1}/${MAX_DOWNLOAD_RETRIES}):`, errorMessage)
+        setTimeout(() => { void handleDownload(key, filename, retryCount + 1) }, 1000 * (retryCount + 1))
+        return
+      }
+      updateDownload(downloadKey, { status: 'failed', error: errorMessage })
+    }
+  }, [addDownload, updateDownload, downloads, abortControllers, pausedChunks])
 
   const [selectedFiles, setSelectedFiles] = useState<SelectedUploadFile[]>([])
   const [encryptionPassword, setEncryptionPassword] = useState<string>('')
@@ -1595,6 +2019,178 @@ export default function UploadPage() {
     setToastMessage('')
   }, [])
 
+  // Create handleDownloadFile that wraps handleDownload for encrypted files
+  const handleDownloadFile = useCallback(async (key: string, filename: string) => {
+    const fileMeta = filesHere.find(file => file.key === key)
+    if (fileMeta?.encryptionEnabled && fileMeta.fileId && fileMeta.encryptionIv && fileMeta.encryptionSalt) {
+      const downloadKey = `${key}:${filename}`
+
+      // Check for paused state with saved chunks
+      const saved = pausedChunks.current.get(downloadKey)
+      const resumeFrom = saved ? saved.bytesDownloaded : 0
+      const chunks: ArrayBuffer[] = saved ? [...saved.chunks] : []
+      let bytesDownloaded = resumeFrom
+      pausedChunks.current.delete(downloadKey)
+
+      const ac = new AbortController()
+      abortControllers.current.set(downloadKey, ac)
+
+      if (saved) {
+        // Resuming — update existing entry
+        updateDownload(downloadKey, { status: 'downloading', speed: 0 })
+      } else {
+        addDownload({
+          key: downloadKey,
+          filename,
+          status: 'downloading',
+          progress: 0,
+          bytesDownloaded: 0,
+          totalBytes: fileMeta.size || 0,
+          speed: 0,
+          startTime: Date.now(),
+          retries: 0,
+          isEncrypted: true,
+        })
+      }
+
+      try {
+        const CLIENT_KEY_CACHE = 'file_encryption_password'
+        const encryptionKey = sessionStorage.getItem(CLIENT_KEY_CACHE)
+        if (!encryptionKey) throw new Error('Missing encryption key — please re-enter your password')
+
+        // Always get a fresh pre-signed URL (they expire)
+        const { getDownloadUrl } = await import('../api/uploadApi')
+        const result = await getDownloadUrl(fileMeta.fileId)
+        if (!result.ok || !result.url) throw new Error('Failed to get download URL')
+
+        if (ac.signal.aborted) return
+
+        // --- Streaming download phase with pause/resume support ---
+        const reqHeaders: Record<string, string> = {}
+        // S3 pre-signed URLs generally don't support Range, but we try anyway;
+        // if the server returns 206 we resume, otherwise we restart from 0
+        if (resumeFrom > 0) reqHeaders['Range'] = `bytes=${resumeFrom}-`
+
+        const response = await fetch(result.url, { signal: ac.signal, headers: reqHeaders })
+
+        // If Range was rejected (200 instead of 206), we must re-download from start
+        if (response.status === 200 && resumeFrom > 0) {
+          chunks.length = 0
+          bytesDownloaded = 0
+        } else if (!response.ok && response.status !== 206) {
+          throw new Error(`HTTP ${response.status}`)
+        }
+
+        const contentLength = response.headers.get('content-length')
+        const rangeTotal = response.headers.get('content-range')?.match(/\/([0-9]+)$/)?.[1]
+        const totalBytes = rangeTotal
+          ? parseInt(rangeTotal, 10)
+          : (contentLength ? resumeFrom + parseInt(contentLength, 10) : (fileMeta.size || 0))
+
+        let lastBytes = bytesDownloaded
+        let lastTime = Date.now()
+        let lastSpeed = 0
+
+        if (response.body) {
+          const reader = response.body.getReader()
+          // eslint-disable-next-line no-constant-condition
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            if (ac.signal.aborted) {
+              // Paused — save collected chunks so we can resume
+              reader.cancel()
+              chunks.push(value.buffer)
+              bytesDownloaded += value.length
+              pausedChunks.current.set(downloadKey, {
+                chunks, bytesDownloaded, totalBytes,
+                isEncrypted: true,
+                encryptedUrl: result.url,
+              })
+              updateDownload(downloadKey, { status: 'paused', bytesDownloaded, totalBytes, speed: 0 })
+              abortControllers.current.delete(downloadKey)
+              return
+            }
+            chunks.push(value.buffer)
+            bytesDownloaded += value.length
+            const now = Date.now()
+            const dt = (now - lastTime) / 1000
+            if (dt >= 0.4) {
+              lastSpeed = (bytesDownloaded - lastBytes) / dt
+              lastBytes = bytesDownloaded
+              lastTime = now
+            }
+            const progress = totalBytes > 0 ? Math.round((bytesDownloaded / totalBytes) * 100) : 0
+            updateDownload(downloadKey, { bytesDownloaded, totalBytes, progress, speed: lastSpeed })
+          }
+        } else {
+          // Fallback — no streaming
+          const arrayBuf = await response.arrayBuffer()
+          chunks.push(arrayBuf)
+          bytesDownloaded += arrayBuf.byteLength
+        }
+
+        if (ac.signal.aborted) {
+          // Paused during non-streaming fallback
+          pausedChunks.current.set(downloadKey, {
+            chunks, bytesDownloaded, totalBytes: fileMeta.size || bytesDownloaded,
+            isEncrypted: true, encryptedUrl: result.url,
+          })
+          updateDownload(downloadKey, { status: 'paused', bytesDownloaded, speed: 0 })
+          abortControllers.current.delete(downloadKey)
+          return
+        }
+
+        // --- Decryption phase ---
+        updateDownload(downloadKey, { status: 'decrypting', progress: 0, speed: 0, decryptionProgress: 0 })
+
+        const { downloadAndDecryptStream } = await import('../lib/encryption')
+        const encBlob = new Blob(chunks, { type: 'application/octet-stream' })
+        const encBlobUrl = URL.createObjectURL(encBlob)
+
+        const decryptedBlob = await downloadAndDecryptStream(
+          encBlobUrl,
+          fileMeta.encryptionIv,
+          fileMeta.encryptionSalt,
+          encryptionKey,
+          fileMeta.size || encBlob.size,
+          (pct) => updateDownload(downloadKey, { decryptionProgress: pct, progress: pct }),
+          fileMeta.fileId,
+          fileMeta.mimeType,
+          filename
+        )
+        URL.revokeObjectURL(encBlobUrl)
+
+        const url = URL.createObjectURL(decryptedBlob)
+        const a = document.createElement('a')
+        a.href = url; a.download = filename; a.rel = 'noreferrer'
+        document.body.appendChild(a); a.click(); document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+
+        const elapsed = (Date.now() - (downloads.get(downloadKey)?.startTime ?? Date.now())) / 1000
+        updateDownload(downloadKey, { status: 'completed', progress: 100, decryptionProgress: 100, speed: elapsed > 0 ? bytesDownloaded / elapsed : 0, totalBytes: bytesDownloaded })
+        abortControllers.current.delete(downloadKey)
+      } catch (error) {
+        abortControllers.current.delete(downloadKey)
+        if ((error as Error).name === 'AbortError') {
+          // Aborted before the read loop — save what we have
+          pausedChunks.current.set(downloadKey, {
+            chunks, bytesDownloaded, totalBytes: downloads.get(downloadKey)?.totalBytes ?? (fileMeta.size || 0),
+            isEncrypted: true,
+          })
+          updateDownload(downloadKey, { status: 'paused', bytesDownloaded, speed: 0 })
+          return
+        }
+        console.error('Download encrypted file error:', error)
+        updateDownload(downloadKey, { status: 'failed', error: error instanceof Error ? error.message : 'فشل في فك التشفير' })
+      }
+      return
+    }
+
+    // Non-encrypted file - use regular download with progress tracking
+    void handleDownload(key, filename)
+  }, [filesHere, handleDownload, addDownload, updateDownload, downloads, abortControllers, pausedChunks])
+
   // Filtered and sorted files
   const filteredAndSortedFiles = useMemo(() => {
     const filtered = filterFiles(filesHere)
@@ -1613,6 +2209,16 @@ export default function UploadPage() {
       setHasTriggeredUpload(false)
     }
   }, [canUpload, selectedFiles.length, hasTriggeredUpload])
+
+  // Listen for retry-download events dispatched from DownloadProgressDialog
+  useEffect(() => {
+    const onRetry = (e: Event) => {
+      const { key, filename } = (e as CustomEvent<{ key: string; filename: string }>).detail
+      void handleDownloadFile(key.split(':')[0], filename)
+    }
+    window.addEventListener('retry-download', onRetry)
+    return () => window.removeEventListener('retry-download', onRetry)
+  }, [handleDownloadFile])
 
   useEffect(() => {
     const workspaceId = user?.workspaceId?.trim()
@@ -1978,64 +2584,6 @@ export default function UploadPage() {
     setEncryptedViewerFile(null)
   }
 
-  async function handleDownloadFile(key: string, filename: string) {
-    const fileMeta = filesHere.find(file => file.key === key)
-    if (fileMeta?.encryptionEnabled && fileMeta.fileId && fileMeta.encryptionIv && fileMeta.encryptionSalt) {
-      try {
-        // Show loading notification
-        showToastNotification('جاري تحميل وفك تشفير الملف...', 'info')
-        
-        // Get client-only key from sessionStorage
-        const CLIENT_KEY_CACHE = 'file_encryption_password'
-        const encryptionKey = sessionStorage.getItem(CLIENT_KEY_CACHE)
-        if (!encryptionKey) {
-          throw new Error('Missing encryption key')
-        }
-        
-        // Get download URL for the encrypted file
-        const { getDownloadUrl } = await import('../api/uploadApi')
-        const result = await getDownloadUrl(fileMeta.fileId)
-        
-        if (!result.ok || !result.url) {
-          throw new Error('Failed to get download URL')
-        }
-        
-        // Download and decrypt the file
-        const { downloadAndDecryptStream } = await import('../lib/encryption')
-        const decryptedBlob = await downloadAndDecryptStream(
-          result.url,
-          fileMeta.encryptionIv,
-          fileMeta.encryptionSalt,
-          encryptionKey,
-          fileMeta.size || 0,
-          undefined,
-          fileMeta.fileId,
-          fileMeta.mimeType,
-          filename
-        )
-        
-        // Create download link for decrypted file
-        const url = URL.createObjectURL(decryptedBlob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = filename
-        a.rel = 'noreferrer'
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-        
-        showToastNotification('تم تحميل الملف بنجاح', 'success')
-      } catch (error) {
-        console.error('Download encrypted file error:', error)
-        showToastNotification('فشل في تحميل الملف المشفر', 'error')
-      }
-      return
-    }
-
-    void handleDownload(key, filename)
-  }
-
   // Folder creation functions
   async function handleCreateFolder() {
     const trimmedName = newFolderName.trim()
@@ -2169,7 +2717,7 @@ export default function UploadPage() {
   // Folder download function with polling for prebuilt ZIP
   async function handleDownloadFolder(folderPath: string) {
     try {
-      const token = localStorage.getItem('larthaa_auth_token')
+      const token = localStorage.getItem(TOKEN_STORAGE_KEY)
       const baseUrl = API_ENV.apiBaseUrl?.trim() || ''
 
       if (!token) {
@@ -2586,7 +3134,7 @@ export default function UploadPage() {
                   disabled={uploading || loadingExplorer}
                   sx={{ borderRadius: 999, minWidth: 'auto', p: 1 }}
                 >
-                  <ViewListIcon />
+                  <ServerMinimalistic weight={"BoldDuotone"} size={24} />
                 </Button>
               </Tooltip>
               <Tooltip title="عرض شبكة">
@@ -2596,7 +3144,7 @@ export default function UploadPage() {
                   disabled={uploading || loadingExplorer}
                   sx={{ borderRadius: 999, minWidth: 'auto', p: 1 }}
                 >
-                  <ViewModuleIcon />
+                  <Widget weight={"BoldDuotone"} size={24} />
                 </Button>
               </Tooltip>
               <Button
@@ -3187,6 +3735,9 @@ export default function UploadPage() {
           onClose={closeToast}
         />
       )}
+
+      {/* Download Progress Dialog — rendered from global DownloadContext */}
+      <DownloadProgressDialog />
     </Box>
   )
 }
