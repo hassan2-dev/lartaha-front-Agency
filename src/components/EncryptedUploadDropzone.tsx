@@ -1,13 +1,3 @@
-/**
- * Enhanced Upload Dropzone with Uppy and E2E Encryption
- *
- * Supports:
- * - Chunked uploads via tus protocol
- * - Pause/resume for large files
- * - End-to-end encryption with user password
- * - Progress tracking
- */
-
 import React, { useEffect, useRef, useState, useCallback, type ChangeEvent } from 'react'
 
 import {
