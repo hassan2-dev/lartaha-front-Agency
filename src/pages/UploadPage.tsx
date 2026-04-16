@@ -281,7 +281,7 @@ function ImageThumbnail({
     const apiPrefix = `${apiBaseNormalized}/api/image/`
     // For direct R2/public URLs (not /api/image/ paths), use the URL directly
     if (!displayUrl.startsWith(apiPrefix)) {
-      setProtectedThumbnailUrl(null)
+      setProtectedThumbnailUrl(displayUrl)
       return
     }
 
@@ -492,7 +492,7 @@ function VideoThumbnail({
     const apiPrefix = `${apiBaseNormalized}/api/image/`
     // For direct R2/public URLs (not /api/image/ paths), use the URL directly
     if (!displayUrl.startsWith(apiPrefix)) {
-      setProtectedThumbnailUrl(null)
+      setProtectedThumbnailUrl(displayUrl)
       return
     }
 
