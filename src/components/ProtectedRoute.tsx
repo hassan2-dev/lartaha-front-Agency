@@ -17,4 +17,3 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   if (!token) return <Navigate to="/login" replace />
   return children
 }
-

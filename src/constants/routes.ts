@@ -21,13 +21,7 @@ export const ROUTES = {
   },
 
   // Route groups
-  PUBLIC: [
-    '/',
-    '/login',
-    '/register',
-    '/signup',
-    '/invite/:token?',
-  ],
+  PUBLIC: ['/', '/login', '/register', '/signup', '/invite/:token?'],
 
   AUTHENTICATED: [
     '/dashboard',
@@ -40,9 +34,7 @@ export const ROUTES = {
     '/dashboard/profile',
   ],
 
-  ADMIN_ONLY: [
-    '/dashboard/teams',
-  ],
+  ADMIN_ONLY: ['/dashboard/teams'],
 } as const
 
 // Navigation items for SideNav
@@ -63,4 +55,4 @@ export const ROUTE_GUARDS = {
   ADMIN: 'admin',
 } as const
 
-export type RouteGuard = typeof ROUTE_GUARDS[keyof typeof ROUTE_GUARDS]
+export type RouteGuard = (typeof ROUTE_GUARDS)[keyof typeof ROUTE_GUARDS]

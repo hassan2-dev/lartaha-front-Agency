@@ -24,25 +24,24 @@ export default function MentionDialog({
   bootstrap,
   onAddMention,
 }: MentionDialogProps) {
-  const mentionOptions = mentionType === 'task'
-    ? bootstrap.tasks.map((t) => ({
-        id: t.id,
-        label: t.title,
-      }))
-    : bootstrap.files.map((f) => ({
-        id: f.id,
-        label: f.name,
-      }))
+  const mentionOptions =
+    mentionType === 'task'
+      ? bootstrap.tasks.map(t => ({
+          id: t.id,
+          label: t.title,
+        }))
+      : bootstrap.files.map(f => ({
+          id: f.id,
+          label: f.name,
+        }))
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>
-        {mentionType === 'task' ? 'إضافة تاق مهمة' : 'إضافة تاق ملف'}
-      </DialogTitle>
+      <DialogTitle>{mentionType === 'task' ? 'إضافة تاق مهمة' : 'إضافة تاق ملف'}</DialogTitle>
       <DialogContent>
         <Stack spacing={1.5} sx={{ mt: 1 }}>
           <Stack sx={{ maxHeight: 260, overflowY: 'auto' }} spacing={0.75}>
-            {mentionOptions.map((option) => (
+            {mentionOptions.map(option => (
               <Button
                 key={`${mentionType}_${option.id}`}
                 variant="outlined"

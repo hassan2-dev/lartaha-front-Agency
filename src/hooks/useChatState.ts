@@ -25,7 +25,7 @@ export function useChatState() {
   return {
     // Refs
     fileInputRef,
-    
+
     // State
     bootstrap,
     conversations,
@@ -42,7 +42,7 @@ export function useChatState() {
     mentionDialogOpen,
     mentionType,
     meetingOpen,
-    
+
     // Setters
     setBootstrap,
     setConversations,

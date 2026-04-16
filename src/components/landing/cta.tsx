@@ -1,6 +1,6 @@
-import { Button } from "../ui/button"
-import { ArrowLeft, Sparkles } from "lucide-react"
-import { useNavigate } from "react-router-dom"
+import { Button } from '../ui/button'
+import { ArrowLeft, Sparkles } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 
 export function CTA() {
   const navigate = useNavigate()
@@ -27,8 +27,8 @@ export function CTA() {
               هل أنت مستعد لتحويل إنتاجية فريقك؟
             </h2>
             <p className="mt-6 text-xl text-indigo-100 leading-relaxed text-pretty">
-              انضم إلى مئات الفرق في الشرق الأوسط الذين يثقون بمجلس
-              لإدارة مساحات عملهم. ابدأ تجربتك المجانية اليوم.
+              انضم إلى مئات الفرق في الشرق الأوسط الذين يثقون بمجلس لإدارة مساحات عملهم. ابدأ تجربتك
+              المجانية اليوم.
             </p>
             <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
               <Button
@@ -51,19 +51,31 @@ export function CTA() {
             <p className="mt-8 text-indigo-200 flex flex-wrap items-center justify-center gap-6">
               <span className="flex items-center gap-2">
                 <svg className="h-5 w-5 text-indigo-300" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                    clipRule="evenodd"
+                  />
                 </svg>
                 تجربة مجانية ١٤ يوم
               </span>
               <span className="flex items-center gap-2">
                 <svg className="h-5 w-5 text-indigo-300" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                    clipRule="evenodd"
+                  />
                 </svg>
                 لا حاجة لبطاقة ائتمان
               </span>
               <span className="flex items-center gap-2">
                 <svg className="h-5 w-5 text-indigo-300" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                    clipRule="evenodd"
+                  />
                 </svg>
                 إلغاء في أي وقت
               </span>

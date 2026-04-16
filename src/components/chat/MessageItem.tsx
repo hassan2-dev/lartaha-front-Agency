@@ -9,19 +9,14 @@ import {
   Paper,
   Stack,
   Card,
-  CardContent
+  CardContent,
 } from '@mui/material'
-import {
-  Check,
-  DoneAll,
-  AttachFile,
-  Person
-} from '@mui/icons-material'
+import { Check, DoneAll, AttachFile, Person } from '@mui/icons-material'
 import { styled } from '@mui/material/styles'
 
 // Styled components for modern chat bubble
 const ChatBubble = styled(Paper, {
-  shouldForwardProp: (prop) => prop !== 'isMine'
+  shouldForwardProp: prop => prop !== 'isMine',
 })<{ isMine: boolean }>(({ theme, isMine }) => ({
   padding: theme.spacing(2),
   borderRadius: 18,
@@ -39,19 +34,13 @@ const ChatBubble = styled(Paper, {
       ? theme.palette.common.white
       : theme.palette.text.primary
     : theme.palette.text.primary,
-  border: isMine
-    ? 'none'
-    : `1px solid ${theme.palette.divider}`,
-  boxShadow: isMine
-    ? '0 1px 2px rgba(0, 0, 0, 0.1)'
-    : theme.shadows[1],
+  border: isMine ? 'none' : `1px solid ${theme.palette.divider}`,
+  boxShadow: isMine ? '0 1px 2px rgba(0, 0, 0, 0.1)' : theme.shadows[1],
   transition: 'all 0.2s ease-in-out',
   '&:hover': {
     transform: 'translateY(-1px)',
-    boxShadow: isMine
-      ? '0 2px 4px rgba(0, 0, 0, 0.15)'
-      : theme.shadows[2],
-  }
+    boxShadow: isMine ? '0 2px 4px rgba(0, 0, 0, 0.15)' : theme.shadows[2],
+  },
 }))
 
 const MessageTime = styled(Typography)(({ theme }) => ({
@@ -66,7 +55,7 @@ const AttachmentCard = styled(Card)(({ theme }) => ({
   border: `1px solid ${theme.palette.divider}`,
   '&:hover': {
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
-  }
+  },
 }))
 
 const MentionChip = styled(Chip)(({ theme }) => ({
@@ -75,7 +64,7 @@ const MentionChip = styled(Chip)(({ theme }) => ({
   color: theme.palette.primary.contrastText,
   '&:hover': {
     backgroundColor: theme.palette.primary.dark,
-  }
+  },
 }))
 
 interface MessageItemProps {
@@ -145,16 +134,13 @@ export default function MessageItem({
       sx={{
         display: 'flex',
         justifyContent: isMine ? 'flex-start' : 'flex-end',
-        mb: 1
+        mb: 1,
       }}
     >
       <ChatBubble isMine={isMine}>
         {isGeneralDiscussionSelected && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-            <Avatar
-              src={sender?.avatar || undefined}
-              sx={{ width: 28, height: 28 }}
-            >
+            <Avatar src={sender?.avatar || undefined} sx={{ width: 28, height: 28 }}>
               {sender?.name ? sender.name.charAt(0).toUpperCase() : 'U'}
             </Avatar>
             <Typography variant="caption" sx={{ fontWeight: 'bold', opacity: 0.85 }}>
@@ -169,7 +155,7 @@ export default function MessageItem({
             sx={{
               wordBreak: 'break-word',
               mb: 0.5,
-              lineHeight: 1.4
+              lineHeight: 1.4,
             }}
           >
             {linkifyText(message.text)}
@@ -178,7 +164,7 @@ export default function MessageItem({
 
         {linkPreviews.length > 0 && (
           <Stack spacing={1.5} sx={{ mt: 2 }}>
-            {linkPreviews.map((link) => (
+            {linkPreviews.map(link => (
               <Box
                 key={`${message.id}_${link}`}
                 component="a"
@@ -196,7 +182,7 @@ export default function MessageItem({
                       variant="body2"
                       sx={{
                         wordBreak: 'break-word',
-                        color: isMine ? 'inherit' : 'text.secondary'
+                        color: isMine ? 'inherit' : 'text.secondary',
                       }}
                     >
                       {link}
@@ -223,7 +209,7 @@ export default function MessageItem({
                     key={key}
                     title={
                       <Box
-                        onClick={(event) => {
+                        onClick={event => {
                           event.stopPropagation()
                           onOpenDirectConversation(mention.id)
                         }}
@@ -233,7 +219,7 @@ export default function MessageItem({
                           display: 'flex',
                           alignItems: 'center',
                           gap: 2,
-                          minWidth: 220
+                          minWidth: 220,
                         }}
                       >
                         <Avatar sx={{ width: 34, height: 34 }}>
@@ -261,11 +247,7 @@ export default function MessageItem({
                       </Box>
                     }
                   >
-                    <MentionChip
-                      label={`@${mention.label}`}
-                      size="small"
-                      clickable
-                    />
+                    <MentionChip label={`@${mention.label}`} size="small" clickable />
                   </Tooltip>
                 )
               }
@@ -277,7 +259,9 @@ export default function MessageItem({
                   label={`${mention.type === 'task' ? '#' : '📎'} ${mention.label}`}
                   size="small"
                   clickable={!!href}
-                  onClick={href ? () => window.open(href, '_blank', 'noopener,noreferrer') : undefined}
+                  onClick={
+                    href ? () => window.open(href, '_blank', 'noopener,noreferrer') : undefined
+                  }
                 />
               )
             })}
@@ -318,7 +302,7 @@ export default function MessageItem({
                         border: '1px solid',
                         borderColor: 'divider',
                         textDecoration: 'none',
-                        mb: 1
+                        mb: 1,
                       }}
                     >
                       <img
@@ -341,7 +325,7 @@ export default function MessageItem({
                     sx={{
                       '&:hover': {
                         backgroundColor: 'action.hover',
-                      }
+                      },
                     }}
                   />
                 </Box>

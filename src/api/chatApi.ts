@@ -97,7 +97,10 @@ export async function createConversation(input: {
   return res.data.conversation as ChatConversation
 }
 
-export async function getConversationMessages(id: string, limit: number = 120): Promise<ChatMessage[]> {
+export async function getConversationMessages(
+  id: string,
+  limit: number = 120
+): Promise<ChatMessage[]> {
   const res = await api.get(`/api/chat/conversations/${id}/messages`, {
     params: { limit },
   })
@@ -117,7 +120,9 @@ export async function sendMessage(
   return res.data.message as ChatMessage
 }
 
-export async function createConversationLivekitSession(conversationId: string): Promise<ChatLivekitSession> {
+export async function createConversationLivekitSession(
+  conversationId: string
+): Promise<ChatLivekitSession> {
   const res = await api.post(`/api/chat/conversations/${conversationId}/livekit-token`)
   return {
     token: String(res.data?.token ?? ''),

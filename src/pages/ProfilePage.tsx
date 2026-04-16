@@ -11,10 +11,7 @@ import {
   CircularProgress,
   IconButton,
 } from '@mui/material'
-import {
-  CameraAlt as CameraIcon,
-  ArrowBack as ArrowBackIcon,
-} from '@mui/icons-material'
+import { CameraAlt as CameraIcon, ArrowBack as ArrowBackIcon } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { CheckCircle } from '@solar-icons/react'
@@ -40,7 +37,12 @@ export default function ProfilePage() {
       console.log('📝 Setting form fields - name:', user.name, 'avatar:', user.avatar)
       setName(user.name || '')
       setAvatarPreview(user.avatar || '')
-      console.log('✅ Form fields set - name:', user.name || '', 'avatarPreview:', user.avatar || '')
+      console.log(
+        '✅ Form fields set - name:',
+        user.name || '',
+        'avatarPreview:',
+        user.avatar || ''
+      )
     } else {
       console.log('❌ No user data available')
     }
@@ -115,7 +117,7 @@ export default function ProfilePage() {
         const uploadResponse = await fetch('/api/upload/avatar', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${token}`,
+            Authorization: `Bearer ${token}`,
           },
           body: formData,
         })
@@ -140,7 +142,7 @@ export default function ProfilePage() {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('larthaa_auth_token')}`,
+          Authorization: `Bearer ${localStorage.getItem('larthaa_auth_token')}`,
         },
         body: JSON.stringify({
           name: name.trim(),
@@ -246,7 +248,7 @@ export default function ProfilePage() {
           fullWidth
           label="الاسم"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={e => setName(e.target.value)}
           disabled={loading}
           sx={{ mb: 3 }}
           inputProps={{
@@ -287,11 +289,7 @@ export default function ProfilePage() {
 
         {/* Save Button */}
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
-          <Button
-            variant="outlined"
-            onClick={() => navigate('/')}
-            disabled={loading}
-          >
+          <Button variant="outlined" onClick={() => navigate('/')} disabled={loading}>
             إلغاء
           </Button>
           <Button

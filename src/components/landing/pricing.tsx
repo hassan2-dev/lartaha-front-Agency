@@ -1,56 +1,56 @@
-import { Button } from "../ui/button"
-import { Check } from "lucide-react"
-import { useNavigate } from "react-router-dom"
-import { cn } from "../../lib/utils"
+import { Button } from '../ui/button'
+import { Check } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { cn } from '../../lib/utils'
 
 const plans = [
   {
-    name: "المبتدئ",
-    description: "مثالي للفرق الصغيرة التي تبدأ للتو",
-    price: "مجاني",
-    period: "للأبد",
+    name: 'المبتدئ',
+    description: 'مثالي للفرق الصغيرة التي تبدأ للتو',
+    price: 'مجاني',
+    period: 'للأبد',
     features: [
-      "حتى 5 أعضاء في الفريق",
-      "لوحات كانبان الأساسية",
-      "1 جيجابايت تخزين",
-      "محادثة جماعية",
-      "دعم عبر البريد الإلكتروني",
+      'حتى 5 أعضاء في الفريق',
+      'لوحات كانبان الأساسية',
+      '1 جيجابايت تخزين',
+      'محادثة جماعية',
+      'دعم عبر البريد الإلكتروني',
     ],
-    cta: "ابدأ الآن",
+    cta: 'ابدأ الآن',
     popular: false,
   },
   {
-    name: "الاحترافي",
-    description: "للفرق النامية التي تحتاج المزيد من القوة",
-    price: "$12",
-    period: "لكل مستخدم/شهرياً",
+    name: 'الاحترافي',
+    description: 'للفرق النامية التي تحتاج المزيد من القوة',
+    price: '$12',
+    period: 'لكل مستخدم/شهرياً',
     features: [
-      "أعضاء فريق غير محدودين",
-      "كانبان متقدم مع الأتمتة",
-      "50 جيجابايت تخزين",
-      "مكالمات فيديو واجتماعات",
-      "حماية الملفات والصلاحيات",
-      "تتبع النشاط",
-      "دعم ذو أولوية",
+      'أعضاء فريق غير محدودين',
+      'كانبان متقدم مع الأتمتة',
+      '50 جيجابايت تخزين',
+      'مكالمات فيديو واجتماعات',
+      'حماية الملفات والصلاحيات',
+      'تتبع النشاط',
+      'دعم ذو أولوية',
     ],
-    cta: "ابدأ التجربة المجانية",
+    cta: 'ابدأ التجربة المجانية',
     popular: true,
   },
   {
-    name: "المؤسسات",
-    description: "حلول مخصصة للمؤسسات الكبيرة",
-    price: "مخصص",
-    period: "تواصل معنا",
+    name: 'المؤسسات',
+    description: 'حلول مخصصة للمؤسسات الكبيرة',
+    price: 'مخصص',
+    period: 'تواصل معنا',
     features: [
-      "كل مميزات الاحترافي",
-      "تخزين غير محدود",
-      "SSO وأمان متقدم",
-      "تكاملات مخصصة",
-      "مدير حساب مخصص",
-      "ضمان SLA",
-      "خيار التثبيت المحلي",
+      'كل مميزات الاحترافي',
+      'تخزين غير محدود',
+      'SSO وأمان متقدم',
+      'تكاملات مخصصة',
+      'مدير حساب مخصص',
+      'ضمان SLA',
+      'خيار التثبيت المحلي',
     ],
-    cta: "تواصل مع المبيعات",
+    cta: 'تواصل مع المبيعات',
     popular: false,
   },
 ]
@@ -63,9 +63,7 @@ export function Pricing() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto mb-16">
-          <p className="text-sm font-semibold text-accent uppercase tracking-wide mb-4">
-            الأسعار
-          </p>
+          <p className="text-sm font-semibold text-accent uppercase tracking-wide mb-4">الأسعار</p>
           <h2 className="text-3xl font-bold text-foreground sm:text-4xl text-balance">
             أسعار بسيطة وشفافة
           </h2>
@@ -80,10 +78,10 @@ export function Pricing() {
             <div
               key={index}
               className={cn(
-                "relative rounded-2xl border bg-card p-8 flex flex-col",
+                'relative rounded-2xl border bg-card p-8 flex flex-col',
                 plan.popular
-                  ? "border-primary shadow-xl shadow-primary/10 scale-105"
-                  : "border-border"
+                  ? 'border-primary shadow-xl shadow-primary/10 scale-105'
+                  : 'border-border'
               )}
             >
               {plan.popular && (
@@ -107,14 +105,15 @@ export function Pricing() {
               <ul className="space-y-3 mb-8 flex-1">
                 {plan.features.map((feature, i) => (
                   <li key={i} className="flex items-center gap-3">
-                    <div className={cn(
-                      "flex h-5 w-5 items-center justify-center rounded-full",
-                      plan.popular ? "bg-primary/20" : "bg-accent/20"
-                    )}>
-                      <Check className={cn(
-                        "h-3 w-3",
-                        plan.popular ? "text-primary" : "text-accent"
-                      )} />
+                    <div
+                      className={cn(
+                        'flex h-5 w-5 items-center justify-center rounded-full',
+                        plan.popular ? 'bg-primary/20' : 'bg-accent/20'
+                      )}
+                    >
+                      <Check
+                        className={cn('h-3 w-3', plan.popular ? 'text-primary' : 'text-accent')}
+                      />
                     </div>
                     <span className="text-sm text-muted-foreground">{feature}</span>
                   </li>
@@ -123,7 +122,7 @@ export function Pricing() {
 
               <Button
                 className="w-full"
-                variant={plan.popular ? "default" : "outline"}
+                variant={plan.popular ? 'default' : 'outline'}
                 size="lg"
                 onClick={() => navigate('/signup')}
               >

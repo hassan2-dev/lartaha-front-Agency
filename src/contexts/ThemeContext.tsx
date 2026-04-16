@@ -29,7 +29,7 @@ export function AppThemeProvider({ children }: { children: React.ReactNode }) {
     () => ({
       mode,
       toggle: () => {
-        setMode((prev) => {
+        setMode(prev => {
           const next = prev === 'dark' ? 'light' : 'dark'
           try {
             localStorage.setItem(STORAGE_KEY, next)
@@ -67,7 +67,10 @@ export function AppThemeProvider({ children }: { children: React.ReactNode }) {
           MuiPaper: {
             styleOverrides: {
               root: {
-                border: mode === 'dark' ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(2,6,23,0.08)',
+                border:
+                  mode === 'dark'
+                    ? '1px solid rgba(255,255,255,0.08)'
+                    : '1px solid rgba(2,6,23,0.08)',
               },
             },
           },
@@ -153,4 +156,3 @@ export function useThemeMode() {
   if (!ctx) throw new Error('useThemeMode must be used inside AppThemeProvider')
   return ctx
 }
-

@@ -54,10 +54,12 @@ export function useChatActions(state: ChatState) {
   const openGeneralDiscussion = useCallback(async () => {
     if (!user) return
 
-    const allParticipantIds = Array.from(new Set([user.id, ...bootstrap.users.map((candidate) => candidate.id)]))
+    const allParticipantIds = Array.from(
+      new Set([user.id, ...bootstrap.users.map(candidate => candidate.id)])
+    )
 
     const existing = conversations.find(
-      (conversation) =>
+      conversation =>
         conversation.type === 'group' &&
         (conversation.title || '').trim().toLowerCase() === 'general discussion'
     )
@@ -88,7 +90,9 @@ export function useChatActions(state: ChatState) {
 
       const participantIds = [user.id, memberId]
       const existing = conversations.find(
-        (conversation) => conversation.type === 'direct' && sameParticipants(conversation.participantIds || [], participantIds)
+        conversation =>
+          conversation.type === 'direct' &&
+          sameParticipants(conversation.participantIds || [], participantIds)
       )
 
       if (existing) {
@@ -118,57 +122,76 @@ export function useChatActions(state: ChatState) {
     setComposerFiles([])
   }, [setComposerText, setComposerMentions, setComposerFiles])
 
-  const handleFileChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    const selected = Array.from(event.target.files || [])
-    if (selected.length === 0) return
-    setComposerFiles((prev) => [...prev, ...selected])
-    event.target.value = ''
-  }, [setComposerFiles])
-
-  const addMention = useCallback((type: ChatMentionType, id: string, label: string) => {
-    setComposerMentions((prev) => {
-      if (prev.some((m) => m.type === type && m.id === id)) return prev
-      return [...prev, { type, id, label }]
-    })
-    state.setMentionDialogOpen(false)
-  }, [setComposerMentions, state.setMentionDialogOpen])
-
-  const removeMention = useCallback((mention: ChatMention) => {
-    setComposerMentions((prev) => prev.filter((m) => !(m.type === mention.type && m.id === mention.id)))
-  }, [setComposerMentions])
-
-  const removeComposerFile = useCallback((index: number) => {
-    setComposerFiles((prev) => prev.filter((_, i) => i !== index))
-  }, [setComposerFiles])
-
-  const addEmoji = useCallback((emoji: string) => {
-    setComposerText((prev) => `${prev}${prev ? ' ' : ''}${emoji}`)
-  }, [setComposerText])
-
-  const applyMemberMentionFromInput = useCallback((memberId: string, memberLabel: string) => {
-    const mentionText = `@${memberLabel.replace(/\s+/g, '_')}`
-    setComposerText((prev) => prev.replace(/(?:^|\s)@([^\s@]{0,30})$/, (full) => {
-      const prefix = full.startsWith(' ') ? ' ' : ''
-      return `${prefix}${mentionText} `
-    }))
-    addMention('member', memberId, memberLabel)
-  }, [setComposerText, addMention])
-
-  const getMentionHref = useCallback(
-    (mention: ChatMention) => {
-      if (mention.type === 'task') {
-        return `/tasks?taskId=${encodeURIComponent(mention.id)}`
-      }
-
-      if (mention.type === 'file') {
-        // This would need filesById from useChatData
-        return `/upload?fileId=${encodeURIComponent(mention.id)}`
-      }
-
-      return null
+  const handleFileChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const selected = Array.from(event.target.files || [])
+      if (selected.length === 0) return
+      setComposerFiles(prev => [...prev, ...selected])
+      event.target.value = ''
     },
-    []
+    [setComposerFiles]
   )
+
+  const addMention = useCallback(
+    (type: ChatMentionType, id: string, label: string) => {
+      setComposerMentions(prev => {
+        if (prev.some(m => m.type === type && m.id === id)) return prev
+        return [...prev, { type, id, label }]
+      })
+      state.setMentionDialogOpen(false)
+    },
+    [setComposerMentions, state.setMentionDialogOpen]
+  )
+
+  const removeMention = useCallback(
+    (mention: ChatMention) => {
+      setComposerMentions(prev =>
+        prev.filter(m => !(m.type === mention.type && m.id === mention.id))
+      )
+    },
+    [setComposerMentions]
+  )
+
+  const removeComposerFile = useCallback(
+    (index: number) => {
+      setComposerFiles(prev => prev.filter((_, i) => i !== index))
+    },
+    [setComposerFiles]
+  )
+
+  const addEmoji = useCallback(
+    (emoji: string) => {
+      setComposerText(prev => `${prev}${prev ? ' ' : ''}${emoji}`)
+    },
+    [setComposerText]
+  )
+
+  const applyMemberMentionFromInput = useCallback(
+    (memberId: string, memberLabel: string) => {
+      const mentionText = `@${memberLabel.replace(/\s+/g, '_')}`
+      setComposerText(prev =>
+        prev.replace(/(?:^|\s)@([^\s@]{0,30})$/, full => {
+          const prefix = full.startsWith(' ') ? ' ' : ''
+          return `${prefix}${mentionText} `
+        })
+      )
+      addMention('member', memberId, memberLabel)
+    },
+    [setComposerText, addMention]
+  )
+
+  const getMentionHref = useCallback((mention: ChatMention) => {
+    if (mention.type === 'task') {
+      return `/tasks?taskId=${encodeURIComponent(mention.id)}`
+    }
+
+    if (mention.type === 'file') {
+      // This would need filesById from useChatData
+      return `/upload?fileId=${encodeURIComponent(mention.id)}`
+    }
+
+    return null
+  }, [])
 
   // Meeting actions
   const openGeneralMeeting = useCallback(() => {
@@ -176,54 +199,68 @@ export function useChatActions(state: ChatState) {
   }, [setMeetingOpen])
 
   // Send message
-  const handleSend = useCallback(async (refreshMessages: (conversationId: string) => Promise<void>, refreshConversations: () => Promise<void>) => {
-    if (!selectedConversationId) return
+  const handleSend = useCallback(
+    async (
+      refreshMessages: (conversationId: string) => Promise<void>,
+      refreshConversations: () => Promise<void>
+    ) => {
+      if (!selectedConversationId) return
 
-    const normalizedText = composerText.trim()
-    if (!normalizedText && composerFiles.length === 0) return
+      const normalizedText = composerText.trim()
+      if (!normalizedText && composerFiles.length === 0) return
 
-    setSending(true)
-    setError(null)
+      setSending(true)
+      setError(null)
 
-    try {
-      let attachments: any[] = []
+      try {
+        let attachments: any[] = []
 
-      if (composerFiles.length > 0) {
-        const formData = new FormData()
-        formData.append('batchName', `${selectedConversationId}/chat`)
+        if (composerFiles.length > 0) {
+          const formData = new FormData()
+          formData.append('batchName', `${selectedConversationId}/chat`)
 
-        composerFiles.forEach((file) => {
-          formData.append('files', file, file.name)
+          composerFiles.forEach(file => {
+            formData.append('files', file, file.name)
+          })
+
+          const uploadRes = await uploadFiles(formData)
+          const uploaded = uploadRes.uploaded ?? []
+
+          attachments = uploaded.map((item, index) => ({
+            key: item.key,
+            name: composerFiles[index]?.name || item.key,
+            size: item.size,
+            mimeType: composerFiles[index]?.type || null,
+            url: getFileUrl(item.key, API_ENV.r2PublicBaseUrl),
+          }))
+        }
+
+        await sendMessage(selectedConversationId, {
+          text: normalizedText || undefined,
+          mentions: composerMentions,
+          attachments,
         })
 
-        const uploadRes = await uploadFiles(formData)
-        const uploaded = uploadRes.uploaded ?? []
-
-        attachments = uploaded.map((item, index) => ({
-          key: item.key,
-          name: composerFiles[index]?.name || item.key,
-          size: item.size,
-          mimeType: composerFiles[index]?.type || null,
-          url: getFileUrl(item.key, API_ENV.r2PublicBaseUrl),
-        }))
+        resetComposer()
+        await refreshMessages(selectedConversationId)
+        await refreshConversations()
+      } catch (e: unknown) {
+        const err = e as { message?: string; response?: { data?: { message?: string } } }
+        setError(err.response?.data?.message ?? err.message ?? 'فشل إرسال الرسالة')
+      } finally {
+        setSending(false)
       }
-
-      await sendMessage(selectedConversationId, {
-        text: normalizedText || undefined,
-        mentions: composerMentions,
-        attachments,
-      })
-
-      resetComposer()
-      await refreshMessages(selectedConversationId)
-      await refreshConversations()
-    } catch (e: unknown) {
-      const err = e as { message?: string; response?: { data?: { message?: string } } }
-      setError(err.response?.data?.message ?? err.message ?? 'فشل إرسال الرسالة')
-    } finally {
-      setSending(false)
-    }
-  }, [selectedConversationId, composerText, composerFiles, composerMentions, setSending, setError, resetComposer])
+    },
+    [
+      selectedConversationId,
+      composerText,
+      composerFiles,
+      composerMentions,
+      setSending,
+      setError,
+      resetComposer,
+    ]
+  )
 
   return {
     // Conversation actions

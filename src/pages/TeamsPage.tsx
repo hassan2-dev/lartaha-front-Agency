@@ -1,9 +1,5 @@
 import { useState, useEffect } from 'react'
-import {
-  Mail,
-  Group,
-  Person,
-} from '@mui/icons-material'
+import { Mail, Group, Person } from '@mui/icons-material'
 import {
   Box,
   Typography,
@@ -57,7 +53,7 @@ export default function TeamsPage() {
       setLoading(true)
       const response = await api.get('/api/workspace/members')
       setTeams(response.data.members || [])
-    } catch (err) {
+    } catch (_err) {
       setError('فشل في جلب أعضاء مساحة العمل')
     } finally {
       setLoading(false)
@@ -86,11 +82,7 @@ export default function TeamsPage() {
     <Box p={3}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h4">أعضاء مساحة العمل</Typography>
-        <Button
-          variant="contained"
-          startIcon={<Mail />}
-          onClick={() => setShowInviteModal(true)}
-        >
+        <Button variant="contained" startIcon={<Mail />} onClick={() => setShowInviteModal(true)}>
           دعوة عضو
         </Button>
       </Box>
@@ -102,7 +94,9 @@ export default function TeamsPage() {
       )}
 
       <Box>
-        <Typography variant="h6" mb={2}>جميع الأعضاء</Typography>
+        <Typography variant="h6" mb={2}>
+          جميع الأعضاء
+        </Typography>
         {loading && teams.length === 0 ? (
           <>
             <TeamMemberSkeleton />
@@ -141,9 +135,7 @@ export default function TeamsPage() {
                       {member.user?.avatar ? null : <Person />}
                     </Avatar>
                     <Box>
-                      <Typography variant="h6">
-                        {member.user?.name || member.email}
-                      </Typography>
+                      <Typography variant="h6">{member.user?.name || member.email}</Typography>
                       <Typography color="text.secondary" variant="body2">
                         {member.user?.email || 'مدعو'}
                       </Typography>
@@ -172,7 +164,12 @@ export default function TeamsPage() {
       </Box>
 
       {/* Invite Dialog */}
-      <Dialog open={showInviteModal} onClose={() => setShowInviteModal(false)} maxWidth="sm" fullWidth>
+      <Dialog
+        open={showInviteModal}
+        onClose={() => setShowInviteModal(false)}
+        maxWidth="sm"
+        fullWidth
+      >
         <DialogTitle>دعوة عضو الفريق</DialogTitle>
         <DialogContent>
           <TextField
@@ -183,7 +180,7 @@ export default function TeamsPage() {
             fullWidth
             variant="outlined"
             value={inviteEmail}
-            onChange={(e) => setInviteEmail(e.target.value)}
+            onChange={e => setInviteEmail(e.target.value)}
           />
         </DialogContent>
         <DialogActions>

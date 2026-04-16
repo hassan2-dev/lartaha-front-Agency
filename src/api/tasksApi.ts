@@ -142,10 +142,7 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
   return res.data.task as Task
 }
 
-export async function updateTask(
-  id: string,
-  patch: UpdateTaskInput
-): Promise<Task> {
+export async function updateTask(id: string, patch: UpdateTaskInput): Promise<Task> {
   const res = await api.patch(`/api/tasks/${id}`, patch)
   return res.data.task as Task
 }
@@ -191,4 +188,3 @@ export async function addTaskAttachment(
 export async function deleteTaskAttachment(taskId: string, attachmentId: string): Promise<void> {
   await api.delete(`/api/tasks/${taskId}/attachments/${attachmentId}`)
 }
-

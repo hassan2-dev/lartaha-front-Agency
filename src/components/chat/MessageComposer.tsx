@@ -67,7 +67,11 @@ export default function MessageComposer() {
       {composerFiles.length > 0 && (
         <Stack direction="row" spacing={0.75} flexWrap="wrap" sx={{ mb: 1 }}>
           {composerFiles.map((file, idx) => (
-            <Chip key={`${file.name}_${idx}`} label={file.name} onDelete={() => removeComposerFile(idx)} />
+            <Chip
+              key={`${file.name}_${idx}`}
+              label={file.name}
+              onDelete={() => removeComposerFile(idx)}
+            />
           ))}
         </Stack>
       )}
@@ -78,7 +82,7 @@ export default function MessageComposer() {
         minRows={2}
         maxRows={6}
         value={composerText}
-        onChange={(e) => setComposerText(e.target.value)}
+        onChange={e => setComposerText(e.target.value)}
         placeholder="اكتب رسالتك هنا... استخدم @ لذكر عضو"
       />
 
@@ -88,13 +92,16 @@ export default function MessageComposer() {
             اقتراحات الأعضاء
           </Typography>
           <List sx={{ p: 0 }}>
-            {memberMentionSuggestions.map((member) => (
+            {memberMentionSuggestions.map(member => (
               <ListItemButton
                 key={`mention_member_${member.id}`}
                 onClick={() => applyMemberMentionFromInput(member.id, member.name)}
                 sx={{ borderRadius: 1.5 }}
               >
-                <Avatar src={member.avatar || undefined} sx={{ width: 24, height: 24, mr: 1, fontSize: 11 }}>
+                <Avatar
+                  src={member.avatar || undefined}
+                  sx={{ width: 24, height: 24, mr: 1, fontSize: 11 }}
+                >
                   {member.name.charAt(0).toUpperCase()}
                 </Avatar>
                 <ListItemText primary={member.name} secondary={member.email} />
@@ -128,15 +135,25 @@ export default function MessageComposer() {
         <Button
           variant="outlined"
           startIcon={<EmojiIcon />}
-          onClick={(event) => setEmojiAnchorEl(event.currentTarget)}
+          onClick={event => setEmojiAnchorEl(event.currentTarget)}
         >
           إيموجي
         </Button>
-        <Button variant="outlined" startIcon={<AttachFileIcon />} onClick={() => fileInputRef.current?.click()}>
+        <Button
+          variant="outlined"
+          startIcon={<AttachFileIcon />}
+          onClick={() => fileInputRef.current?.click()}
+        >
           إرفاق ملف
         </Button>
         <Box sx={{ flex: 1 }} />
-        <Button sx={{ gap: 1 }} variant="contained" startIcon={<Plain2 weight='BoldDuotone' />} disabled={sending} onClick={handleSend}>
+        <Button
+          sx={{ gap: 1 }}
+          variant="contained"
+          startIcon={<Plain2 weight="BoldDuotone" />}
+          disabled={sending}
+          onClick={handleSend}
+        >
           {sending ? 'إرسال...' : 'إرسال'}
         </Button>
       </Box>

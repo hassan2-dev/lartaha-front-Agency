@@ -43,7 +43,7 @@ export function useFileDecryption(
   const [isDecrypting, setIsDecrypting] = useState(false)
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
-  
+
   const abortRef = useRef(false)
 
   // Cleanup blob URL on unmount
@@ -78,7 +78,7 @@ export function useFileDecryption(
       // Get auth token
       const token = localStorage.getItem(TOKEN_STORAGE_KEY)
       const apiBase = API_ENV.apiBaseUrl || 'http://localhost:3030'
-      
+
       // Fetch encrypted data
       const headers: Record<string, string> = {}
       if (token) {
@@ -100,12 +100,20 @@ export function useFileDecryption(
       if (abortRef.current) return
 
       // Decrypt
-      const decrypted = encryptedData.byteLength > 12 * 1024 * 1024
-        ? await decryptFileChunked(
-            { encryptedChunks: splitIntoChunks(encryptedData), iv: encryptionIv, salt: encryptionSalt, password: key },
-            (p) => { if (!abortRef.current) setProgress(p) }
-          )
-        : await decryptFile(encryptedData, encryptionIv, encryptionSalt, key)
+      const decrypted =
+        encryptedData.byteLength > 12 * 1024 * 1024
+          ? await decryptFileChunked(
+              {
+                encryptedChunks: splitIntoChunks(encryptedData),
+                iv: encryptionIv,
+                salt: encryptionSalt,
+                password: key,
+              },
+              p => {
+                if (!abortRef.current) setProgress(p)
+              }
+            )
+          : await decryptFile(encryptedData, encryptionIv, encryptionSalt, key)
 
       if (abortRef.current) return
 
@@ -172,19 +180,19 @@ export async function decryptFileToBlobUrl(
   }
 
   // Check cache first
-  const { getFileFromCache, putFileInCache, generateCacheKey } = await import('../lib/fileCache');
-  const cacheKey = generateCacheKey(fileId, key);
-  const cachedFile = await getFileFromCache(cacheKey);
-  
+  const { getFileFromCache, putFileInCache, generateCacheKey } = await import('../lib/fileCache')
+  const cacheKey = generateCacheKey(fileId, key)
+  const cachedFile = await getFileFromCache(cacheKey)
+
   if (cachedFile) {
-    console.log('[decryptFileToBlobUrl] Found file in cache:', fileId);
-    return URL.createObjectURL(cachedFile.decryptedBlob);
+    console.log('[decryptFileToBlobUrl] Found file in cache:', fileId)
+    return URL.createObjectURL(cachedFile.decryptedBlob)
   }
 
   // Get auth token
   const token = localStorage.getItem(TOKEN_STORAGE_KEY)
   const apiBase = API_ENV.apiBaseUrl || 'http://localhost:3030'
-  
+
   const headers: Record<string, string> = {}
   if (token) {
     headers['Authorization'] = `Bearer ${token}`
@@ -199,20 +207,26 @@ export async function decryptFileToBlobUrl(
   const encryptedData = await response.arrayBuffer()
 
   // Decrypt
-  const decrypted = encryptedData.byteLength > 12 * 1024 * 1024
-    ? await decryptFileChunked(
-        { encryptedChunks: splitIntoChunks(encryptedData), iv: encryptionIv, salt: encryptionSalt, password: key },
-        () => {}
-      )
-    : await decryptFile(encryptedData, encryptionIv, encryptionSalt, key)
+  const decrypted =
+    encryptedData.byteLength > 12 * 1024 * 1024
+      ? await decryptFileChunked(
+          {
+            encryptedChunks: splitIntoChunks(encryptedData),
+            iv: encryptionIv,
+            salt: encryptionSalt,
+            password: key,
+          },
+          () => {}
+        )
+      : await decryptFile(encryptedData, encryptionIv, encryptionSalt, key)
 
   // Cache the decrypted file
   await putFileInCache(cacheKey, decrypted, {
     mimeType: 'application/octet-stream',
     filename: fileId,
     size: encryptedData.byteLength,
-  });
-  console.log('[decryptFileToBlobUrl] Cached decrypted file:', fileId);
+  })
+  console.log('[decryptFileToBlobUrl] Cached decrypted file:', fileId)
 
   return URL.createObjectURL(decrypted)
 }

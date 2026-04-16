@@ -1,6 +1,6 @@
 /**
  * Encrypted File Viewer
- * 
+ *
  * Component for previewing and decrypting encrypted files.
  * Supports images, videos, and other file types.
  */
@@ -84,42 +84,53 @@ export default function EncryptedFileViewer({
   }, [open, fileId])
 
   // Determine file type for preview
-  const isImage = mimeType.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(filename)
+  const isImage =
+    mimeType.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(filename)
   const isVideo = mimeType.startsWith('video/') || /\.(mp4|webm|ogg|mov|avi)$/i.test(filename)
   const isAudio = mimeType.startsWith('audio/') || /\.(mp3|wav|ogg|m4a)$/i.test(filename)
 
   // Auto-fetch workspace key and decrypt when opening
   useEffect(() => {
-    console.log('[EncryptedFileViewer] Props:', { open, encryptionEnabled, encryptionIv, encryptionSalt })
+    console.log('[EncryptedFileViewer] Props:', {
+      open,
+      encryptionEnabled,
+      encryptionIv,
+      encryptionSalt,
+    })
     if (!open) {
       console.log('[EncryptedFileViewer] Dialog not open, skipping')
       return
     }
-    
+
     // For video files, let StreamingVideoPlayer handle decryption
     if (isVideo) {
-      console.log('[EncryptedFileViewer] Video file, will let StreamingVideoPlayer handle decryption')
+      console.log(
+        '[EncryptedFileViewer] Video file, will let StreamingVideoPlayer handle decryption'
+      )
       console.log('[EncryptedFileViewer] File ID:', fileId)
       setIsLoading(true)
       getDownloadUrl(fileId)
         .then(result => {
           console.log('[EncryptedFileViewer] Download URL result:', result)
           if (result.ok && result.url) {
-            console.log('[EncryptedFileViewer] Setting decrypted URL:', result.url.substring(0, 50) + '...')
+            console.log(
+              '[EncryptedFileViewer] Setting decrypted URL:',
+              result.url.substring(0, 50) + '...'
+            )
             setDecryptedUrl(result.url)
           } else {
             console.error('[EncryptedFileViewer] Failed to get file URL:', result)
             setError('Failed to get file URL')
           }
         })
-        .catch((err) => {
+        .catch(err => {
           console.error('[EncryptedFileViewer] Error fetching file:', err)
           setError('Failed to fetch file')
         })
         .finally(() => setIsLoading(false))
       return
     }
-    
+
     if (!encryptionEnabled) {
       console.log('[EncryptedFileViewer] File not encrypted, will show directly')
       // For non-encrypted files, just fetch and show directly
@@ -137,7 +148,10 @@ export default function EncryptedFileViewer({
       return
     }
     if (!encryptionIv || !encryptionSalt) {
-      console.error('[EncryptedFileViewer] MISSING IV or SALT - treating as non-encrypted:', { encryptionIv, encryptionSalt })
+      console.error('[EncryptedFileViewer] MISSING IV or SALT - treating as non-encrypted:', {
+        encryptionIv,
+        encryptionSalt,
+      })
       // Fallback: try to show as non-encrypted
       setIsLoading(true)
       getDownloadUrl(fileId)
@@ -177,7 +191,7 @@ export default function EncryptedFileViewer({
         console.log('[EncryptedFileViewer] Step 3: Fetching encrypted data directly from R2...')
         const response = await fetch(result.url, {
           headers: {
-            'Origin': window.location.origin,
+            Origin: window.location.origin,
           },
         })
         if (!response.ok) {
@@ -194,8 +208,13 @@ export default function EncryptedFileViewer({
         setIsDecrypting(true)
 
         // Step 4: Decrypt
-        console.log('[EncryptedFileViewer] Step 4: Decrypting with IV:', encryptionIv, 'Salt:', encryptionSalt)
-        
+        console.log(
+          '[EncryptedFileViewer] Step 4: Decrypting with IV:',
+          encryptionIv,
+          'Salt:',
+          encryptionSalt
+        )
+
         // Use streaming decryption for large files
         // Note: We need to get the file size from the server response
         const fileSize = result.size || 0
@@ -205,12 +224,12 @@ export default function EncryptedFileViewer({
           encryptionSalt!,
           key,
           fileSize,
-          (progress) => setDecryptionProgress(progress),
+          progress => setDecryptionProgress(progress),
           fileId, // Pass fileId for caching
           mimeType, // Pass MIME type for caching
           filename // Pass filename for caching
         )
-        
+
         console.log('[EncryptedFileViewer] Step 4: Decryption complete, blob size:', decrypted.size)
 
         const url = URL.createObjectURL(decrypted)
@@ -252,7 +271,9 @@ export default function EncryptedFileViewer({
     if (isVideo) {
       if (!decryptedUrl) {
         return (
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
+          <Box
+            sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}
+          >
             <CircularProgress />
           </Box>
         )
@@ -274,7 +295,9 @@ export default function EncryptedFileViewer({
 
     if (isLoading) {
       return (
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
+        <Box
+          sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}
+        >
           <CircularProgress />
         </Box>
       )
@@ -282,7 +305,16 @@ export default function EncryptedFileViewer({
 
     if (isDecrypting) {
       return (
-        <Box sx={{ minHeight: 300, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+        <Box
+          sx={{
+            minHeight: 300,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 2,
+          }}
+        >
           <CircularProgress size={48} />
           <Typography>جاري فك التشفير... {decryptionProgress}%</Typography>
           <LinearProgress variant="determinate" value={decryptionProgress} sx={{ width: '80%' }} />
@@ -292,7 +324,9 @@ export default function EncryptedFileViewer({
 
     if (error && !decryptedUrl) {
       return (
-        <Box sx={{ minHeight: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Box
+          sx={{ minHeight: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
           <Typography color="error">{error}</Typography>
         </Box>
       )
@@ -345,13 +379,16 @@ export default function EncryptedFileViewer({
       maxWidth="lg"
       fullWidth
       PaperProps={{
-        sx: { minHeight: '60vh' }
+        sx: { minHeight: '60vh' },
       }}
     >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {encryptionEnabled ? <LockIcon /> : <LockOpenIcon />}
-          <Typography variant="h6" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <Typography
+            variant="h6"
+            sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+          >
             {filename}
           </Typography>
         </Box>
@@ -374,7 +411,10 @@ export default function EncryptedFileViewer({
             </Typography>
           )}
           {encryptionEnabled && (
-            <Typography variant="body2" sx={{ color: 'success.main', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Typography
+              variant="body2"
+              sx={{ color: 'success.main', display: 'flex', alignItems: 'center', gap: 0.5 }}
+            >
               <LockIcon sx={{ fontSize: 14 }} /> مشفر
             </Typography>
           )}

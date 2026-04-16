@@ -1,12 +1,4 @@
-import {
-  Avatar,
-  Box,
-  List,
-  ListItemButton,
-  ListItemText,
-  Typography,
-  Divider,
-} from '@mui/material'
+import { Avatar, Box, List, ListItemButton, ListItemText, Typography, Divider } from '@mui/material'
 import { ConversationItemSkeleton } from '../SkeletonLoaders'
 import { useChatContext } from '../../contexts/ChatContext'
 import { useMemo } from 'react'
@@ -23,35 +15,35 @@ export default function ConversationList() {
     user,
   } = useChatContext()
 
-  const selectedConversation = conversations.find((conv) => conv.id === selectedConversationId)
+  const selectedConversation = conversations.find(conv => conv.id === selectedConversationId)
   const memberList = useMemo(() => {
-    const members = bootstrap.users.filter((candidate) => candidate.id !== user?.id)
+    const members = bootstrap.users.filter(candidate => candidate.id !== user?.id)
 
     // Debug logging
     console.log('Debug info:', {
       bootstrapUsers: bootstrap.users,
       user: user,
       filteredMembersCount: members.length,
-      conversations: conversations
+      conversations: conversations,
     })
 
     // Sort members: unread first, then by last message time (no special treatment for selected)
     return members.sort((a, b) => {
       const aConversation = conversations.find(
-        (conv) =>
+        conv =>
           conv.type === 'direct' &&
           conv.participantIds.includes(a.id) &&
           conv.participantIds.includes(user?.id || '')
       )
       const bConversation = conversations.find(
-        (conv) =>
+        conv =>
           conv.type === 'direct' &&
           conv.participantIds.includes(b.id) &&
           conv.participantIds.includes(user?.id || '')
       )
 
-      const aUnread = aConversation ? (unreadMessageCounts.get(aConversation.id) || 0) : 0
-      const bUnread = bConversation ? (unreadMessageCounts.get(bConversation.id) || 0) : 0
+      const aUnread = aConversation ? unreadMessageCounts.get(aConversation.id) || 0 : 0
+      const bUnread = bConversation ? unreadMessageCounts.get(bConversation.id) || 0 : 0
 
       // Sort by unread count first
       if (aUnread !== bUnread) {
@@ -59,8 +51,12 @@ export default function ConversationList() {
       }
 
       // Then sort by last message time
-      const aTime = aConversation?.lastMessageAt ? new Date(aConversation.lastMessageAt).getTime() : 0
-      const bTime = bConversation?.lastMessageAt ? new Date(bConversation.lastMessageAt).getTime() : 0
+      const aTime = aConversation?.lastMessageAt
+        ? new Date(aConversation.lastMessageAt).getTime()
+        : 0
+      const bTime = bConversation?.lastMessageAt
+        ? new Date(bConversation.lastMessageAt).getTime()
+        : 0
       return bTime - aTime
     })
   }, [bootstrap.users, user?.id, conversations, unreadMessageCounts])
@@ -79,7 +75,10 @@ export default function ConversationList() {
 
       <List sx={{ p: 0, mb: 1.5 }}>
         <ListItemButton
-          selected={selectedConversation?.type === 'group' && (selectedConversation.title || '').toLowerCase() === 'general discussion'}
+          selected={
+            selectedConversation?.type === 'group' &&
+            (selectedConversation.title || '').toLowerCase() === 'general discussion'
+          }
           onClick={() => openGeneralDiscussion()}
           sx={{ borderRadius: 2, mb: 0.75 }}
         >
@@ -107,71 +106,78 @@ export default function ConversationList() {
         </Typography>
       ) : (
         <List sx={{ p: 0 }}>
-          {memberList.map((member: any) => {
-            const memberDirectConversation = conversations.find(
-              (conversation) =>
-                conversation.type === 'direct' &&
-                conversation.participantIds.includes(member.id) &&
-                conversation.participantIds.includes(user?.id || '')
-            )
-            const memberOnline = Boolean(member.isOnline)
-            const unreadCount = memberDirectConversation ? (unreadMessageCounts.get(memberDirectConversation.id) || 0) : 0
+          {memberList.map(
+            (member: { id: string; name?: string; email?: string; avatar?: string | null }) => {
+              const memberDirectConversation = conversations.find(
+                conversation =>
+                  conversation.type === 'direct' &&
+                  conversation.participantIds.includes(member.id) &&
+                  conversation.participantIds.includes(user?.id || '')
+              )
+              const memberOnline = Boolean(member.isOnline)
+              const unreadCount = memberDirectConversation
+                ? unreadMessageCounts.get(memberDirectConversation.id) || 0
+                : 0
 
-            return (
-              <ListItemButton
-                key={member.id}
-                selected={memberDirectConversation?.id === selectedConversationId}
-                onClick={() => openDirectConversation(member.id)}
-                sx={{ borderRadius: 2, mb: 0.75 }}
-              >
-                <Box sx={{ position: 'relative', mr: 1.25 }}>
-                  <Avatar src={member.avatar || undefined} sx={{ width: 28, height: 28, fontSize: 12 }}>
-                    {(member.name || 'U').charAt(0).toUpperCase()}
-                  </Avatar>
-                  {unreadCount > 0 && (
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        top: -2,
-                        right: -2,
-                        width: 12,
-                        height: 12,
-                        borderRadius: '50%',
-                        bgcolor: '#22c55e',
-                        border: '2px solid rgba(255,255,255,0.9)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '8px',
-                        fontWeight: 'bold',
-                        color: 'white'
-                      }}
+              return (
+                <ListItemButton
+                  key={member.id}
+                  selected={memberDirectConversation?.id === selectedConversationId}
+                  onClick={() => openDirectConversation(member.id)}
+                  sx={{ borderRadius: 2, mb: 0.75 }}
+                >
+                  <Box sx={{ position: 'relative', mr: 1.25 }}>
+                    <Avatar
+                      src={member.avatar || undefined}
+                      sx={{ width: 28, height: 28, fontSize: 12 }}
                     >
-                      {unreadCount > 9 ? '9+' : unreadCount}
-                    </Box>
-                  )}
-                </Box>
-                <ListItemText
-                  primary={member.name}
-                  secondary={
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      {(member.name || 'U').charAt(0).toUpperCase()}
+                    </Avatar>
+                    {unreadCount > 0 && (
                       <Box
                         sx={{
-                          width: 8,
-                          height: 8,
+                          position: 'absolute',
+                          top: -2,
+                          right: -2,
+                          width: 12,
+                          height: 12,
                           borderRadius: '50%',
-                          bgcolor: memberOnline ? '#22c55e' : 'rgba(148,163,184,0.9)',
+                          bgcolor: '#22c55e',
+                          border: '2px solid rgba(255,255,255,0.9)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '8px',
+                          fontWeight: 'bold',
+                          color: 'white',
                         }}
-                      />
-                      <Typography component="span" variant="caption" sx={{ opacity: 0.9 }}>
-                        {memberOnline ? 'متصل' : 'غير متصل'}
-                      </Typography>
-                    </Box>
-                  }
-                />
-              </ListItemButton>
-            )
-          })}
+                      >
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </Box>
+                    )}
+                  </Box>
+                  <ListItemText
+                    primary={member.name}
+                    secondary={
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                        <Box
+                          sx={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: '50%',
+                            bgcolor: memberOnline ? '#22c55e' : 'rgba(148,163,184,0.9)',
+                          }}
+                        />
+                        <Typography component="span" variant="caption" sx={{ opacity: 0.9 }}>
+                          {memberOnline ? 'متصل' : 'غير متصل'}
+                        </Typography>
+                      </Box>
+                    }
+                  />
+                </ListItemButton>
+              )
+            }
+          )}
         </List>
       )}
     </Box>

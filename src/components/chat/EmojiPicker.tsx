@@ -1,10 +1,4 @@
-import {
-  Box,
-  Button,
-  Popover,
-  Typography,
-  Stack,
-} from '@mui/material'
+import { Box, Button, Popover, Typography, Stack } from '@mui/material'
 import { EMOJIS } from '../../utils/chatUtils'
 
 interface EmojiPickerProps {
@@ -27,7 +21,7 @@ export default function EmojiPicker({ anchorEl, onClose, onEmojiSelect }: EmojiP
           اختر إيموجي
         </Typography>
         <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
-          {EMOJIS.map((emoji) => (
+          {EMOJIS.map(emoji => (
             <Button
               key={emoji}
               size="small"

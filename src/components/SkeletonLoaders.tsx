@@ -125,7 +125,15 @@ export function FileItemGridSkeleton() {
         bgcolor: 'rgba(255,255,255,0.02)',
       }}
     >
-      <Box sx={{ p: 2, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 120 }}>
+      <Box
+        sx={{
+          p: 2,
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: 120,
+        }}
+      >
         <Skeleton variant="rounded" width={64} height={64} />
       </Box>
       <CardContent sx={{ p: 2, pt: 0, flex: 1 }}>
@@ -180,7 +188,15 @@ export function FolderItemGridSkeleton() {
         bgcolor: 'rgba(255,255,255,0.02)',
       }}
     >
-      <Box sx={{ p: 2, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 120 }}>
+      <Box
+        sx={{
+          p: 2,
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: 120,
+        }}
+      >
         <Skeleton variant="rounded" width={64} height={64} sx={{ borderRadius: 1 }} />
       </Box>
       <CardContent sx={{ p: 2, pt: 0, flex: 1 }}>
@@ -245,16 +261,17 @@ export function PageHeaderSkeleton() {
 }
 
 // Generic list skeleton
-export function ListSkeleton({ count = 5, itemHeight = 60 }: { count?: number; itemHeight?: number }) {
+export function ListSkeleton({
+  count = 5,
+  itemHeight = 60,
+}: {
+  count?: number
+  itemHeight?: number
+}) {
   return (
     <Box>
       {Array.from({ length: count }).map((_, i) => (
-        <Skeleton
-          key={i}
-          variant="rounded"
-          height={itemHeight}
-          sx={{ mb: 1, borderRadius: 2 }}
-        />
+        <Skeleton key={i} variant="rounded" height={itemHeight} sx={{ mb: 1, borderRadius: 2 }} />
       ))}
     </Box>
   )

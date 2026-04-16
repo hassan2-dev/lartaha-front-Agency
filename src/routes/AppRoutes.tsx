@@ -1,10 +1,9 @@
 import { Route, Routes, Navigate } from 'react-router-dom'
 import LoginPage from '../pages/LoginPage'
-import SignUpPage from '../pages/SignUpPage'
+import SignUpPage from '../pages/signup'
 import RegisterPage from '../pages/RegisterPage'
 import ResetPasswordPage from '../pages/ResetPasswordPage'
 import HomePage from '../pages/HomePage'
-import UploadPage from '../pages/UploadPage'
 import TasksPage from '../pages/TasksPage'
 import TeamsPage from '../pages/TeamsPage'
 import ChatPage from '../pages/ChatPage'
@@ -16,6 +15,7 @@ import LandingPage from '../pages/LandingPage'
 import SideNav from '../components/SideNav'
 import { ProtectedRoute } from '../components/ProtectedRoute'
 import { AdminRoute } from '../components/AdminRoute'
+import UploadPage from '../pages/upload/UploadPage'
 
 export default function AppRoutes() {
   return (
@@ -40,7 +40,14 @@ export default function AppRoutes() {
                 <Route path="files" element={<Navigate to="/dashboard/upload" replace />} />
                 <Route path="tasks" element={<TasksPage />} />
                 <Route path="chat" element={<ChatPage />} />
-                <Route path="teams" element={<AdminRoute><TeamsPage /></AdminRoute>} />
+                <Route
+                  path="teams"
+                  element={
+                    <AdminRoute>
+                      <TeamsPage />
+                    </AdminRoute>
+                  }
+                />
                 <Route path="activity" element={<ActivityPage />} />
                 <Route path="settings" element={<SettingsPage />} />
                 <Route path="profile" element={<ProfilePage />} />

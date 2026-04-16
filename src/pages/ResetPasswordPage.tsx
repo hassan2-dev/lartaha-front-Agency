@@ -63,17 +63,29 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <Container maxWidth="sm" sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', py: 4 }}>
+    <Container
+      maxWidth="sm"
+      sx={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        py: 4,
+      }}
+    >
       <Fade in timeout={500}>
         <Card sx={{ width: '100%', maxWidth: 440, borderRadius: 2, overflow: 'hidden' }}>
           <Box
             sx={{
               p: 4,
-              background: (t) => `linear-gradient(135deg, ${t.palette.primary.main} 0%, ${t.palette.primary.dark} 100%)`,
+              background: t =>
+                `linear-gradient(135deg, ${t.palette.primary.main} 0%, ${t.palette.primary.dark} 100%)`,
               textAlign: 'center',
             }}
           >
-            <Avatar sx={{ width: 62, height: 62, mx: 'auto', mb: 2, bgcolor: 'rgba(255,255,255,0.2)' }}>
+            <Avatar
+              sx={{ width: 62, height: 62, mx: 'auto', mb: 2, bgcolor: 'rgba(255,255,255,0.2)' }}
+            >
               <LockResetIcon sx={{ fontSize: 30 }} />
             </Avatar>
             <Typography variant="h4" sx={{ color: 'white', fontWeight: 700, mb: 1 }}>
@@ -102,7 +114,7 @@ export default function ResetPasswordPage() {
                 label="كلمة المرور الجديدة"
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={e => setPassword(e.target.value)}
                 fullWidth
                 autoComplete="new-password"
               />
@@ -110,12 +122,18 @@ export default function ResetPasswordPage() {
                 label="تأكيد كلمة المرور"
                 type="password"
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                onChange={e => setConfirmPassword(e.target.value)}
                 fullWidth
                 autoComplete="new-password"
               />
 
-              <Button type="submit" variant="contained" fullWidth disabled={loading} sx={{ mt: 1, mb: 2, py: 1.4 }}>
+              <Button
+                type="submit"
+                variant="contained"
+                fullWidth
+                disabled={loading}
+                sx={{ mt: 1, mb: 2, py: 1.4 }}
+              >
                 {loading ? (
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <CircularProgress size={18} sx={{ color: 'white' }} />

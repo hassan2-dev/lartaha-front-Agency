@@ -20,19 +20,17 @@ export type SelectedUploadFile = {
 function toSelectedFiles(files: FileList | File[] | null | undefined): SelectedUploadFile[] {
   if (!files) return []
   const arr = Array.isArray(files) ? files : Array.from(files)
-  return arr
-    .filter(Boolean)
-    .map((f) => {
-      const rel = (f as File & { webkitRelativePath?: string }).webkitRelativePath
-      // For folder uploads, webkitRelativePath should contain the full path including folder name
-      // Example: "MyFolder/subfolder/file.jpg"
-      // If webkitRelativePath exists, use it; otherwise fall back to just filename
-      const relativePath = rel && rel.length > 0 ? rel : f.name
-      return {
-        file: f,
-        relativePath,
-      }
-    })
+  return arr.filter(Boolean).map(f => {
+    const rel = (f as File & { webkitRelativePath?: string }).webkitRelativePath
+    // For folder uploads, webkitRelativePath should contain the full path including folder name
+    // Example: "MyFolder/subfolder/file.jpg"
+    // If webkitRelativePath exists, use it; otherwise fall back to just filename
+    const relativePath = rel && rel.length > 0 ? rel : f.name
+    return {
+      file: f,
+      relativePath,
+    }
+  })
 }
 
 function fmtBytes(bytes: number) {
@@ -79,11 +77,9 @@ export default function UploadDropzone({
       }
     }
 
-    const readAllEntries = async (
-      reader: {
-        readEntries: (cb: (entries: AnyEntry[]) => void, err?: (e: unknown) => void) => void
-      },
-    ): Promise<AnyEntry[]> => {
+    const readAllEntries = async (reader: {
+      readEntries: (cb: (entries: AnyEntry[]) => void, err?: (e: unknown) => void) => void
+    }): Promise<AnyEntry[]> => {
       const all: AnyEntry[] = []
       while (true) {
         const chunk = await new Promise<AnyEntry[]>((resolve, reject) => {
@@ -104,8 +100,8 @@ export default function UploadDropzone({
       if (entry.isFile && entry.file) {
         const file = await new Promise<File>((resolve, reject) => {
           entry.file!(
-            (f) => resolve(f),
-            (err) => reject(err)
+            f => resolve(f),
+            err => reject(err)
           )
         })
         const relativePath = (entry.fullPath ?? '').replace(/^\/+/, '') || file.name
@@ -121,8 +117,10 @@ export default function UploadDropzone({
     }
 
     const roots = Array.from(items)
-      .map((it) => {
-        const e = (it as unknown as { webkitGetAsEntry?: () => AnyEntry | null }).webkitGetAsEntry?.()
+      .map(it => {
+        const e = (
+          it as unknown as { webkitGetAsEntry?: () => AnyEntry | null }
+        ).webkitGetAsEntry?.()
         return e
       })
       .filter(Boolean) as AnyEntry[]
@@ -140,12 +138,14 @@ export default function UploadDropzone({
     const selected = toSelectedFiles(next)
 
     // Dedupe by relativePath + size (good enough for upload UIs)
-    const deduped = Array.from(new Map(selected.map((sf) => [`${sf.relativePath}_${sf.file.size}`, sf])).values())
+    const deduped = Array.from(
+      new Map(selected.map(sf => [`${sf.relativePath}_${sf.file.size}`, sf])).values()
+    )
 
     // For folder uploads, we should preserve the structure automatically if webkitRelativePath is available
     // Only show the folder name prompt if the browser doesn't support folder structure
     if (source === 'folder') {
-      const hasAnyPath = deduped.some((sf) => sf.relativePath.includes('/'))
+      const hasAnyPath = deduped.some(sf => sf.relativePath.includes('/'))
 
       if (!hasAnyPath) {
         // Browser didn't provide folder paths, ask user for folder name
@@ -166,12 +166,14 @@ export default function UploadDropzone({
     const root = pendingFolderName.trim().replace(/^\/+|\/+$/g, '')
     if (!root) return
 
-    const transformed = pendingFolderFiles.map((sf) => ({
+    const transformed = pendingFolderFiles.map(sf => ({
       ...sf,
       relativePath: `${root}/${sf.relativePath}`,
     }))
 
-    const deduped = Array.from(new Map(transformed.map((sf) => [`${sf.relativePath}_${sf.file.size}`, sf])).values())
+    const deduped = Array.from(
+      new Map(transformed.map(sf => [`${sf.relativePath}_${sf.file.size}`, sf])).values()
+    )
     setPendingFolderFiles(null)
     setPendingFolderName('')
     onFilesChange(deduped)
@@ -184,23 +186,22 @@ export default function UploadDropzone({
         p: 2,
         borderRadius: 2,
         borderColor: dragOver ? 'primary.main' : 'rgba(255,255,255,0.10)',
-        background: (t) =>
-          `linear-gradient(135deg, ${t.palette.primary.main}14, transparent 55%)`,
+        background: t => `linear-gradient(135deg, ${t.palette.primary.main}14, transparent 55%)`,
         transition: 'border-color 150ms ease',
       }}
-      onDragEnter={(e) => {
+      onDragEnter={e => {
         e.preventDefault()
         setDragOver(true)
       }}
-      onDragOver={(e) => {
+      onDragOver={e => {
         e.preventDefault()
         setDragOver(true)
       }}
-      onDragLeave={(e) => {
+      onDragLeave={e => {
         e.preventDefault()
         setDragOver(false)
       }}
-      onDrop={(e) => {
+      onDrop={e => {
         e.preventDefault()
         setDragOver(false)
         // Try preserve folder structure on directory drop (Chrome/Edge).
@@ -235,7 +236,7 @@ export default function UploadDropzone({
         type="file"
         multiple
         style={{ display: 'none' }}
-        onChange={(e) => onPickFiles(e.target.files ? Array.from(e.target.files) : [], 'files')}
+        onChange={e => onPickFiles(e.target.files ? Array.from(e.target.files) : [], 'files')}
       />
 
       <input
@@ -245,9 +246,7 @@ export default function UploadDropzone({
         // @ts-expect-error: webkitdirectory is non-standard but supported in Chromium/WebKit browsers.
         webkitdirectory=""
         style={{ display: 'none' }}
-        onChange={(e) =>
-          onPickFiles(e.target.files ? Array.from(e.target.files) : [], 'folder')
-        }
+        onChange={e => onPickFiles(e.target.files ? Array.from(e.target.files) : [], 'folder')}
       />
 
       <Box sx={{ display: 'flex', gap: 1, mt: 2, flexWrap: 'wrap' }}>
@@ -296,7 +295,9 @@ export default function UploadDropzone({
                     size="small"
                     label="اسم المجلد داخل uploads"
                     value={pendingFolderName}
-                    onChange={(e: ChangeEvent<HTMLInputElement>) => setPendingFolderName(e.target.value)}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      setPendingFolderName(e.target.value)
+                    }
                     fullWidth
                   />
                 </Box>
@@ -321,7 +322,7 @@ export default function UploadDropzone({
                 border: '1px solid rgba(255,255,255,0.08)',
               }}
             >
-              {files.slice(0, 80).map((sf) => (
+              {files.slice(0, 80).map(sf => (
                 <ListItem key={`${sf.relativePath}_${sf.file.size}`} sx={{ py: 0.75 }}>
                   <Typography variant="body2" sx={{ wordBreak: 'break-word', opacity: 0.92 }}>
                     {sf.relativePath}
@@ -348,4 +349,3 @@ export default function UploadDropzone({
     </Paper>
   )
 }
-

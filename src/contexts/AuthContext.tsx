@@ -3,21 +3,23 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { TOKEN_STORAGE_KEY } from '../config/api'
 import { fetchMe, loginUser, type LoginPayload, type LoginResult } from '../api/authApi'
 
+export type User = {
+  id: string
+  email: string
+  username: string
+  name: string
+  avatar?: string
+  position?: string
+  phone?: string
+  isAdmin: boolean
+  workspaceId?: string
+  workspaceName?: string
+  workspaceLogo?: string
+}
+
 type AuthContextValue = {
   token: string | null
-  user: {
-    id: string
-    email: string
-    username: string
-    name: string
-    avatar?: string
-    position?: string
-    phone?: string
-    isAdmin: boolean
-    workspaceId?: string
-    workspaceName?: string
-    workspaceLogo?: string
-  } | null
+  user: User | null
   loading: boolean
   error: string | null
   login: (payload: LoginPayload) => Promise<void>
@@ -40,19 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return null
     }
   })
-  const [user, setUser] = useState<{
-    id: string
-    email: string
-    username: string
-    name: string
-    avatar?: string
-    position?: string
-    phone?: string
-    isAdmin: boolean
-    workspaceId?: string
-    workspaceName?: string
-    workspaceLogo?: string
-  } | null>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true) // Start with true for initial auth check
   const [error, setError] = useState<string | null>(null)
 
@@ -98,7 +88,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void refreshMe()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 
   // Navigate to login when token is cleared (only if not already on login page)
@@ -112,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       loading,
       error,
-      login: async (payload) => {
+      login: async payload => {
         setLoading(true)
         setError(null)
         try {
@@ -150,7 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       },
       refreshMe,
-      updateUser: (userData) => {
+      updateUser: userData => {
         if (user) {
           setUser({ ...user, ...userData })
         }
@@ -167,4 +156,3 @@ export function useAuth() {
   if (!ctx) throw new Error('useAuth must be used inside AuthProvider')
   return ctx
 }
-

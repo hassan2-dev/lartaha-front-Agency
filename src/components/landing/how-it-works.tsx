@@ -1,30 +1,31 @@
-import { UserPlus, Settings, Rocket, CheckCircle2 } from "lucide-react"
+import { UserPlus, Settings, Rocket, CheckCircle2 } from 'lucide-react'
 
 const steps = [
   {
-    step: "١",
+    step: '١',
     icon: UserPlus,
-    title: "إنشاء حساب مجاني",
-    description: "سجّل في دقائق معدودة وابدأ رحلتك مع مجلس. لا حاجة لبطاقة ائتمان للتجربة المجانية."
+    title: 'إنشاء حساب مجاني',
+    description:
+      'سجّل في دقائق معدودة وابدأ رحلتك مع مجلس. لا حاجة لبطاقة ائتمان للتجربة المجانية.',
   },
   {
-    step: "٢",
+    step: '٢',
     icon: Settings,
-    title: "إعداد مساحة العمل",
-    description: "أنشئ مساحة عملك الخاصة وخصصها حسب احتياجات فريقك ومتطلبات مشاريعك."
+    title: 'إعداد مساحة العمل',
+    description: 'أنشئ مساحة عملك الخاصة وخصصها حسب احتياجات فريقك ومتطلبات مشاريعك.',
   },
   {
-    step: "٣",
+    step: '٣',
     icon: Rocket,
-    title: "دعوة أعضاء الفريق",
-    description: "أضف زملاءك بسهولة عبر البريد الإلكتروني أو رابط الدعوة وحدد صلاحياتهم."
+    title: 'دعوة أعضاء الفريق',
+    description: 'أضف زملاءك بسهولة عبر البريد الإلكتروني أو رابط الدعوة وحدد صلاحياتهم.',
   },
   {
-    step: "٤",
+    step: '٤',
     icon: CheckCircle2,
-    title: "ابدأ الإنجاز",
-    description: "استخدم أدواتنا المتكاملة لإدارة المهام والملفات والتواصل مع فريقك بفعالية."
-  }
+    title: 'ابدأ الإنجاز',
+    description: 'استخدم أدواتنا المتكاملة لإدارة المهام والملفات والتواصل مع فريقك بفعالية.',
+  },
 ]
 
 export function HowItWorks() {
@@ -46,7 +47,7 @@ export function HowItWorks() {
         <div className="relative">
           {/* Connection Line */}
           <div className="hidden lg:block absolute top-1/2 right-[12%] left-[12%] h-1 bg-gradient-to-l from-primary/20 via-primary to-primary/20 -translate-y-1/2 rounded-full" />
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {steps.map((step, index) => (
               <div key={index} className="relative">
@@ -55,12 +56,12 @@ export function HowItWorks() {
                   <div className="absolute -top-4 right-1/2 translate-x-1/2 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-lg">
                     {step.step}
                   </div>
-                  
+
                   {/* Icon */}
                   <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-6 mt-2">
                     <step.icon className="w-8 h-8 text-primary" />
                   </div>
-                  
+
                   <h3 className="text-xl font-bold text-foreground mb-3">{step.title}</h3>
                   <p className="text-muted-foreground leading-relaxed">{step.description}</p>
                 </div>

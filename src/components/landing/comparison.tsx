@@ -1,18 +1,18 @@
-import { Check, X, Minus } from "lucide-react"
+import { Check, X, Minus } from 'lucide-react'
 
 const features = [
-  { name: "إدارة المهام بنظام كانبان", majlis: true, competitor1: true, competitor2: true },
-  { name: "تحميل ومشاركة الملفات", majlis: true, competitor1: true, competitor2: "limited" },
-  { name: "حماية الملفات والصلاحيات", majlis: true, competitor1: "limited", competitor2: false },
-  { name: "الدردشة الجماعية والخاصة", majlis: true, competitor1: false, competitor2: true },
-  { name: "مكالمات الفيديو والاجتماعات", majlis: true, competitor1: false, competitor2: "limited" },
-  { name: "تتبع سجل النشاطات", majlis: true, competitor1: true, competitor2: false },
-  { name: "دعم اللغة العربية الكامل", majlis: true, competitor1: false, competitor2: false },
-  { name: "واجهة RTL أصلية", majlis: true, competitor1: false, competitor2: false },
-  { name: "تكامل مع +١٠٠ تطبيق", majlis: true, competitor1: true, competitor2: "limited" },
-  { name: "دعم فني على مدار الساعة", majlis: true, competitor1: "limited", competitor2: false },
-  { name: "تطبيقات الجوال", majlis: true, competitor1: true, competitor2: true },
-  { name: "API مفتوح للمطورين", majlis: true, competitor1: true, competitor2: false },
+  { name: 'إدارة المهام بنظام كانبان', majlis: true, competitor1: true, competitor2: true },
+  { name: 'تحميل ومشاركة الملفات', majlis: true, competitor1: true, competitor2: 'limited' },
+  { name: 'حماية الملفات والصلاحيات', majlis: true, competitor1: 'limited', competitor2: false },
+  { name: 'الدردشة الجماعية والخاصة', majlis: true, competitor1: false, competitor2: true },
+  { name: 'مكالمات الفيديو والاجتماعات', majlis: true, competitor1: false, competitor2: 'limited' },
+  { name: 'تتبع سجل النشاطات', majlis: true, competitor1: true, competitor2: false },
+  { name: 'دعم اللغة العربية الكامل', majlis: true, competitor1: false, competitor2: false },
+  { name: 'واجهة RTL أصلية', majlis: true, competitor1: false, competitor2: false },
+  { name: 'تكامل مع +١٠٠ تطبيق', majlis: true, competitor1: true, competitor2: 'limited' },
+  { name: 'دعم فني على مدار الساعة', majlis: true, competitor1: 'limited', competitor2: false },
+  { name: 'تطبيقات الجوال', majlis: true, competitor1: true, competitor2: true },
+  { name: 'API مفتوح للمطورين', majlis: true, competitor1: true, competitor2: false },
 ]
 
 const renderStatus = (status: boolean | string) => {
@@ -63,15 +63,19 @@ export function Comparison() {
                     مجلس
                   </div>
                 </th>
-                <th className="py-4 px-4 text-center text-muted-foreground font-medium">المنافس أ</th>
-                <th className="py-4 px-4 text-center text-muted-foreground font-medium">المنافس ب</th>
+                <th className="py-4 px-4 text-center text-muted-foreground font-medium">
+                  المنافس أ
+                </th>
+                <th className="py-4 px-4 text-center text-muted-foreground font-medium">
+                  المنافس ب
+                </th>
               </tr>
             </thead>
             <tbody>
               {features.map((feature, index) => (
                 <tr
                   key={index}
-                  className={`border-b border-border ${index % 2 === 0 ? "bg-card" : "bg-background"}`}
+                  className={`border-b border-border ${index % 2 === 0 ? 'bg-card' : 'bg-background'}`}
                 >
                   <td className="py-4 px-4 font-medium text-foreground">{feature.name}</td>
                   <td className="py-4 px-4">{renderStatus(feature.majlis)}</td>

@@ -1,37 +1,37 @@
-import { Shield, Award, Clock, HeartHandshake } from "lucide-react"
+import { Shield, Award, Clock, HeartHandshake } from 'lucide-react'
 
 const badges = [
   {
     icon: Shield,
-    title: "أمان على مستوى البنوك",
-    description: "تشفير ٢٥٦-bit AES وشهادة ISO 27001"
+    title: 'أمان على مستوى البنوك',
+    description: 'تشفير ٢٥٦-bit AES وشهادة ISO 27001',
   },
   {
     icon: Award,
-    title: "جائزة أفضل منصة ٢٠٢٤",
-    description: "من مجلة التقنية العربية"
+    title: 'جائزة أفضل منصة ٢٠٢٤',
+    description: 'من مجلة التقنية العربية',
   },
   {
     icon: Clock,
-    title: "وقت تشغيل ٩٩.٩٪",
-    description: "ضمان استمرارية الخدمة"
+    title: 'وقت تشغيل ٩٩.٩٪',
+    description: 'ضمان استمرارية الخدمة',
   },
   {
     icon: HeartHandshake,
-    title: "ضمان استرداد ٣٠ يوم",
-    description: "استرداد كامل بدون أسئلة"
-  }
+    title: 'ضمان استرداد ٣٠ يوم',
+    description: 'استرداد كامل بدون أسئلة',
+  },
 ]
 
 const companies = [
-  "أرامكو",
-  "مجموعة سابك",
-  "بنك الراجحي",
-  "اتصالات الإمارات",
-  "طيران الإمارات",
-  "شركة المراعي",
-  "مجموعة ماجد الفطيم",
-  "بنك الكويت الوطني"
+  'أرامكو',
+  'مجموعة سابك',
+  'بنك الراجحي',
+  'اتصالات الإمارات',
+  'طيران الإمارات',
+  'شركة المراعي',
+  'مجموعة ماجد الفطيم',
+  'بنك الكويت الوطني',
 ]
 
 export function TrustBadges() {

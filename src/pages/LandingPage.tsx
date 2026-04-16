@@ -1,32 +1,32 @@
-import { Header } from "../components/landing/header"
-import { Hero } from "../components/landing/hero"
-import { Stats } from "../components/landing/stats"
-import { TrustBadges } from "../components/landing/trust-badges"
-import { Features } from "../components/landing/features"
-import { FeatureShowcase } from "../components/landing/feature-showcase"
-import { HowItWorks } from "../components/landing/how-it-works"
-import { Integrations } from "../components/landing/integrations"
-import { Comparison } from "../components/landing/comparison"
-import { TestimonialsExtended } from "../components/landing/testimonials-extended"
-import { Pricing } from "../components/landing/pricing"
-import { FAQ } from "../components/landing/faq"
-import { CTA } from "../components/landing/cta"
-import { Footer } from "../components/landing/footer"
-import { SmoothScrollProvider } from "../components/landing/smooth-scroll-provider"
-import { useEffect, useRef, type ReactNode } from "react"
+import { Header } from '../components/landing/header'
+import { Hero } from '../components/landing/hero'
+import { Stats } from '../components/landing/stats'
+import { TrustBadges } from '../components/landing/trust-badges'
+import { Features } from '../components/landing/features'
+import { FeatureShowcase } from '../components/landing/feature-showcase'
+import { HowItWorks } from '../components/landing/how-it-works'
+import { Integrations } from '../components/landing/integrations'
+import { Comparison } from '../components/landing/comparison'
+import { TestimonialsExtended } from '../components/landing/testimonials-extended'
+import { Pricing } from '../components/landing/pricing'
+import { FAQ } from '../components/landing/faq'
+import { CTA } from '../components/landing/cta'
+import { Footer } from '../components/landing/footer'
+import { SmoothScrollProvider } from '../components/landing/smooth-scroll-provider'
+import { useEffect, useRef, type ReactNode } from 'react'
 
 interface AnimatedSectionProps {
   children: ReactNode
   className?: string
-  animation?: "fade-in-up" | "fade-in" | "scale-in" | "slide-in-left" | "slide-in-right"
+  animation?: 'fade-in-up' | 'fade-in' | 'scale-in' | 'slide-in-left' | 'slide-in-right'
   delay?: 100 | 200 | 300 | 400 | 500
 }
 
 function AnimatedSection({
   children,
-  className = "",
-  animation = "fade-in-up",
-  delay
+  className = '',
+  animation = 'fade-in-up',
+  delay,
 }: AnimatedSectionProps) {
   const ref = useRef<HTMLDivElement>(null)
 
@@ -37,38 +37,33 @@ function AnimatedSection({
     console.log(`Setting up observer for ${animation} section`)
 
     const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
+      entries => {
+        entries.forEach(entry => {
           console.log(`Intersection: ${entry.isIntersecting} for ${animation}`)
           if (entry.isIntersecting) {
-            entry.target.classList.add("is-visible")
+            entry.target.classList.add('is-visible')
             console.log(`Added is-visible to ${animation}`)
             observer.unobserve(entry.target)
           }
         })
       },
-      { threshold: 0.1, rootMargin: "0px 0px -100px 0px" }
+      { threshold: 0.1, rootMargin: '0px 0px -100px 0px' }
     )
 
     observer.observe(element)
     return () => observer.disconnect()
   }, [animation])
 
-  const delayClass = delay ? `delay-${delay}` : ""
+  const delayClass = delay ? `delay-${delay}` : ''
 
   return (
-    <div
-      ref={ref}
-      className={`animate-on-scroll animate-${animation} ${delayClass} ${className}`}
-    >
+    <div ref={ref} className={`animate-on-scroll animate-${animation} ${delayClass} ${className}`}>
       {children}
     </div>
   )
 }
 
 export default function LandingPage() {
-
-
   return (
     <SmoothScrollProvider>
       <div className="min-h-screen bg-background" dir="rtl" lang="ar">

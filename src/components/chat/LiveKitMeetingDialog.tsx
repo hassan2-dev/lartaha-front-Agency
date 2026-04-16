@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from '@mui/material'
+import {
+  Alert,
+  Box,
+  Button,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Typography,
+} from '@mui/material'
 import { LiveKitRoom, RoomAudioRenderer, VideoConference } from '@livekit/components-react'
 import '@livekit/components-styles'
 import { createConversationLivekitSession, type ChatLivekitSession } from '../../api/chatApi'
@@ -55,9 +65,7 @@ export default function LiveKitMeetingDialog({
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xl">
-      <DialogTitle>
-        اجتماع مباشر · {conversationLabel}
-      </DialogTitle>
+      <DialogTitle>اجتماع مباشر · {conversationLabel}</DialogTitle>
       <DialogContent sx={{ minHeight: 360 }}>
         {!conversationId ? (
           <Alert severity="warning">اختر محادثة صالحة لبدء الاجتماع.</Alert>
@@ -70,7 +78,7 @@ export default function LiveKitMeetingDialog({
             <Alert severity="error" sx={{ mb: 2 }}>
               {error}
             </Alert>
-            <Button variant="contained" onClick={() => setRefreshIndex((prev) => prev + 1)}>
+            <Button variant="contained" onClick={() => setRefreshIndex(prev => prev + 1)}>
               إعادة المحاولة
             </Button>
           </Box>

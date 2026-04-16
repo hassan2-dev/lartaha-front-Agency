@@ -17,9 +17,7 @@ export default function NotFoundPage() {
         <Typography variant="h4" sx={{ fontWeight: 800 }}>
           404
         </Typography>
-        <Typography sx={{ mt: 1, opacity: 0.8 }}>
-          الصفحة غير موجودة.
-        </Typography>
+        <Typography sx={{ mt: 1, opacity: 0.8 }}>الصفحة غير موجودة.</Typography>
         <Button sx={{ mt: 3 }} variant="contained" onClick={() => navigate('/')}>
           الذهاب إلى الرفع
         </Button>
@@ -27,4 +25,3 @@ export default function NotFoundPage() {
     </Container>
   )
 }
-

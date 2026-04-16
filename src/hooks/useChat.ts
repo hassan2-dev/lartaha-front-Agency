@@ -45,7 +45,7 @@ export function useChat() {
   // Computed values
   const usersById = useMemo(() => {
     const map = new Map()
-    bootstrap.users.forEach((u) => {
+    bootstrap.users.forEach(u => {
       map.set(u.id, {
         id: u.id,
         name: u.name,
@@ -69,7 +69,7 @@ export function useChat() {
   }, [bootstrap.users, user])
 
   const selectedConversation = useMemo(
-    () => conversations.find((conv) => conv.id === selectedConversationId) ?? null,
+    () => conversations.find(conv => conv.id === selectedConversationId) ?? null,
     [conversations, selectedConversationId]
   )
 
@@ -82,43 +82,48 @@ export function useChat() {
   }, [selectedConversation])
 
   const memberList = useMemo(
-    () => bootstrap.users.filter((candidate) => candidate.id !== user?.id),
+    () => bootstrap.users.filter(candidate => candidate.id !== user?.id),
     [bootstrap.users, user?.id]
   )
 
   // Sort members by recent message and track unread messages
   const sortedMemberList = useMemo(() => {
-    return memberList.map(member => {
-      // Find the direct conversation with this member
-      const directConversation = conversations.find(conv =>
-        conv.type === 'direct' &&
-        conv.participantIds.includes(member.id) &&
-        conv.participantIds.includes(user?.id || '')
-      )
+    return memberList
+      .map(member => {
+        // Find the direct conversation with this member
+        const directConversation = conversations.find(
+          conv =>
+            conv.type === 'direct' &&
+            conv.participantIds.includes(member.id) &&
+            conv.participantIds.includes(user?.id || '')
+        )
 
-      // Check if there are unread messages
-      let hasUnread = false
-      let lastMessageTime = directConversation?.lastMessageAt ? new Date(directConversation.lastMessageAt).getTime() : 0
+        // Check if there are unread messages
+        let hasUnread = false
+        const lastMessageTime = directConversation?.lastMessageAt
+          ? new Date(directConversation.lastMessageAt).getTime()
+          : 0
 
-      if (directConversation && directConversation.id !== selectedConversationId) {
-        const lastMessageTime = new Date(directConversation.lastMessageAt || 0)
-        const now = new Date()
-        const hoursDiff = (now.getTime() - lastMessageTime.getTime()) / (1000 * 60 * 60)
-        hasUnread = hoursDiff < 24
-      }
+        if (directConversation && directConversation.id !== selectedConversationId) {
+          const lastMessageTime = new Date(directConversation.lastMessageAt || 0)
+          const now = new Date()
+          const hoursDiff = (now.getTime() - lastMessageTime.getTime()) / (1000 * 60 * 60)
+          hasUnread = hoursDiff < 24
+        }
 
-      return {
-        ...member,
-        hasUnread,
-        lastMessageTime
-      }
-    }).sort((a, b) => {
-      // Sort by unread status first, then by last message time
-      if (a.hasUnread !== b.hasUnread) {
-        return b.hasUnread ? 1 : -1
-      }
-      return b.lastMessageTime - a.lastMessageTime
-    })
+        return {
+          ...member,
+          hasUnread,
+          lastMessageTime,
+        }
+      })
+      .sort((a, b) => {
+        // Sort by unread status first, then by last message time
+        if (a.hasUnread !== b.hasUnread) {
+          return b.hasUnread ? 1 : -1
+        }
+        return b.lastMessageTime - a.lastMessageTime
+      })
   }, [memberList, conversations, selectedConversationId, user?.id])
 
   const atMentionQuery = useMemo(() => {
@@ -131,9 +136,12 @@ export function useChat() {
     if (atMentionQuery === null) return []
     const query = atMentionQuery.trim().toLowerCase()
     return memberList
-      .filter((candidate) => {
+      .filter(candidate => {
         if (!query) return true
-        return candidate.name.toLowerCase().includes(query) || candidate.email.toLowerCase().includes(query)
+        return (
+          candidate.name.toLowerCase().includes(query) ||
+          candidate.email.toLowerCase().includes(query)
+        )
       })
       .slice(0, 6)
   }, [atMentionQuery, memberList])
@@ -235,7 +243,7 @@ export function useChat() {
 
   useEffect(() => {
     const unsubscribe = subscribeRealtime(
-      (event) => {
+      event => {
         if (event.scope !== 'chat') return
         void refreshConversations()
         if (event.action === 'presence_changed') {
@@ -253,14 +261,17 @@ export function useChat() {
   }, [refreshBootstrap, refreshConversations, refreshMessages, selectedConversationId])
 
   // Actions
-  const getConversationLabel = useCallback((conversation: any) => {
-    if (conversation.type === 'group') {
-      return conversation.title || 'مجموعة بدون اسم'
-    }
-    const otherId = conversation.participantIds.find((id: string) => id !== user?.id)
-    const other = otherId ? usersById.get(otherId) : null
-    return other?.name || 'محادثة مباشرة'
-  }, [user?.id, usersById])
+  const getConversationLabel = useCallback(
+    (conversation: any) => {
+      if (conversation.type === 'group') {
+        return conversation.title || 'مجموعة بدون اسم'
+      }
+      const otherId = conversation.participantIds.find((id: string) => id !== user?.id)
+      const other = otherId ? usersById.get(otherId) : null
+      return other?.name || 'محادثة مباشرة'
+    },
+    [user?.id, usersById]
+  )
 
   const sameParticipants = useCallback((a: string[], b: string[]) => {
     if (a.length !== b.length) return false
@@ -271,9 +282,11 @@ export function useChat() {
 
   const openGeneralDiscussion = useCallback(async () => {
     if (!user) return
-    const allParticipantIds = Array.from(new Set([user.id, ...bootstrap.users.map((candidate) => candidate.id)]))
+    const allParticipantIds = Array.from(
+      new Set([user.id, ...bootstrap.users.map(candidate => candidate.id)])
+    )
     const existing = conversations.find(
-      (conversation) =>
+      conversation =>
         conversation.type === 'group' &&
         (conversation.title || '').trim().toLowerCase() === 'general discussion'
     )
@@ -295,25 +308,30 @@ export function useChat() {
     }
   }, [bootstrap.users, conversations, refreshConversations, user])
 
-  const openDirectConversation = useCallback(async (memberId: string) => {
-    if (!user || memberId === user.id) return
-    const participantIds = [user.id, memberId]
-    const existing = conversations.find(
-      (conversation) => conversation.type === 'direct' && sameParticipants(conversation.participantIds || [], participantIds)
-    )
-    if (existing) {
-      setSelectedConversationId(existing.id)
-      return
-    }
-    try {
-      const created = await createConversation({ type: 'direct', participantIds })
-      await refreshConversations()
-      setSelectedConversationId(created.id)
-    } catch (e: unknown) {
-      const err = e as { message?: string; response?: { data?: { message?: string } } }
-      setError(err.response?.data?.message ?? err.message ?? 'فشل فتح المحادثة المباشرة')
-    }
-  }, [conversations, refreshConversations, sameParticipants, user])
+  const openDirectConversation = useCallback(
+    async (memberId: string) => {
+      if (!user || memberId === user.id) return
+      const participantIds = [user.id, memberId]
+      const existing = conversations.find(
+        conversation =>
+          conversation.type === 'direct' &&
+          sameParticipants(conversation.participantIds || [], participantIds)
+      )
+      if (existing) {
+        setSelectedConversationId(existing.id)
+        return
+      }
+      try {
+        const created = await createConversation({ type: 'direct', participantIds })
+        await refreshConversations()
+        setSelectedConversationId(created.id)
+      } catch (e: unknown) {
+        const err = e as { message?: string; response?: { data?: { message?: string } } }
+        setError(err.response?.data?.message ?? err.message ?? 'فشل فتح المحادثة المباشرة')
+      }
+    },
+    [conversations, refreshConversations, sameParticipants, user]
+  )
 
   const resetComposer = useCallback(() => {
     setComposerText('')
@@ -324,38 +342,43 @@ export function useChat() {
   const handleFileChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const selected = Array.from(event.target.files || [])
     if (selected.length === 0) return
-    setComposerFiles((prev) => [...prev, ...selected])
+    setComposerFiles(prev => [...prev, ...selected])
     event.target.value = ''
   }, [])
 
   const addMention = useCallback((type: ChatMentionType, id: string, label: string) => {
-    setComposerMentions((prev) => {
-      if (prev.some((m) => m.type === type && m.id === id)) return prev
+    setComposerMentions(prev => {
+      if (prev.some(m => m.type === type && m.id === id)) return prev
       return [...prev, { type, id, label }]
     })
     setMentionDialogOpen(false)
   }, [])
 
   const removeMention = useCallback((mention: ChatMention) => {
-    setComposerMentions((prev) => prev.filter((m) => !(m.type === mention.type && m.id === mention.id)))
+    setComposerMentions(prev => prev.filter(m => !(m.type === mention.type && m.id === mention.id)))
   }, [])
 
   const removeComposerFile = useCallback((index: number) => {
-    setComposerFiles((prev) => prev.filter((_, i) => i !== index))
+    setComposerFiles(prev => prev.filter((_, i) => i !== index))
   }, [])
 
   const addEmoji = useCallback((emoji: string) => {
-    setComposerText((prev) => `${prev}${prev ? ' ' : ''}${emoji}`)
+    setComposerText(prev => `${prev}${prev ? ' ' : ''}${emoji}`)
   }, [])
 
-  const applyMemberMentionFromInput = useCallback((memberId: string, memberLabel: string) => {
-    const mentionText = `@${memberLabel.replace(/\s+/g, '_')}`
-    setComposerText((prev) => prev.replace(/(?:^|\s)@([^\s@]{0,30})$/, (full) => {
-      const prefix = full.startsWith(' ') ? ' ' : ''
-      return `${prefix}${mentionText} `
-    }))
-    addMention('member', memberId, memberLabel)
-  }, [addMention])
+  const applyMemberMentionFromInput = useCallback(
+    (memberId: string, memberLabel: string) => {
+      const mentionText = `@${memberLabel.replace(/\s+/g, '_')}`
+      setComposerText(prev =>
+        prev.replace(/(?:^|\s)@([^\s@]{0,30})$/, full => {
+          const prefix = full.startsWith(' ') ? ' ' : ''
+          return `${prefix}${mentionText} `
+        })
+      )
+      addMention('member', memberId, memberLabel)
+    },
+    [addMention]
+  )
 
   const getMentionHref = useCallback((mention: ChatMention) => {
     if (mention.type === 'task') {
@@ -385,7 +408,7 @@ export function useChat() {
       if (composerFiles.length > 0) {
         const formData = new FormData()
         formData.append('batchName', `${selectedConversationId}/chat`)
-        composerFiles.forEach((file) => {
+        composerFiles.forEach(file => {
           formData.append('files', file, file.name)
         })
         const uploadRes = await uploadFiles(formData)
@@ -414,7 +437,15 @@ export function useChat() {
     } finally {
       setSending(false)
     }
-  }, [selectedConversationId, composerText, composerFiles, composerMentions, resetComposer, refreshMessages, refreshConversations])
+  }, [
+    selectedConversationId,
+    composerText,
+    composerFiles,
+    composerMentions,
+    resetComposer,
+    refreshMessages,
+    refreshConversations,
+  ])
 
   return {
     // State

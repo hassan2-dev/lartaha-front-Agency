@@ -87,7 +87,19 @@ function isVideoInputFile(file: File, relativePath: string) {
 function isImageInputFile(file: File, relativePath: string) {
   if (file.type?.toLowerCase().startsWith('image/')) return true
   const ext = relativePath.split('.').pop()?.toLowerCase() || ''
-  return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'bmp', 'svg', 'ico', 'heic', 'heif'].includes(ext)
+  return [
+    'jpg',
+    'jpeg',
+    'png',
+    'gif',
+    'webp',
+    'avif',
+    'bmp',
+    'svg',
+    'ico',
+    'heic',
+    'heif',
+  ].includes(ext)
 }
 
 function buildImageThumbnailKey(originalKey: string) {
@@ -99,13 +111,15 @@ function buildImageThumbnailKey(originalKey: string) {
   const basename = filename.replace(/\.[^.]+$/, '') || filename
   const directory = parts.join('/')
   const thumbnailFilename = `${basename}__thumb.jpg`
-  return directory ? `${directory}/.thumbnails/${thumbnailFilename}` : `.thumbnails/${thumbnailFilename}`
+  return directory
+    ? `${directory}/.thumbnails/${thumbnailFilename}`
+    : `.thumbnails/${thumbnailFilename}`
 }
 
 export async function createImageThumbnailBlob(file: File): Promise<Blob | null> {
   if (typeof window === 'undefined' || typeof document === 'undefined') return null
 
-  return await new Promise((resolve) => {
+  return await new Promise(resolve => {
     const objectUrl = URL.createObjectURL(file)
     const img = new Image()
     img.src = objectUrl
@@ -138,12 +152,12 @@ export async function createImageThumbnailBlob(file: File): Promise<Blob | null>
 
         context.drawImage(img, 0, 0, width, height)
         canvas.toBlob(
-          (blob) => {
+          blob => {
             cleanup()
             resolve(blob || null)
           },
           'image/jpeg',
-          0.82,
+          0.82
         )
       } catch {
         cleanup()
@@ -161,7 +175,7 @@ export async function createImageThumbnailBlob(file: File): Promise<Blob | null>
 export async function createVideoThumbnailBlob(file: File): Promise<Blob | null> {
   if (typeof window === 'undefined' || typeof document === 'undefined') return null
 
-  return await new Promise((resolve) => {
+  return await new Promise(resolve => {
     const objectUrl = URL.createObjectURL(file)
     const video = document.createElement('video')
     video.preload = 'metadata'
@@ -206,12 +220,12 @@ export async function createVideoThumbnailBlob(file: File): Promise<Blob | null>
 
         context.drawImage(video, 0, 0, width, height)
         canvas.toBlob(
-          (blob) => {
+          blob => {
             cleanup()
             resolve(blob || null)
           },
           'image/jpeg',
-          0.82,
+          0.82
         )
       } catch {
         cleanup()
@@ -238,13 +252,17 @@ async function uploadVideoThumbnail(originalKey: string, thumbnailBlob: Blob) {
   })
 }
 
-export async function uploadImageThumbnail(key: string, thumbnailKey: string, thumbnailBlob: Blob): Promise<void> {
+export async function uploadImageThumbnail(
+  key: string,
+  thumbnailKey: string,
+  thumbnailBlob: Blob
+): Promise<void> {
   // Use FormData to send both file and metadata
   const formData = new FormData()
   formData.append('key', key)
   formData.append('thumbnailKey', thumbnailKey)
   formData.append('file', thumbnailBlob, 'thumbnail.jpg')
-  
+
   await api.post('/api/upload/image-thumbnail', formData, {
     timeout: 2 * 60 * 1000,
     maxContentLength: Infinity,
@@ -254,7 +272,12 @@ export async function uploadImageThumbnail(key: string, thumbnailKey: string, th
 
 export async function uploadFiles(
   formData: FormData,
-  onUploadProgress?: (progressPercent: number, bytesUploaded?: number, totalBytes?: number, uploadSpeed?: number) => void
+  onUploadProgress?: (
+    progressPercent: number,
+    bytesUploaded?: number,
+    totalBytes?: number,
+    uploadSpeed?: number
+  ) => void
 ): Promise<UploadResult> {
   let lastTime = Date.now()
   let lastLoaded = 0
@@ -265,7 +288,7 @@ export async function uploadFiles(
       // but keeping it explicit is fine for most backends.
       'Content-Type': 'multipart/form-data',
     },
-    onUploadProgress: (evt) => {
+    onUploadProgress: evt => {
       if (!evt.total) return
 
       const currentTime = Date.now()
@@ -299,7 +322,7 @@ export async function uploadFilesStreamed(
     folderName?: string
     skipFiles?: Set<string>
     onUploadProgress?: (progress: StreamUploadProgress) => void
-  },
+  }
 ): Promise<UploadResult> {
   const { batchName, folderName, skipFiles = new Set(), onUploadProgress } = options
   const totalFiles = files.length
@@ -319,7 +342,7 @@ export async function uploadFilesStreamed(
   let activeFile: StreamUploadInputFile | null = null
   let activeFileIndex = 0
 
-  const unsubscribeRealtime = subscribeRealtime((event) => {
+  const unsubscribeRealtime = subscribeRealtime(event => {
     if (event.scope !== 'files' || event.action !== 'upload_progress') return
     if (!event.data || typeof event.data !== 'object') return
 
@@ -332,10 +355,13 @@ export async function uploadFilesStreamed(
     const eventUploadId = typeof data.uploadId === 'string' ? data.uploadId : ''
     if (!eventUploadId || eventUploadId !== activeUploadId || !activeFile) return
 
-    const status = data.status === 'completed' || data.status === 'failed' || data.status === 'running'
-      || data.status === 'finalizing'
-      ? data.status
-      : 'running'
+    const status =
+      data.status === 'completed' ||
+      data.status === 'failed' ||
+      data.status === 'running' ||
+      data.status === 'finalizing'
+        ? data.status
+        : 'running'
     const currentFileUploadedRaw = typeof data.bytesUploaded === 'number' ? data.bytesUploaded : 0
     const currentFileUploaded = Math.min(Math.max(currentFileUploadedRaw, 0), activeFile.file.size)
     const bytesUploaded = Math.min(totalBytes, completedBytes + currentFileUploaded)
@@ -410,7 +436,7 @@ export async function uploadFilesStreamed(
         timeout: 30 * 60 * 1000,
         maxContentLength: Infinity,
         maxBodyLength: Infinity,
-        onUploadProgress: (evt) => {
+        onUploadProgress: evt => {
           if (!evt.total) return
           const now = Date.now()
           const timeDiff = (now - lastProgressTime) / 1000
@@ -455,7 +481,11 @@ export async function uploadFilesStreamed(
         }
       }
 
-      if (uploadedKey && !item.thumbnailUploadFile && isVideoInputFile(item.file, item.relativePath)) {
+      if (
+        uploadedKey &&
+        !item.thumbnailUploadFile &&
+        isVideoInputFile(item.file, item.relativePath)
+      ) {
         try {
           const thumbnailBlob = await createVideoThumbnailBlob(item.file)
           if (thumbnailBlob) {
@@ -474,16 +504,30 @@ export async function uploadFilesStreamed(
         relativePath: item.relativePath,
         fileType: item.file.type,
       })
-      if (uploadedKey && !item.thumbnailUploadFile && isImageInputFile(item.file, item.relativePath) && !item.encryptionEnabled) {
+      if (
+        uploadedKey &&
+        !item.thumbnailUploadFile &&
+        isImageInputFile(item.file, item.relativePath) &&
+        !item.encryptionEnabled
+      ) {
         try {
           const thumbnailBlob = await createImageThumbnailBlob(item.file)
-          console.debug('[uploadFilesStreamed] thumbnail blob created', { uploadedKey, thumbnailBlobSize: thumbnailBlob?.size })
+          console.debug('[uploadFilesStreamed] thumbnail blob created', {
+            uploadedKey,
+            thumbnailBlobSize: thumbnailBlob?.size,
+          })
           if (thumbnailBlob) {
             const thumbnailKey = buildImageThumbnailKey(uploadedKey)
-            console.debug('[uploadFilesStreamed] thumbnail key built', { uploadedKey, thumbnailKey })
+            console.debug('[uploadFilesStreamed] thumbnail key built', {
+              uploadedKey,
+              thumbnailKey,
+            })
             if (thumbnailKey) {
               await uploadImageThumbnail(uploadedKey, thumbnailKey, thumbnailBlob)
-              console.debug('[uploadFilesStreamed] thumbnail upload completed', { uploadedKey, thumbnailKey })
+              console.debug('[uploadFilesStreamed] thumbnail upload completed', {
+                uploadedKey,
+                thumbnailKey,
+              })
             }
           }
         } catch (err) {

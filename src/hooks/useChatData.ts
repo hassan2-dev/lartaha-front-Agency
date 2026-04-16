@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useMemo } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import {
-  getChatBootstrap,
-  getConversationMessages,
-  getConversations,
-} from '../api/chatApi'
+import { getChatBootstrap, getConversationMessages, getConversations } from '../api/chatApi'
 import { subscribeRealtime } from '../api/realtimeApi'
 import type { ChatState } from './useChatState'
 
@@ -26,15 +22,18 @@ export function useChatData(state: ChatState) {
 
   // Computed values
   const usersById = useMemo(() => {
-    const map = new Map<string, {
-      id: string
-      name: string
-      email: string
-      avatar?: string | null
-      position?: string | null
-      isOnline?: boolean
-    }>()
-    bootstrap.users.forEach((u) => {
+    const map = new Map<
+      string,
+      {
+        id: string
+        name: string
+        email: string
+        avatar?: string | null
+        position?: string | null
+        isOnline?: boolean
+      }
+    >()
+    bootstrap.users.forEach(u => {
       map.set(u.id, {
         id: u.id,
         name: u.name,
@@ -58,7 +57,7 @@ export function useChatData(state: ChatState) {
   }, [bootstrap.users, user])
 
   const selectedConversation = useMemo(
-    () => conversations.find((conv) => conv.id === selectedConversationId) ?? null,
+    () => conversations.find(conv => conv.id === selectedConversationId) ?? null,
     [conversations, selectedConversationId]
   )
 
@@ -71,13 +70,13 @@ export function useChatData(state: ChatState) {
   }, [selectedConversation])
 
   const memberList = useMemo(
-    () => bootstrap.users.filter((candidate) => candidate.id !== user?.id),
+    () => bootstrap.users.filter(candidate => candidate.id !== user?.id),
     [bootstrap.users, user?.id]
   )
 
   const filesById = useMemo(() => {
     const map = new Map<string, { id: string; key: string; name: string }>()
-    bootstrap.files.forEach((item) => {
+    bootstrap.files.forEach(item => {
       map.set(item.id, { id: item.id, key: item.key, name: item.name })
     })
     return map
@@ -93,9 +92,12 @@ export function useChatData(state: ChatState) {
     if (atMentionQuery === null) return []
     const query = atMentionQuery.trim().toLowerCase()
     return memberList
-      .filter((candidate) => {
+      .filter(candidate => {
         if (!query) return true
-        return candidate.name.toLowerCase().includes(query) || candidate.email.toLowerCase().includes(query)
+        return (
+          candidate.name.toLowerCase().includes(query) ||
+          candidate.email.toLowerCase().includes(query)
+        )
       })
       .slice(0, 6)
   }, [atMentionQuery, memberList])
@@ -119,15 +121,18 @@ export function useChatData(state: ChatState) {
     }
   }, [selectedConversationId, setConversations, setSelectedConversationId, setLoadingConversations])
 
-  const refreshMessages = useCallback(async (conversationId: string) => {
-    setLoadingMessages(true)
-    try {
-      const data = await getConversationMessages(conversationId, 120)
-      setMessages(data)
-    } finally {
-      setLoadingMessages(false)
-    }
-  }, [setMessages, setLoadingMessages])
+  const refreshMessages = useCallback(
+    async (conversationId: string) => {
+      setLoadingMessages(true)
+      try {
+        const data = await getConversationMessages(conversationId, 120)
+        setMessages(data)
+      } finally {
+        setLoadingMessages(false)
+      }
+    },
+    [setMessages, setLoadingMessages]
+  )
 
   // Effects
   useEffect(() => {
@@ -151,7 +156,7 @@ export function useChatData(state: ChatState) {
 
   useEffect(() => {
     const unsubscribe = subscribeRealtime(
-      (event) => {
+      event => {
         if (event.scope !== 'chat') return
 
         void refreshConversations()

@@ -1,6 +1,6 @@
 /**
  * Upload Context - Global upload state for persistent minimized toast
- * 
+ *
  * This context allows the upload progress to be visible across all dashboard pages
  * by storing upload state at the layout level (SideNav) rather than page level.
  */
@@ -57,7 +57,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
   const [showSuccess, setShowSuccess] = useState(false)
 
   const updateUploadItem = useCallback((fileKey: string, updates: Partial<UploadItemState>) => {
-    setUploadItems((prev) => {
+    setUploadItems(prev => {
       const existing = prev[fileKey]
       if (!existing) return prev
       return {
@@ -68,7 +68,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const removeUploadItem = useCallback((fileKey: string) => {
-    setUploadItems((prev) => {
+    setUploadItems(prev => {
       const next = { ...prev }
       delete next[fileKey]
       return next
@@ -95,9 +95,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
     item => item.status === 'completed'
   ).length
 
-  const totalUploadsCount = Object.values(uploadItems).filter(
-    item => item.status !== 'idle'
-  ).length
+  const totalUploadsCount = Object.values(uploadItems).filter(item => item.status !== 'idle').length
 
   return (
     <UploadContext.Provider
@@ -124,6 +122,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useUpload() {
   const context = useContext(UploadContext)
   if (context === undefined) {

@@ -1,41 +1,40 @@
-import {
-  LayoutGrid,
-  Upload,
-  Shield,
-  MessageCircle,
-  Activity
-} from "lucide-react"
+import { LayoutGrid, Upload, Shield, MessageCircle, Activity } from 'lucide-react'
 
 const features = [
   {
     icon: LayoutGrid,
-    title: "إدارة المهام بنظام كانبان",
-    description: "أنشئ ونظم وتتبع المهام بلوحات السحب والإفلات. عيّن أعضاء الفريق وحدد المواعيد النهائية وراقب التقدم في الوقت الفعلي.",
-    color: "bg-amber-500/10 text-amber-600",
+    title: 'إدارة المهام بنظام كانبان',
+    description:
+      'أنشئ ونظم وتتبع المهام بلوحات السحب والإفلات. عيّن أعضاء الفريق وحدد المواعيد النهائية وراقب التقدم في الوقت الفعلي.',
+    color: 'bg-amber-500/10 text-amber-600',
   },
   {
     icon: Upload,
-    title: "رفع الملفات بأمان",
-    description: "ارفع الصور والفيديوهات والمستندات إلى التخزين السحابي. أنشئ روابط قابلة للمشاركة وتعاون على الملفات مع فريقك بالكامل.",
-    color: "bg-emerald-500/10 text-emerald-600",
+    title: 'رفع الملفات بأمان',
+    description:
+      'ارفع الصور والفيديوهات والمستندات إلى التخزين السحابي. أنشئ روابط قابلة للمشاركة وتعاون على الملفات مع فريقك بالكامل.',
+    color: 'bg-emerald-500/10 text-emerald-600',
   },
   {
     icon: Shield,
-    title: "حماية الملفات",
-    description: "حافظ على أمان الملفات الحساسة مع التحكم في الوصول القائم على الأدوار. اقفل الملفات من أعضاء الفريق غير المصرح لهم.",
-    color: "bg-blue-500/10 text-blue-600",
+    title: 'حماية الملفات',
+    description:
+      'حافظ على أمان الملفات الحساسة مع التحكم في الوصول القائم على الأدوار. اقفل الملفات من أعضاء الفريق غير المصرح لهم.',
+    color: 'bg-blue-500/10 text-blue-600',
   },
   {
     icon: MessageCircle,
-    title: "تواصل الفريق",
-    description: "محادثات جماعية ورسائل خاصة ومكالمات فيديو واجتماعات مجدولة. ابق على تواصل مع فريقك أينما كانوا.",
-    color: "bg-rose-500/10 text-rose-600",
+    title: 'تواصل الفريق',
+    description:
+      'محادثات جماعية ورسائل خاصة ومكالمات فيديو واجتماعات مجدولة. ابق على تواصل مع فريقك أينما كانوا.',
+    color: 'bg-rose-500/10 text-rose-600',
   },
   {
     icon: Activity,
-    title: "تتبع النشاط",
-    description: "رؤية كاملة لأنشطة الفريق. تتبع تحديثات المهام وتغييرات الملفات وسجل التعاون في جدول زمني شامل.",
-    color: "bg-violet-500/10 text-violet-600",
+    title: 'تتبع النشاط',
+    description:
+      'رؤية كاملة لأنشطة الفريق. تتبع تحديثات المهام وتغييرات الملفات وسجل التعاون في جدول زمني شامل.',
+    color: 'bg-violet-500/10 text-violet-600',
   },
 ]
 
@@ -63,15 +62,13 @@ export function Features() {
               key={index}
               className="group relative rounded-2xl border border-border bg-card p-8 hover:border-indigo-300 hover:shadow-xl hover:shadow-indigo-500/10 transition-all duration-300"
             >
-              <div className={`inline-flex h-12 w-12 items-center justify-center rounded-xl ${feature.color} mb-6`}>
+              <div
+                className={`inline-flex h-12 w-12 items-center justify-center rounded-xl ${feature.color} mb-6`}
+              >
                 <feature.icon className="h-6 w-6" />
               </div>
-              <h3 className="text-xl font-semibold text-foreground mb-3">
-                {feature.title}
-              </h3>
-              <p className="text-muted-foreground leading-relaxed">
-                {feature.description}
-              </p>
+              <h3 className="text-xl font-semibold text-foreground mb-3">{feature.title}</h3>
+              <p className="text-muted-foreground leading-relaxed">{feature.description}</p>
             </div>
           ))}
         </div>

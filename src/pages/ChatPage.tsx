@@ -1,9 +1,4 @@
-import {
-  Alert,
-  Box,
-  Container,
-  Paper,
-} from '@mui/material'
+import { Alert, Box, Container, Paper } from '@mui/material'
 import LiveKitMeetingDialog from '../components/chat/LiveKitMeetingDialog'
 import ConversationList from '../components/chat/ConversationList'
 import MessageList from '../components/chat/MessageList'
@@ -54,7 +49,9 @@ function ChatPageContent() {
       <LiveKitMeetingDialog
         open={meetingOpen}
         conversationId={isGeneralDiscussionSelected ? selectedConversationId : null}
-        conversationLabel={selectedConversation ? getConversationLabel(selectedConversation) : 'General Discussion'}
+        conversationLabel={
+          selectedConversation ? getConversationLabel(selectedConversation) : 'General Discussion'
+        }
         onClose={() => setMeetingOpen(false)}
       />
     </Container>

@@ -3,57 +3,57 @@
  * Stores decrypted files with 7-day expiration
  */
 
-import Dexie, { type Table } from 'dexie';
+import Dexie, { type Table } from 'dexie'
 
-const DB_NAME = 'EncryptedFileCache';
-const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+const DB_NAME = 'EncryptedFileCache'
+const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
 
 export interface CachedFile {
-  fileId: string;
-  decryptedBlob: Blob;
-  timestamp: number;
-  expiresAt: number;
-  mimeType: string;
-  filename: string;
-  size: number;
+  fileId: string
+  decryptedBlob: Blob
+  timestamp: number
+  expiresAt: number
+  mimeType: string
+  filename: string
+  size: number
 }
 
 class FileCacheDB extends Dexie {
-  decryptedFiles!: Table<CachedFile, string>;
+  decryptedFiles!: Table<CachedFile, string>
 
   constructor() {
-    super(DB_NAME);
-    
+    super(DB_NAME)
+
     this.version(1).stores({
       decryptedFiles: 'fileId, expiresAt, timestamp',
-    });
+    })
   }
 }
 
 // Create singleton instance
-const db = new FileCacheDB();
+const db = new FileCacheDB()
 
 /**
  * Get a file from the cache
  */
 export async function getFileFromCache(fileId: string): Promise<CachedFile | null> {
   try {
-    const cachedFile = await db.decryptedFiles.get(fileId);
-    
+    const cachedFile = await db.decryptedFiles.get(fileId)
+
     if (!cachedFile) {
-      return null;
+      return null
     }
-    
+
     // Check if the file has expired
     if (Date.now() > cachedFile.expiresAt) {
-      await db.decryptedFiles.delete(fileId);
-      return null;
+      await db.decryptedFiles.delete(fileId)
+      return null
     }
-    
-    return cachedFile;
+
+    return cachedFile
   } catch (error) {
-    console.error('Error getting file from cache:', error);
-    return null;
+    console.error('Error getting file from cache:', error)
+    return null
   }
 }
 
@@ -64,15 +64,15 @@ export async function putFileInCache(
   fileId: string,
   decryptedBlob: Blob,
   metadata: {
-    mimeType: string;
-    filename: string;
-    size: number;
+    mimeType: string
+    filename: string
+    size: number
   }
 ): Promise<void> {
   try {
-    const timestamp = Date.now();
-    const expiresAt = timestamp + SEVEN_DAYS;
-    
+    const timestamp = Date.now()
+    const expiresAt = timestamp + SEVEN_DAYS
+
     const cachedFile: CachedFile = {
       fileId,
       decryptedBlob,
@@ -81,14 +81,14 @@ export async function putFileInCache(
       mimeType: metadata.mimeType,
       filename: metadata.filename,
       size: metadata.size,
-    };
-    
-    await db.decryptedFiles.put(cachedFile);
-    
+    }
+
+    await db.decryptedFiles.put(cachedFile)
+
     // Clean up expired files
-    await cleanupExpiredFiles();
+    await cleanupExpiredFiles()
   } catch (error) {
-    console.error('Error putting file in cache:', error);
+    console.error('Error putting file in cache:', error)
   }
 }
 
@@ -97,16 +97,13 @@ export async function putFileInCache(
  */
 async function cleanupExpiredFiles(): Promise<void> {
   try {
-    const expiredFiles = await db.decryptedFiles
-      .where('expiresAt')
-      .below(Date.now())
-      .toArray();
-    
+    const expiredFiles = await db.decryptedFiles.where('expiresAt').below(Date.now()).toArray()
+
     for (const file of expiredFiles) {
-      await db.decryptedFiles.delete(file.fileId);
+      await db.decryptedFiles.delete(file.fileId)
     }
   } catch (error) {
-    console.error('Error cleaning up expired files:', error);
+    console.error('Error cleaning up expired files:', error)
   }
 }
 
@@ -115,9 +112,9 @@ async function cleanupExpiredFiles(): Promise<void> {
  */
 export async function clearCache(): Promise<void> {
   try {
-    await db.decryptedFiles.clear();
+    await db.decryptedFiles.clear()
   } catch (error) {
-    console.error('Error clearing cache:', error);
+    console.error('Error clearing cache:', error)
   }
 }
 
@@ -125,40 +122,40 @@ export async function clearCache(): Promise<void> {
  * Get cache statistics
  */
 export async function getCacheStats(): Promise<{
-  entryCount: number;
-  totalSize: number;
-  oldestEntry: number | null;
-  newestEntry: number | null;
+  entryCount: number
+  totalSize: number
+  oldestEntry: number | null
+  newestEntry: number | null
 }> {
   try {
-    const allFiles = await db.decryptedFiles.toArray();
-    
+    const allFiles = await db.decryptedFiles.toArray()
+
     if (allFiles.length === 0) {
       return {
         entryCount: 0,
         totalSize: 0,
         oldestEntry: null,
         newestEntry: null,
-      };
+      }
     }
-    
-    const timestamps = allFiles.map(f => f.timestamp);
-    const totalSize = allFiles.reduce((sum, f) => sum + f.size, 0);
-    
+
+    const timestamps = allFiles.map(f => f.timestamp)
+    const totalSize = allFiles.reduce((sum, f) => sum + f.size, 0)
+
     return {
       entryCount: allFiles.length,
       totalSize,
       oldestEntry: Math.min(...timestamps),
       newestEntry: Math.max(...timestamps),
-    };
+    }
   } catch (error) {
-    console.error('Error getting cache stats:', error);
+    console.error('Error getting cache stats:', error)
     return {
       entryCount: 0,
       totalSize: 0,
       oldestEntry: null,
       newestEntry: null,
-    };
+    }
   }
 }
 
@@ -168,5 +165,5 @@ export async function getCacheStats(): Promise<{
 export function generateCacheKey(fileId: string, password: string): string {
   // In a real implementation, you might want to use a more secure method
   // For now, we'll use a simple combination
-  return `${fileId}-${password.substring(0, 8)}`;
+  return `${fileId}-${password.substring(0, 8)}`
 }

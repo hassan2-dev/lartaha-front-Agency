@@ -10,7 +10,7 @@ export interface Activity {
     avatar?: string
     isAdmin: boolean
   }
-  details: Record<string, any>
+  details: Record<string, unknown>
   createdAt: string
 }
 
@@ -28,11 +28,11 @@ export async function fetchActivities(params?: {
   offset?: number
 }): Promise<ActivitiesResponse> {
   const searchParams = new URLSearchParams()
-  
+
   if (params?.limit) {
     searchParams.append('limit', params.limit.toString())
   }
-  
+
   if (params?.offset) {
     searchParams.append('offset', params.offset.toString())
   }

@@ -25,7 +25,11 @@ import { useAuth } from '../contexts/AuthContext'
 
 interface EnhancedTaskCardProps {
   task: Task
-  onChecklistUpdate: (taskId: string, itemId: string, update: { completed?: boolean; text?: string }) => Promise<void>
+  onChecklistUpdate: (
+    taskId: string,
+    itemId: string,
+    update: { completed?: boolean; text?: string }
+  ) => Promise<void>
   onTaskClick?: (task: Task) => void
 }
 
@@ -42,7 +46,10 @@ const PRIORITY_LABEL: Record<TaskPriority, string> = {
   urgent: 'عاجل',
 }
 
-const PRIORITY_COLOR: Record<TaskPriority, 'default' | 'primary' | 'secondary' | 'error' | 'warning' | 'info' | 'success'> = {
+const PRIORITY_COLOR: Record<
+  TaskPriority,
+  'default' | 'primary' | 'secondary' | 'error' | 'warning' | 'info' | 'success'
+> = {
   low: 'default',
   medium: 'primary',
   high: 'warning',
@@ -96,20 +103,26 @@ export default function EnhancedTaskCard({
         p: 2,
         borderRadius: 2,
         background: 'rgba(255,255,255,0.02)',
-        border: task.parentId ? '1px solid rgba(25, 118, 210, 0.3)' : '1px solid rgba(25, 118, 210, 0.15)',
+        border: task.parentId
+          ? '1px solid rgba(25, 118, 210, 0.3)'
+          : '1px solid rgba(25, 118, 210, 0.15)',
         transition: 'all 0.2s ease-in-out',
         cursor: 'pointer',
         opacity: hasAccess ? 1 : 0.6,
         '&:hover': {
           background: 'rgba(255,255,255,0.04)',
           transform: 'translateY(-2px)',
-          border: task.parentId ? '1px solid rgba(25, 118, 210, 0.5)' : '1px solid rgba(25, 118, 210, 0.25)',
+          border: task.parentId
+            ? '1px solid rgba(25, 118, 210, 0.5)'
+            : '1px solid rgba(25, 118, 210, 0.25)',
         },
       }}
     >
       {/* Header with title */}
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 1 }}>
-        {task.parentId && <SubdirectoryArrowRightIcon sx={{ color: 'text.secondary', fontSize: 20, mt: 0.5 }} />}
+        {task.parentId && (
+          <SubdirectoryArrowRightIcon sx={{ color: 'text.secondary', fontSize: 20, mt: 0.5 }} />
+        )}
         <Box sx={{ flex: 1 }}>
           <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5, lineHeight: 1.2 }}>
             {task.title}
@@ -127,8 +140,11 @@ export default function EnhancedTaskCard({
         <Chip
           label={STATUS_LABEL[task.status]}
           color={
-            task.status === 'done' ? 'success' :
-              task.status === 'in_progress' ? 'warning' : 'default'
+            task.status === 'done'
+              ? 'success'
+              : task.status === 'in_progress'
+                ? 'warning'
+                : 'default'
           }
           size="small"
         />
@@ -138,11 +154,7 @@ export default function EnhancedTaskCard({
           size="small"
         />
         {task.dueDate && (
-          <Chip
-            label={`📅 ${formatDate(task.dueDate)}`}
-            variant="outlined"
-            size="small"
-          />
+          <Chip label={`📅 ${formatDate(task.dueDate)}`} variant="outlined" size="small" />
         )}
       </Box>
 
@@ -153,7 +165,7 @@ export default function EnhancedTaskCard({
             المسند إليهم:
           </Typography>
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            {task.assignees.map((assignment) => (
+            {task.assignees.map(assignment => (
               <Chip
                 key={assignment.user.id}
                 avatar={
@@ -175,7 +187,9 @@ export default function EnhancedTaskCard({
       )}
 
       {/* Expandable Details */}
-      {((task.checklists?.length ?? 0) > 0 || (task.links?.length ?? 0) > 0 || (task.attachments?.length ?? 0) > 0) && (
+      {((task.checklists?.length ?? 0) > 0 ||
+        (task.links?.length ?? 0) > 0 ||
+        (task.attachments?.length ?? 0) > 0) && (
         <Accordion sx={{ background: 'transparent', boxShadow: 'none' }}>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             <Typography variant="body2">التفاصيل الإضافية</Typography>
@@ -184,17 +198,20 @@ export default function EnhancedTaskCard({
             {/* Checklist */}
             {task.checklists && task.checklists.length > 0 && (
               <Box sx={{ mb: 2 }}>
-                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
+                <Typography
+                  variant="caption"
+                  sx={{ color: 'text.secondary', display: 'block', mb: 1 }}
+                >
                   قائمة المهام ({completedChecklistItems}/{totalChecklistItems})
                 </Typography>
                 <List dense>
-                  {task.checklists.map((item) => (
+                  {task.checklists.map(item => (
                     <ListItem key={item.id} disablePadding>
                       <ListItemIcon sx={{ minWidth: 36 }}>
                         <Checkbox
                           edge="start"
                           checked={item.completed}
-                          onChange={(e) => handleChecklistToggle(item.id, e.target.checked)}
+                          onChange={e => handleChecklistToggle(item.id, e.target.checked)}
                           size="small"
                           disabled={!canEditTask()}
                         />
@@ -215,18 +232,26 @@ export default function EnhancedTaskCard({
             {/* Links */}
             {task.links && task.links.length > 0 && (
               <Box sx={{ mb: 2 }}>
-                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
+                <Typography
+                  variant="caption"
+                  sx={{ color: 'text.secondary', display: 'block', mb: 1 }}
+                >
                   الروابط:
                 </Typography>
                 <List dense>
-                  {task.links.map((link) => (
+                  {task.links.map(link => (
                     <ListItem key={link.id} disablePadding>
                       <ListItemIcon sx={{ minWidth: 36 }}>
                         <LinkIcon fontSize="small" />
                       </ListItemIcon>
                       <ListItemText
                         primary={
-                          <MuiLink href={link.url} target="_blank" rel="noopener noreferrer" underline="hover">
+                          <MuiLink
+                            href={link.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            underline="hover"
+                          >
                             {link.title || link.url}
                           </MuiLink>
                         }
@@ -240,18 +265,23 @@ export default function EnhancedTaskCard({
             {/* Attachments */}
             {task.attachments && task.attachments.length > 0 && (
               <Box>
-                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
+                <Typography
+                  variant="caption"
+                  sx={{ color: 'text.secondary', display: 'block', mb: 1 }}
+                >
                   المرفقات:
                 </Typography>
                 <List dense>
-                  {task.attachments.map((attachment) => (
+                  {task.attachments.map(attachment => (
                     <ListItem key={attachment.id} disablePadding>
                       <ListItemIcon sx={{ minWidth: 36 }}>
                         <AttachFileIcon fontSize="small" />
                       </ListItemIcon>
                       <ListItemText
                         primary={attachment.filename}
-                        secondary={attachment.size ? `${(attachment.size / 1024).toFixed(2)} KB` : undefined}
+                        secondary={
+                          attachment.size ? `${(attachment.size / 1024).toFixed(2)} KB` : undefined
+                        }
                       />
                     </ListItem>
                   ))}

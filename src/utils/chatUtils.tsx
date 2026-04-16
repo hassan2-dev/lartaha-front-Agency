@@ -5,12 +5,22 @@ export function linkifyText(text: string) {
   return parts.map((part, idx) => {
     if (/^https?:\/\//i.test(part)) {
       return (
-        <a key={`${part}_${idx}`} href={part} target="_blank" rel="noreferrer" style={{ color: '#42a5f5' }}>
+        <a
+          key={`${part}_${idx}`}
+          href={part}
+          target="_blank"
+          rel="noreferrer"
+          style={{ color: '#42a5f5' }}
+        >
           {part}
         </a>
       )
     }
-    return <span key={`${part}_${idx}`} style={{ whiteSpace: 'pre-wrap' }}>{part}</span>
+    return (
+      <span key={`${part}_${idx}`} style={{ whiteSpace: 'pre-wrap' }}>
+        {part}
+      </span>
+    )
   })
 }
 
@@ -27,7 +37,13 @@ export function getFileUrl(key: string, baseUrl?: string) {
   return `${normalized}/${safeKey}`
 }
 
-export function isImageAttachment(attachment: any) {
+interface Attachment {
+  mimeType?: string
+  name?: string
+  key?: string
+}
+
+export function isImageAttachment(attachment: Attachment) {
   const byMime = (attachment.mimeType || '').toLowerCase().startsWith('image/')
   const byName = /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i.test(attachment.name || '')
   const byKey = /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i.test(attachment.key || '')

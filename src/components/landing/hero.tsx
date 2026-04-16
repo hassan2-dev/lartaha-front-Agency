@@ -1,7 +1,7 @@
-import { Button } from "../ui/button"
-import { ArrowUpLeft, Play, Sparkles } from "lucide-react"
-import { useNavigate } from "react-router-dom"
-import { useEffect, useRef } from "react"
+import { Button } from '../ui/button'
+import { ArrowUpLeft, Play, Sparkles } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { useEffect, useRef } from 'react'
 
 export function Hero() {
   const navigate = useNavigate()
@@ -12,10 +12,10 @@ export function Hero() {
     if (!element) return
 
     const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
+      entries => {
+        entries.forEach(entry => {
           if (entry.isIntersecting) {
-            entry.target.classList.add("hero-visible")
+            entry.target.classList.add('hero-visible')
             observer.unobserve(entry.target)
           }
         })
@@ -51,13 +51,15 @@ export function Hero() {
           <h1 className="hero-headline text-5xl font-bold tracking-tight text-foreground sm:text-7xl lg:text-8xl text-balance leading-tight opacity-0">
             وحّد فريقك
             <br />
-            <span className="bg-gradient-to-l from-indigo-600 via-indigo-500 to-indigo-700 bg-clip-text text-transparent">ضاعف إنتاجيتك</span>
+            <span className="bg-gradient-to-l from-indigo-600 via-indigo-500 to-indigo-700 bg-clip-text text-transparent">
+              ضاعف إنتاجيتك
+            </span>
           </h1>
 
           {/* Subheadline */}
           <p className="hero-subheadline mx-auto mt-8 max-w-3xl text-xl text-muted-foreground leading-relaxed text-pretty opacity-0">
-            منصة مساحة العمل المتكاملة التي تجمع إدارة المهام ومشاركة الملفات
-            والتواصل الفريقي وتتبع النشاط في حل واحد قوي ومتكامل.
+            منصة مساحة العمل المتكاملة التي تجمع إدارة المهام ومشاركة الملفات والتواصل الفريقي وتتبع
+            النشاط في حل واحد قوي ومتكامل.
           </p>
 
           {/* CTA Buttons */}
@@ -85,19 +87,31 @@ export function Hero() {
           <div className="hero-trust mt-10 flex flex-wrap items-center justify-center gap-6 text-muted-foreground opacity-0">
             <div className="flex items-center gap-2">
               <svg className="h-5 w-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                <path
+                  fillRule="evenodd"
+                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                  clipRule="evenodd"
+                />
               </svg>
               <span className="text-sm">١٤ يوم تجربة مجانية</span>
             </div>
             <div className="flex items-center gap-2">
               <svg className="h-5 w-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                <path
+                  fillRule="evenodd"
+                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                  clipRule="evenodd"
+                />
               </svg>
               <span className="text-sm">لا حاجة لبطاقة ائتمان</span>
             </div>
             <div className="flex items-center gap-2">
               <svg className="h-5 w-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                <path
+                  fillRule="evenodd"
+                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                  clipRule="evenodd"
+                />
               </svg>
               <span className="text-sm">إلغاء في أي وقت</span>
             </div>
@@ -130,7 +144,9 @@ export function Hero() {
                         <div className="h-9 w-9 rounded-full bg-indigo-100 border-2 border-white" />
                         <div className="h-9 w-9 rounded-full bg-indigo-200 border-2 border-white -mr-3" />
                         <div className="h-9 w-9 rounded-full bg-indigo-300 border-2 border-white -mr-3" />
-                        <div className="h-9 w-9 rounded-full bg-indigo-400 border-2 border-white -mr-3 flex items-center justify-center text-xs text-white font-semibold">+٥</div>
+                        <div className="h-9 w-9 rounded-full bg-indigo-400 border-2 border-white -mr-3 flex items-center justify-center text-xs text-white font-semibold">
+                          +٥
+                        </div>
                       </div>
                     </div>
 
@@ -146,8 +162,13 @@ export function Hero() {
                           { active: false, label: 'النشاط' },
                           { active: false, label: 'الإعدادات' },
                         ].map((item, i) => (
-                          <div key={i} className={`h-10 rounded-lg flex items-center px-3 ${item.active ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-muted'}`}>
-                            <div className={`h-4 w-full rounded ${item.active ? 'bg-indigo-300/50' : 'bg-muted-foreground/10'}`} />
+                          <div
+                            key={i}
+                            className={`h-10 rounded-lg flex items-center px-3 ${item.active ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-muted'}`}
+                          >
+                            <div
+                              className={`h-4 w-full rounded ${item.active ? 'bg-indigo-300/50' : 'bg-muted-foreground/10'}`}
+                            />
                           </div>
                         ))}
                       </div>
@@ -158,19 +179,26 @@ export function Hero() {
                           {[
                             { title: 'للتنفيذ', count: 4, color: 'bg-slate-500' },
                             { title: 'قيد التنفيذ', count: 3, color: 'bg-indigo-500' },
-                            { title: 'مكتمل', count: 6, color: 'bg-green-500' }
+                            { title: 'مكتمل', count: 6, color: 'bg-green-500' },
                           ].map((col, i) => (
                             <div key={col.title} className="flex-1 rounded-xl bg-muted/50 p-4">
                               <div className="flex items-center justify-between mb-4">
                                 <div className="flex items-center gap-2">
                                   <div className={`h-3 w-3 rounded-full ${col.color}`} />
-                                  <span className="font-semibold text-foreground text-sm">{col.title}</span>
+                                  <span className="font-semibold text-foreground text-sm">
+                                    {col.title}
+                                  </span>
                                 </div>
-                                <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">{col.count}</span>
+                                <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">
+                                  {col.count}
+                                </span>
                               </div>
                               <div className="space-y-3">
                                 {[...Array(i === 1 ? 3 : 2)].map((_, j) => (
-                                  <div key={j} className="rounded-lg bg-card p-4 shadow-sm border border-border hover:border-indigo-200 transition-colors cursor-pointer">
+                                  <div
+                                    key={j}
+                                    className="rounded-lg bg-card p-4 shadow-sm border border-border hover:border-indigo-200 transition-colors cursor-pointer"
+                                  >
                                     <div className="h-3 w-full rounded bg-foreground/10 mb-2" />
                                     <div className="h-3 w-2/3 rounded bg-muted-foreground/10 mb-4" />
                                     <div className="flex items-center justify-between">
@@ -194,8 +222,18 @@ export function Hero() {
             <div className="hero-float-1 absolute -right-6 top-1/4 rounded-2xl bg-card border border-indigo-100 p-5 shadow-xl shadow-indigo-500/10 hidden lg:block opacity-0">
               <div className="flex items-center gap-4">
                 <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center">
-                  <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  <svg
+                    className="h-6 w-6 text-green-600"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 13l4 4L19 7"
+                    />
                   </svg>
                 </div>
                 <div>
@@ -208,8 +246,18 @@ export function Hero() {
             <div className="hero-float-2 absolute -left-6 bottom-1/4 rounded-2xl bg-card border border-indigo-100 p-5 shadow-xl shadow-indigo-500/10 hidden lg:block opacity-0">
               <div className="flex items-center gap-4">
                 <div className="h-12 w-12 rounded-full bg-indigo-100 flex items-center justify-center">
-                  <svg className="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                  <svg
+                    className="h-6 w-6 text-indigo-600"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"
+                    />
                   </svg>
                 </div>
                 <div>
@@ -222,8 +270,18 @@ export function Hero() {
             <div className="hero-float-3 absolute -left-4 top-1/3 rounded-2xl bg-card border border-indigo-100 p-4 shadow-xl shadow-indigo-500/10 hidden xl:block opacity-0">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center">
-                  <svg className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  <svg
+                    className="h-5 w-5 text-amber-600"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                    />
                   </svg>
                 </div>
                 <div>

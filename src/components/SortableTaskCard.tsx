@@ -6,7 +6,11 @@ import EnhancedTaskCard from './EnhancedTaskCard'
 
 interface SortableTaskCardProps {
   task: Task
-  onChecklistUpdate: (taskId: string, itemId: string, update: { completed?: boolean; text?: string }) => Promise<void>
+  onChecklistUpdate: (
+    taskId: string,
+    itemId: string,
+    update: { completed?: boolean; text?: string }
+  ) => Promise<void>
   onTaskClick?: (task: Task) => void
 }
 
@@ -15,14 +19,9 @@ export default function SortableTaskCard({
   onChecklistUpdate,
   onTaskClick,
 }: SortableTaskCardProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: task.id })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: task.id,
+  })
 
   const style = {
     transform: CSS.Transform.toString(transform),

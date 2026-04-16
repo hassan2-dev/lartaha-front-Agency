@@ -14,11 +14,7 @@ import {
   ListItem,
   ListItemText,
 } from '@mui/material'
-import {
-  Delete as DeleteIcon,
-  Add as AddIcon,
-  Link as LinkIcon,
-} from '@mui/icons-material'
+import { Delete as DeleteIcon, Add as AddIcon, Link as LinkIcon } from '@mui/icons-material'
 import type { TaskPriority, User } from '../api/tasksApi'
 
 interface EnhancedTaskFormProps {
@@ -88,14 +84,13 @@ export default function EnhancedTaskForm({
     onAssigneesChange(newAssignees)
   }
 
-
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       {/* Basic Fields */}
       <TextField
         label="العنوان"
         value={title}
-        onChange={(e) => onTitleChange(e.target.value)}
+        onChange={e => onTitleChange(e.target.value)}
         fullWidth
         required
         sx={{
@@ -114,7 +109,7 @@ export default function EnhancedTaskForm({
       <TextField
         label="الوصف"
         value={description}
-        onChange={(e) => onDescriptionChange(e.target.value)}
+        onChange={e => onDescriptionChange(e.target.value)}
         fullWidth
         multiline
         minRows={3}
@@ -139,10 +134,12 @@ export default function EnhancedTaskForm({
               left: 'auto',
               transformOrigin: 'right top',
             }}
-          >الحالة</InputLabel>
+          >
+            الحالة
+          </InputLabel>
           <Select
             value={status}
-            onChange={(e) => onStatusChange(e.target.value as 'todo' | 'in_progress' | 'done')}
+            onChange={e => onStatusChange(e.target.value as 'todo' | 'in_progress' | 'done')}
             label="الحالة"
             sx={{
               textAlign: 'right',
@@ -165,10 +162,12 @@ export default function EnhancedTaskForm({
               left: 'auto',
               transformOrigin: 'right top',
             }}
-          >الأولوية</InputLabel>
+          >
+            الأولوية
+          </InputLabel>
           <Select
             value={priority}
-            onChange={(e) => onPriorityChange(e.target.value as TaskPriority)}
+            onChange={e => onPriorityChange(e.target.value as TaskPriority)}
             label="الأولوية"
             sx={{
               textAlign: 'right',
@@ -189,7 +188,7 @@ export default function EnhancedTaskForm({
           type="date"
           label="تاريخ الاستحقاق"
           value={dueDate}
-          onChange={(e) => onDueDateChange(e.target.value)}
+          onChange={e => onDueDateChange(e.target.value)}
           InputLabelProps={{ shrink: true }}
           sx={{
             minWidth: 180,
@@ -212,7 +211,7 @@ export default function EnhancedTaskForm({
           المسند إليهم
         </Typography>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-          {workspaceUsers.map((user) => (
+          {workspaceUsers.map(user => (
             <Chip
               key={user.id}
               avatar={<Avatar src={user.avatar} sx={{ width: 24, height: 24 }} />}
@@ -289,7 +288,7 @@ export default function EnhancedTaskForm({
           <TextField
             label="الرابط"
             value={newLink.url}
-            onChange={(e) => onNewLinkChange({ ...newLink, url: e.target.value })}
+            onChange={e => onNewLinkChange({ ...newLink, url: e.target.value })}
             size="small"
             sx={{
               flex: 2,
@@ -306,7 +305,7 @@ export default function EnhancedTaskForm({
           <TextField
             label="العنوان (اختياري)"
             value={newLink.title}
-            onChange={(e) => onNewLinkChange({ ...newLink, title: e.target.value })}
+            onChange={e => onNewLinkChange({ ...newLink, title: e.target.value })}
             size="small"
             sx={{
               flex: 1,

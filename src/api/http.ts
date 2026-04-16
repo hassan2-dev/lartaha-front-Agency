@@ -7,19 +7,19 @@ export const api = axios.create({
 })
 
 // Request interceptor to add auth token
-api.interceptors.request.use((config) => {
+api.interceptors.request.use(config => {
   const token = localStorage.getItem(TOKEN_STORAGE_KEY)
   if (token) {
     config.headers = config.headers ?? {}
-      ; (config.headers as Record<string, string>)['Authorization'] = `Bearer ${token}`
+    ;(config.headers as Record<string, string>)['Authorization'] = `Bearer ${token}`
   }
   return config
 })
 
 // Response interceptor to handle 401 errors
 api.interceptors.response.use(
-  (response) => response,
-  (error) => {
+  response => response,
+  error => {
     if (error.response?.status === 401) {
       // Clear invalid token
       localStorage.removeItem(TOKEN_STORAGE_KEY)
@@ -29,4 +29,3 @@ api.interceptors.response.use(
     return Promise.reject(error)
   }
 )
-

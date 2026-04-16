@@ -20,7 +20,10 @@ export async function fetchWorkspace(workspaceId: string): Promise<Workspace> {
   return res.data.workspace
 }
 
-export async function updateWorkspace(workspaceId: string, data: UpdateWorkspaceData): Promise<Workspace> {
+export async function updateWorkspace(
+  workspaceId: string,
+  data: UpdateWorkspaceData
+): Promise<Workspace> {
   const res = await api.patch(`/api/workspaces/${workspaceId}`, data)
   return res.data.workspace
 }

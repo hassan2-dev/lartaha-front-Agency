@@ -1,28 +1,39 @@
-import { useState } from "react"
+import { useState } from 'react'
 
 const integrations = [
-  { name: "Google Drive", category: "تخزين", color: "bg-yellow-500" },
-  { name: "Dropbox", category: "تخزين", color: "bg-blue-500" },
-  { name: "Slack", category: "تواصل", color: "bg-purple-600" },
-  { name: "Microsoft Teams", category: "تواصل", color: "bg-indigo-600" },
-  { name: "Zoom", category: "اجتماعات", color: "bg-blue-600" },
-  { name: "Google Meet", category: "اجتماعات", color: "bg-green-500" },
-  { name: "Jira", category: "إدارة مشاريع", color: "bg-blue-700" },
-  { name: "GitHub", category: "تطوير", color: "bg-gray-800" },
-  { name: "Figma", category: "تصميم", color: "bg-pink-500" },
-  { name: "Notion", category: "توثيق", color: "bg-gray-700" },
-  { name: "Zapier", category: "أتمتة", color: "bg-orange-500" },
-  { name: "AWS S3", category: "تخزين", color: "bg-orange-600" },
+  { name: 'Google Drive', category: 'تخزين', color: 'bg-yellow-500' },
+  { name: 'Dropbox', category: 'تخزين', color: 'bg-blue-500' },
+  { name: 'Slack', category: 'تواصل', color: 'bg-purple-600' },
+  { name: 'Microsoft Teams', category: 'تواصل', color: 'bg-indigo-600' },
+  { name: 'Zoom', category: 'اجتماعات', color: 'bg-blue-600' },
+  { name: 'Google Meet', category: 'اجتماعات', color: 'bg-green-500' },
+  { name: 'Jira', category: 'إدارة مشاريع', color: 'bg-blue-700' },
+  { name: 'GitHub', category: 'تطوير', color: 'bg-gray-800' },
+  { name: 'Figma', category: 'تصميم', color: 'bg-pink-500' },
+  { name: 'Notion', category: 'توثيق', color: 'bg-gray-700' },
+  { name: 'Zapier', category: 'أتمتة', color: 'bg-orange-500' },
+  { name: 'AWS S3', category: 'تخزين', color: 'bg-orange-600' },
 ]
 
-const categories = ["الكل", "تخزين", "تواصل", "اجتماعات", "إدارة مشاريع", "تطوير", "تصميم", "توثيق", "أتمتة"]
+const categories = [
+  'الكل',
+  'تخزين',
+  'تواصل',
+  'اجتماعات',
+  'إدارة مشاريع',
+  'تطوير',
+  'تصميم',
+  'توثيق',
+  'أتمتة',
+]
 
 export function Integrations() {
-  const [activeCategory, setActiveCategory] = useState("الكل")
+  const [activeCategory, setActiveCategory] = useState('الكل')
 
-  const filteredIntegrations = activeCategory === "الكل" 
-    ? integrations 
-    : integrations.filter(i => i.category === activeCategory)
+  const filteredIntegrations =
+    activeCategory === 'الكل'
+      ? integrations
+      : integrations.filter(i => i.category === activeCategory)
 
   return (
     <section className="py-24 bg-background">
@@ -41,14 +52,14 @@ export function Integrations() {
 
         {/* Category Filter */}
         <div className="flex flex-wrap justify-center gap-2 mb-12">
-          {categories.map((category) => (
+          {categories.map(category => (
             <button
               key={category}
               onClick={() => setActiveCategory(category)}
               className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 ${
                 activeCategory === category
-                  ? "bg-primary text-primary-foreground shadow-lg"
-                  : "bg-secondary text-secondary-foreground hover:bg-primary/10"
+                  ? 'bg-primary text-primary-foreground shadow-lg'
+                  : 'bg-secondary text-secondary-foreground hover:bg-primary/10'
               }`}
             >
               {category}
@@ -63,7 +74,9 @@ export function Integrations() {
               key={index}
               className="bg-card rounded-xl p-6 border border-border hover:border-primary/30 hover:shadow-lg transition-all duration-300 group cursor-pointer"
             >
-              <div className={`w-12 h-12 ${integration.color} rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300`}>
+              <div
+                className={`w-12 h-12 ${integration.color} rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300`}
+              >
                 <span className="text-white font-bold text-lg">{integration.name[0]}</span>
               </div>
               <h3 className="font-semibold text-foreground mb-1">{integration.name}</h3>

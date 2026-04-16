@@ -217,10 +217,7 @@ export default function RegisterPage() {
             <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
               {/* Avatar Upload */}
               <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
-                <Avatar
-                  src={avatarPreview}
-                  sx={{ width: 80, height: 80, mb: 1 }}
-                />
+                <Avatar src={avatarPreview} sx={{ width: 80, height: 80, mb: 1 }} />
                 <input
                   accept="image/*"
                   id="avatar-upload"
@@ -238,7 +235,7 @@ export default function RegisterPage() {
                       ml: 6,
                       bgcolor: 'background.paper',
                       border: '2px solid',
-                      borderColor: 'primary.main'
+                      borderColor: 'primary.main',
                     }}
                   >
                     <PhotoCamera />

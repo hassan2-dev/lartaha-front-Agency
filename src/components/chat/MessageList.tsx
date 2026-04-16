@@ -1,9 +1,4 @@
-import {
-  Box,
-  Typography,
-  Divider,
-  Button,
-} from '@mui/material'
+import { Box, Typography, Divider, Button } from '@mui/material'
 import { Forum as ForumIcon } from '@mui/icons-material'
 import { MessageSkeleton } from '../SkeletonLoaders'
 import MessageItem from './MessageItem'
@@ -26,7 +21,16 @@ export default function MessageList() {
 
   if (!selectedConversation) {
     return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 1 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flex: 1,
+          gap: 1,
+        }}
+      >
         <ForumIcon sx={{ fontSize: 40, opacity: 0.5 }} />
         <Typography variant="body1" sx={{ opacity: 0.7 }}>
           اختر محادثة من القائمة
@@ -37,7 +41,15 @@ export default function MessageList() {
 
   return (
     <>
-      <Box sx={{ pb: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
+      <Box
+        sx={{
+          pb: 1,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 1,
+        }}
+      >
         <Box>
           <Typography variant="h6" sx={{ fontWeight: 800 }}>
             {getConversationLabel(selectedConversation)}
@@ -48,8 +60,13 @@ export default function MessageList() {
         </Box>
 
         {isGeneralDiscussionSelected && (
-          <Button sx={{ px: 0 }} variant="contained" endIcon={<VideocameraAdd size={24} />} onClick={openGeneralMeeting}>
-            <span className='hidden sm:inline me-3'>اجتماع مباشر</span>
+          <Button
+            sx={{ px: 0 }}
+            variant="contained"
+            endIcon={<VideocameraAdd size={24} />}
+            onClick={openGeneralMeeting}
+          >
+            <span className="hidden sm:inline me-3">اجتماع مباشر</span>
           </Button>
         )}
       </Box>
@@ -80,7 +97,7 @@ export default function MessageList() {
             ابدأ أول رسالة في هذه المحادثة.
           </Typography>
         ) : (
-          messages.map((message) => {
+          messages.map(message => {
             const isMine = message.senderId === user?.id
             const sender = usersById.get(message.senderId)
 

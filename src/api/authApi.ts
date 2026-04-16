@@ -45,7 +45,10 @@ export async function requestPasswordReset(email: string): Promise<{ message: st
   return res.data as { message: string }
 }
 
-export async function confirmPasswordReset(token: string, newPassword: string): Promise<{ message: string }> {
+export async function confirmPasswordReset(
+  token: string,
+  newPassword: string
+): Promise<{ message: string }> {
   const res = await api.post(API_ENV.authResetPasswordPath, { token, newPassword })
   return res.data as { message: string }
 }
@@ -71,4 +74,3 @@ export async function fetchMe(): Promise<{
   console.log('📋 API response headers:', res.headers)
   return res.data.user // Extract the actual user object from the nested structure
 }
-

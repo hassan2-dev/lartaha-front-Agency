@@ -1,13 +1,13 @@
-import { useState } from "react"
-import { useNavigate } from "react-router-dom"
-import { Button } from "../ui/button"
-import { Menu, X } from "lucide-react"
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Button } from '../ui/button'
+import { Menu, X } from 'lucide-react'
 
 const navLinks = [
-  { name: "المميزات", href: "#features" },
-  { name: "الأسعار", href: "#pricing" },
-  { name: "من نحن", href: "#about" },
-  { name: "تواصل معنا", href: "#contact" },
+  { name: 'المميزات', href: '#features' },
+  { name: 'الأسعار', href: '#pricing' },
+  { name: 'من نحن', href: '#about' },
+  { name: 'تواصل معنا', href: '#contact' },
 ]
 
 export function Header() {
@@ -21,12 +21,14 @@ export function Header() {
           {/* Logo */}
           <div className="flex items-center gap-0.5">
             <img src="/logo-color.svg" className="w-14 h-14" />
-            <span className="text-xl font-bold bg-linear-to-l from-indigo-600 to-indigo-800 bg-clip-text text-transparent">مجلس</span>
+            <span className="text-xl font-bold bg-linear-to-l from-indigo-600 to-indigo-800 bg-clip-text text-transparent">
+              مجلس
+            </span>
           </div>
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-8">
-            {navLinks.map((link) => (
+            {navLinks.map(link => (
               <a
                 key={link.name}
                 href={link.href}
@@ -69,7 +71,7 @@ export function Header() {
         {mobileMenuOpen && (
           <div className="md:hidden py-4 border-t border-border">
             <nav className="flex flex-col gap-4">
-              {navLinks.map((link) => (
+              {navLinks.map(link => (
                 <a
                   key={link.name}
                   href={link.href}
@@ -83,13 +85,19 @@ export function Header() {
                 <Button
                   variant="ghost"
                   className="justify-start hover:text-indigo-600"
-                  onClick={() => { navigate('/login'); setMobileMenuOpen(false); }}
+                  onClick={() => {
+                    navigate('/login')
+                    setMobileMenuOpen(false)
+                  }}
                 >
                   تسجيل الدخول
                 </Button>
                 <Button
                   className="bg-indigo-600 hover:bg-indigo-700 text-white"
-                  onClick={() => { navigate('/signup'); setMobileMenuOpen(false); }}
+                  onClick={() => {
+                    navigate('/signup')
+                    setMobileMenuOpen(false)
+                  }}
                 >
                   ابدأ مجاناً
                 </Button>

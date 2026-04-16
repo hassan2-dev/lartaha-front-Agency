@@ -15,7 +15,6 @@ import {
 } from '@solar-icons/react'
 import { useNavigate, useLocation } from 'react-router-dom'
 
-
 const mobileNavItems = [
   { text: 'الرئيسية', icon: <Home size={26} />, path: '/dashboard' },
   { text: 'الملفات', icon: <CloudUpload size={26} />, path: '/dashboard/upload' },
@@ -34,9 +33,10 @@ export default function BottomNav() {
   if (!isMobile) return null
 
   const getCurrentIndex = () => {
-    const index = mobileNavItems.findIndex(item =>
-      location.pathname === item.path ||
-      (item.path === '/dashboard' && location.pathname === '/dashboard/')
+    const index = mobileNavItems.findIndex(
+      item =>
+        location.pathname === item.path ||
+        (item.path === '/dashboard' && location.pathname === '/dashboard/')
     )
     return index >= 0 ? index : 0
   }
@@ -70,13 +70,12 @@ export default function BottomNav() {
           },
         }}
       >
-        {mobileNavItems.map((item) => (
+        {mobileNavItems.map(item => (
           <BottomNavigationAction
             key={item.path}
             icon={item.icon}
             label={item.text}
             showLabel={true}
-
             sx={{
               gap: 0.5,
               fontSize: '0.7rem',

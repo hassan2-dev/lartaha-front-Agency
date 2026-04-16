@@ -7,31 +7,38 @@
 
 import React, { createContext, useContext, useState, useCallback, useRef } from 'react'
 
-export type DownloadStatus = 'pending' | 'downloading' | 'decrypting' | 'paused' | 'completed' | 'failed' | 'cancelled'
+export type DownloadStatus =
+  | 'pending'
+  | 'downloading'
+  | 'decrypting'
+  | 'paused'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
 
 export interface DownloadItem {
-  key: string        // unique download id (e.g. "s3key:filename")
+  key: string // unique download id (e.g. "s3key:filename")
   filename: string
   status: DownloadStatus
-  progress: number   // 0–100 (download phase; 100 = decryption done)
+  progress: number // 0–100 (download phase; 100 = decryption done)
   bytesDownloaded: number
   totalBytes: number
-  speed: number      // bytes/second
+  speed: number // bytes/second
   startTime: number
   error?: string
   retries: number
   // Encrypted download extras
   isEncrypted?: boolean
-  decryptionProgress?: number  // 0–100
+  decryptionProgress?: number // 0–100
 }
 
 export interface PausedDownloadState {
-  chunks: ArrayBuffer[]       // bytes collected before pause
+  chunks: ArrayBuffer[] // bytes collected before pause
   bytesDownloaded: number
   totalBytes: number
   isEncrypted: boolean
-  s3Key?: string              // original S3 key (for non-encrypted Range requests)
-  encryptedUrl?: string       // pre-signed URL snapshot (may expire)
+  s3Key?: string // original S3 key (for non-encrypted Range requests)
+  encryptedUrl?: string // pre-signed URL snapshot (may expire)
 }
 
 interface DownloadContextType {
@@ -112,27 +119,30 @@ export function DownloadProvider({ children }: { children: React.ReactNode }) {
   const totalCount = downloads.size
 
   return (
-    <DownloadContext.Provider value={{
-      downloads,
-      addDownload,
-      updateDownload,
-      removeDownload,
-      clearCompleted,
-      isMinimized,
-      setIsMinimized,
-      showDialog,
-      setShowDialog,
-      abortControllers,
-      pausedChunks,
-      activeCount,
-      completedCount,
-      totalCount,
-    }}>
+    <DownloadContext.Provider
+      value={{
+        downloads,
+        addDownload,
+        updateDownload,
+        removeDownload,
+        clearCompleted,
+        isMinimized,
+        setIsMinimized,
+        showDialog,
+        setShowDialog,
+        abortControllers,
+        pausedChunks,
+        activeCount,
+        completedCount,
+        totalCount,
+      }}
+    >
       {children}
     </DownloadContext.Provider>
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useDownload() {
   const ctx = useContext(DownloadContext)
   if (!ctx) throw new Error('useDownload must be used within a DownloadProvider')

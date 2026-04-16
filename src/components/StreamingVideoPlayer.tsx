@@ -1,16 +1,11 @@
 /**
  * Streaming Video Player with progressive decryption
- * 
+ *
  * Downloads and decrypts video in chunks while playing
  */
 
 import { useState, useEffect, useRef } from 'react'
-import {
-  Box,
-  CircularProgress,
-  LinearProgress,
-  Typography,
-} from '@mui/material'
+import { Box, CircularProgress, LinearProgress, Typography } from '@mui/material'
 
 import { downloadAndDecryptStream } from '../lib/encryption'
 
@@ -42,7 +37,7 @@ export default function StreamingVideoPlayer({
   const [decryptionProgress, setDecryptionProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
-  
+
   const videoRef = useRef<HTMLVideoElement>(null)
   const decryptionPasswordRef = useRef<string>('')
 
@@ -81,7 +76,7 @@ export default function StreamingVideoPlayer({
         }
 
         setIsDecrypting(true)
-        
+
         // For encrypted files, use streaming decryption
         console.log('[StreamingVideoPlayer] Encrypted file, using streaming decryption')
         const decrypted = await downloadAndDecryptStream(
@@ -90,7 +85,7 @@ export default function StreamingVideoPlayer({
           encryptionSalt,
           decryptionPasswordRef.current,
           size,
-          (progress) => setDecryptionProgress(progress),
+          progress => setDecryptionProgress(progress),
           fileId, // Pass fileId for caching
           _mimeType, // Pass MIME type for caching
           filename // Pass filename for caching
@@ -143,16 +138,18 @@ export default function StreamingVideoPlayer({
 
   if (error) {
     return (
-      <Box sx={{ 
-        p: 4, 
-        textAlign: 'center',
-        minHeight: 300,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 2,
-      }}>
+      <Box
+        sx={{
+          p: 4,
+          textAlign: 'center',
+          minHeight: 300,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 2,
+        }}
+      >
         <Typography color="error">{error}</Typography>
         <button onClick={onClose}>Close</button>
       </Box>
@@ -161,30 +158,30 @@ export default function StreamingVideoPlayer({
 
   if (isLoading || isDecrypting) {
     return (
-      <Box sx={{ 
-        p: 4, 
-        textAlign: 'center',
-        minHeight: 300,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 2,
-      }}>
+      <Box
+        sx={{
+          p: 4,
+          textAlign: 'center',
+          minHeight: 300,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 2,
+        }}
+      >
         <CircularProgress size={48} />
         {isDecrypting && (
           <>
             <Typography>جاري فك التشفير... {decryptionProgress}%</Typography>
-            <LinearProgress 
-              variant="determinate" 
-              value={decryptionProgress} 
-              sx={{ width: '80%' }} 
+            <LinearProgress
+              variant="determinate"
+              value={decryptionProgress}
+              sx={{ width: '80%' }}
             />
           </>
         )}
-        {isLoading && !isDecrypting && (
-          <Typography>جاري تحميل الفيديو...</Typography>
-        )}
+        {isLoading && !isDecrypting && <Typography>جاري تحميل الفيديو...</Typography>}
       </Box>
     )
   }
@@ -195,8 +192,8 @@ export default function StreamingVideoPlayer({
         ref={videoRef}
         controls
         autoPlay
-        style={{ 
-          maxWidth: '100%', 
+        style={{
+          maxWidth: '100%',
           maxHeight: '70vh',
           width: '100%',
         }}

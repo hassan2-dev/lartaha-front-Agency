@@ -1,579 +1,210 @@
-import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
-import {
-  DndContext,
-  pointerWithin,
-  KeyboardSensor,
-  PointerSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type DragStartEvent,
-  type DragOverEvent,
-  DragOverlay,
-  useDroppable,
-} from '@dnd-kit/core'
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable'
-import {
-  Box,
-  Button,
-  Container,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Paper,
-  Typography,
-  Fab,
-  CircularProgress,
-} from '@mui/material'
-import { AddSquare, TrashBinTrash } from '@solar-icons/react'
+import { useCallback, useMemo, useRef } from 'react'
+import { DndContext, pointerWithin, DragOverlay } from '@dnd-kit/core'
+import { Box, Container, Fab, Typography, CircularProgress } from '@mui/material'
+import { AddSquare } from '@solar-icons/react'
 import { useAuth } from '../contexts/AuthContext'
-import {
-  createTask,
-  getTasks,
-  updateTask,
-  deleteTask,
-  getWorkspaceUsers,
-  updateChecklistItem,
-  type Task,
-  type TaskStatus,
-  type TaskPriority,
-  type User,
-} from '../api/tasksApi'
-import { subscribeRealtime } from '../api/realtimeApi'
-import EnhancedTaskForm from '../components/EnhancedTaskForm'
+import { createTask, updateTask, deleteTask, type Task, type TaskStatus } from '../api/tasksApi'
+import { useTasks } from '../hooks/useTasks'
+import { useTaskForm } from '../hooks/useTaskForm'
+import { useTaskModals } from '../hooks/useTaskModals'
+import { useTaskDragAndDrop } from '../hooks/useTaskDragAndDrop'
+import { canEditTask, getEffectiveAssigneeIds } from '../utils/taskUtils'
+import { STATUS_ORDER } from '../constants/tasks'
+import { TaskColumn, TaskCreateModal, TaskEditModal } from '../components/tasks'
 import EnhancedTaskCard from '../components/EnhancedTaskCard'
-import SortableTaskCard from '../components/SortableTaskCard'
 import { ColumnSkeleton } from '../components/SkeletonLoaders'
 import Toast from '../components/Toast'
-
-const STATUS_LABEL: Record<TaskStatus, string> = {
-  todo: 'قيد الانتظار',
-  in_progress: 'قيد التنفيذ',
-  done: 'منجزة',
-}
-
-const STATUS_ORDER: TaskStatus[] = ['todo', 'in_progress', 'done']
 
 export default function TasksPage() {
   const { user } = useAuth()
 
-  const [tasks, setTasks] = useState<Task[]>([])
-  const [workspaceUsers, setWorkspaceUsers] = useState<User[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [showToast, setShowToast] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
-  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  // Data fetching hook
+  const {
+    tasks,
+    groupedTasks,
+    workspaceUsers,
+    loading,
+    isLoadingMore,
+    hasMore,
+    error,
+    setTasks,
+    setError,
+    loadMore,
+    handleChecklistUpdate,
+  } = useTasks({
+    workspaceId: user?.workspaceId,
+    workspaceName: user?.workspaceName,
+  })
+
+  // Form state hook
+  const form = useTaskForm()
+
+  // Modal state hook
+  const modals = useTaskModals(form.resetForm)
+
+  // Permission helper
+  const checkCanEditTask = useCallback(
+    (task: Task) => canEditTask(task, user?.id, user?.isAdmin),
+    [user?.id, user?.isAdmin]
+  )
+
+  // Error handling
+  const handleError = useCallback(
+    (message: string) => {
+      setError(message)
+    },
+    [setError]
+  )
+
+  // Status change handler for drag and drop
+  const handleStatusChange = useCallback(
+    async (taskId: string, newStatus: TaskStatus) => {
+      const updated = await updateTask(taskId, { status: newStatus })
+      setTasks(current => current.map(item => (item.id === taskId ? updated : item)))
+    },
+    [setTasks]
+  )
+
+  // Drag and drop hook
+  const dragAndDrop = useTaskDragAndDrop({
+    tasks,
+    onTasksChange: setTasks,
+    onStatusChange: handleStatusChange,
+    canEditTask: checkCanEditTask,
+    onError: handleError,
+  })
+
+  // Scroll container ref for infinite scroll
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
-  // Modal state
-  const [createModalOpen, setCreateModalOpen] = useState(false)
-  const [editModalOpen, setEditModalOpen] = useState(false)
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null)
+  // Infinite scroll handler
+  const handleScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      const { scrollTop, scrollHeight, clientHeight } = e.currentTarget
+      // When user is within 200px of bottom, load more
+      if (scrollHeight - scrollTop - clientHeight < 200) {
+        void loadMore()
+      }
+    },
+    [loadMore]
+  )
 
-  // Basic task fields
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [status, setStatus] = useState<TaskStatus>('todo')
-  const [priority, setPriority] = useState<TaskPriority>('medium')
-  const [dueDate, setDueDate] = useState('')
+  // Task creation/editing handler
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
+  const handleSubmit = useCallback(async () => {
+    const isEditing = Boolean(modals.selectedTask)
 
-  // Enhanced task features
-  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([])
-  const [checklistItems, setChecklistItems] = useState<{ text: string; completed?: boolean }[]>([])
-  const [links, setLinks] = useState<{ url: string; title?: string }[]>([])
-  const [newChecklistItem, setNewChecklistItem] = useState('')
-  const [newLink, setNewLink] = useState({ url: '', title: '' })
-  const [activeId, setActiveId] = useState<string | null>(null)
-  const [overColumn, setOverColumn] = useState<TaskStatus | null>(null)
+    setError(null)
 
-  // Detect mobile devices
+    if (!form.title.trim()) {
+      setError('يرجى كتابة عنوان المهمة')
+      return
+    }
+
+    try {
+      const effectiveAssigneeIds = getEffectiveAssigneeIds(
+        form.selectedAssignees,
+        user?.id,
+        user?.isAdmin,
+        isEditing
+      )
+
+      const taskData = {
+        title: form.title.trim(),
+        description: form.description.trim() || undefined,
+        status: form.status,
+        priority: form.priority,
+        dueDate: form.dueDate || undefined,
+        assigneeIds: effectiveAssigneeIds.length > 0 ? effectiveAssigneeIds : undefined,
+        checklists: form.checklistItems.length > 0 ? form.checklistItems : undefined,
+        links: form.links.length > 0 ? form.links : undefined,
+      }
+
+      if (isEditing && modals.selectedTask) {
+        const updated = await updateTask(modals.selectedTask.id, taskData)
+        setTasks(prev => prev.map(t => (t.id === modals.selectedTask!.id ? updated : t)))
+        modals.closeEditModal()
+      } else {
+        const newTask = await createTask(taskData)
+        setTasks(prev => [newTask, ...prev])
+        modals.closeCreateModal()
+      }
+    } catch (e: unknown) {
+      const err = e as { message?: string; response?: { data?: { message?: string } } }
+      setError(
+        err.response?.data?.message ??
+          err.message ??
+          (isEditing ? 'فشل تحديث المهمة' : 'فشل إنشاء المهمة')
+      )
+    }
+  }, [form, modals, user?.id, user?.isAdmin, setTasks, setError])
+
+  // Task deletion handler
+  const handleDelete = useCallback(async () => {
+    if (!modals.selectedTask) return
+
+    const confirmDelete = window.confirm(
+      `هل أنت متأكد من حذف المهمة "${modals.selectedTask.title}"؟ هذا الإجراء لا يمكن التراجع عنه.`
+    )
+    if (!confirmDelete) return
+
+    setError(null)
+    try {
+      await deleteTask(modals.selectedTask.id)
+      setTasks(prev => prev.filter(t => t.id !== modals.selectedTask!.id))
+      modals.closeEditModal()
+    } catch (e: unknown) {
+      const err = e as { message?: string; response?: { data?: { message?: string } } }
+      setError(err.response?.data?.message ?? err.message ?? 'فشل حذف المهمة')
+    }
+  }, [modals.selectedTask, setTasks, setError, modals])
+
+  // Task click handler (opens edit modal with permission check)
+  const handleTaskClick = useCallback(
+    (task: Task) => {
+      if (!checkCanEditTask(task)) {
+        setError(
+          'لا يمكنك تعديل هذه المهمة. فقط المسؤول أو منشئ المهمة أو الأعضاء المعينين يمكنهم التعديل.'
+        )
+        return
+      }
+      form.populateFromTask(task)
+      modals.openEditModal(task)
+    },
+    [checkCanEditTask, form, modals, setError]
+  )
+
+  // Mobile detection
   const isMobile = useMemo(() => {
     return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
       typeof navigator !== 'undefined' ? navigator.userAgent : ''
     )
   }, [])
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 10, // Further increased distance for desktop
-      },
-    }),
-    // Only include TouchSensor on non-mobile devices to block dragging on mobile
-    ...(isMobile ? [] : [
-      useSensor(TouchSensor, {
-        activationConstraint: {
-          delay: 500, // Increased to 500ms delay before drag starts on touch devices
-          tolerance: 5, // Reduced tolerance to be more precise
-        },
-      })
-    ]),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
+  // Render columns
+  const renderColumns = () => (
+    <>
+      {STATUS_ORDER.map(status => (
+        <TaskColumn
+          key={status}
+          status={status}
+          tasks={groupedTasks[status]}
+          overColumn={dragAndDrop.overColumn}
+          onChecklistUpdate={handleChecklistUpdate}
+          onTaskClick={handleTaskClick}
+        />
+      ))}
+    </>
   )
 
-  const refresh = useCallback(async (options?: { silent?: boolean; reset?: boolean }) => {
-    const silent = options?.silent === true
-    const reset = options?.reset === true
-
-    if (!silent) {
-      setError(null)
-      setLoading(true)
-    }
-
-    try {
-      const tasksParams = reset ? { limit: 50 } : { limit: 50, ...(nextCursor && { cursor: nextCursor }) }
-
-      console.log('🔄 Tasks fetch request:', {
-        reset,
-        nextCursor,
-        params: tasksParams,
-        currentTasksCount: tasks.length
-      })
-
-      const [tasksData, usersData] = await Promise.all([getTasks(tasksParams), getWorkspaceUsers()])
-
-      console.log('🔄 Raw API response:', tasksData)
-
-      // Log workspace information for debugging
-      console.log('🏢 Current user workspace:', user?.workspaceId, user?.workspaceName)
-      console.log('📋 Tasks loaded:', tasksData.tasks.length)
-      console.log('📋 Task workspace IDs:', tasksData.tasks.map(t => ({ id: t.id, title: t.title, workspaceId: (t as any).workspaceId })))
-      console.log('📋 Pagination response:', tasksData.pagination)
-
-      if (reset) {
-        setTasks(tasksData.tasks)
-      } else {
-        setTasks(prev => [...prev, ...tasksData.tasks])
-      }
-
-      setHasMore(tasksData.pagination?.hasMore ?? false)
-      setNextCursor(tasksData.pagination?.nextCursor ?? null)
-      setWorkspaceUsers(usersData)
-    } catch (e: unknown) {
-      const err = e as { message?: string; response?: { data?: { message?: string } } }
-      setError(err.response?.data?.message ?? err.message ?? 'فشل جلب المهام')
-    } finally {
-      if (!silent) {
-        setLoading(false)
-      }
-    }
-  }, [user?.workspaceId, user?.workspaceName])
-
-  useEffect(() => {
-    void refresh({ reset: true })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
-    const unsubscribe = subscribeRealtime(
-      (event) => {
-        if (event.scope !== 'tasks') return
-        void refresh({ silent: true, reset: true })
-      },
-      () => {
-        // keep UI functional even if realtime stream disconnects
-      }
-    )
-
-    return unsubscribe
-  }, [refresh])
-
-  const loadMoreTasks = useCallback(async () => {
-    if (!hasMore || isLoadingMore || loading) return
-
-    setIsLoadingMore(true)
-    try {
-      await refresh({ silent: true })
-    } finally {
-      setIsLoadingMore(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasMore, isLoadingMore, loading])
-
-  // Infinite scroll handler
-  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget
-
-    // When user is within 200px of bottom, load more
-    if (scrollHeight - scrollTop - clientHeight < 200) {
-      void loadMoreTasks()
-    }
-  }, [loadMoreTasks])
-
-  const resetForm = () => {
-    setTitle('')
-    setDescription('')
-    setStatus('todo')
-    setPriority('medium')
-    setDueDate('')
-    setSelectedAssignees([])
-    setChecklistItems([])
-    setLinks([])
-    setNewChecklistItem('')
-    setNewLink({ url: '', title: '' })
-  }
-
-  const addChecklistItem = () => {
-    if (newChecklistItem.trim()) {
-      setChecklistItems([...checklistItems, { text: newChecklistItem.trim(), completed: false }])
-      setNewChecklistItem('')
-    }
-  }
-
-  const removeChecklistItem = (index: number) => {
-    setChecklistItems(checklistItems.filter((_, i) => i !== index))
-  }
-
-  const addLink = () => {
-    if (newLink.url.trim()) {
-      setLinks([...links, { url: newLink.url.trim(), title: newLink.title.trim() }])
-      setNewLink({ url: '', title: '' })
-    }
-  }
-
-  const removeLink = (index: number) => {
-    setLinks(links.filter((_, i) => i !== index))
-  }
-
-  const grouped = useMemo(() => {
-    // Additional safety filter: ensure only tasks from current workspace are displayed
-    const workspaceFilteredTasks = user?.workspaceId
-      ? tasks.filter((t) => {
-        const taskWorkspaceId = (t as any).workspaceId;
-        // Include tasks that belong to current workspace or don't have workspaceId (for backward compatibility)
-        return !taskWorkspaceId || taskWorkspaceId === user.workspaceId;
-      })
-      : tasks;
-
-    return {
-      todo: workspaceFilteredTasks.filter((t) => t.status === 'todo'),
-      in_progress: workspaceFilteredTasks.filter((t) => t.status === 'in_progress'),
-      done: workspaceFilteredTasks.filter((t) => t.status === 'done'),
-    }
-  }, [tasks, user?.workspaceId])
-
-  async function onCreate() {
-    const isEditing = Boolean(selectedTask)
-
-    setError(null)
-    setLoading(true)
-    if (!title.trim()) {
-      setError('يرجى كتابة عنوان المهمة')
-      setLoading(false)
-      return
-    }
-    try {
-      const effectiveAssigneeIds = isEditing
-        ? selectedAssignees
-        : Array.from(
-          new Set([
-            ...selectedAssignees,
-            ...(!user?.isAdmin && user?.id ? [user.id] : []),
-          ])
-        )
-
-      const taskData = {
-        title: title.trim(),
-        description: description.trim() || undefined,
-        status,
-        priority,
-        dueDate: dueDate || undefined,
-        assigneeIds: effectiveAssigneeIds.length > 0 ? effectiveAssigneeIds : undefined,
-        checklists: checklistItems.length > 0 ? checklistItems : undefined,
-        links: links.length > 0 ? links : undefined,
-      }
-
-      if (isEditing && selectedTask) {
-        // Update existing task
-        const updated = await updateTask(selectedTask.id, taskData)
-        setTasks((prev) => prev.map((t) => (t.id === selectedTask.id ? updated : t)))
-        closeEditModal()
-      } else {
-        // Create new task
-        const t = await createTask(taskData)
-        setTasks((prev) => [t, ...prev])
-        closeCreateModal()
-      }
-    } catch (e: unknown) {
-      const err = e as { message?: string; response?: { data?: { message?: string } } }
-      setError(err.response?.data?.message ?? err.message ?? (isEditing ? 'فشل تحديث المهمة' : 'فشل إنشاء المهمة'))
-      setShowToast(true)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const openCreateModal = () => {
-    setSelectedTask(null)
-    resetForm()
-    setCreateModalOpen(true)
-  }
-
-  const closeCreateModal = () => {
-    setCreateModalOpen(false)
-    setSelectedTask(null)
-    resetForm()
-  }
-
-  // Permission helper function
-  const canEditTask = (task: Task) => {
-    const isAssignee = task.assignees?.some(a => a.userId === user?.id)
-    return user?.isAdmin || task.createdBy?.id === user?.id || isAssignee
-  }
-
-  const openEditModal = (task: Task) => {
-    // Check if user has permission to edit this task
-    if (!canEditTask(task)) {
-      setError('لا يمكنك تعديل هذه المهمة. فقط المسؤول أو منشئ المهمة أو الأعضاء المعينين يمكنهم التعديل.')
-      setShowToast(true)
-      return
-    }
-
-    setSelectedTask(task)
-    setTitle(task.title)
-    setDescription(task.description || '')
-    setStatus(task.status)
-    setPriority(task.priority)
-    setDueDate(task.dueDate || '')
-    setSelectedAssignees(task.assignees?.map(a => a.userId) || [])
-    setChecklistItems(task.checklists?.map(c => ({ text: c.text, completed: c.completed })) || [])
-    setLinks(task.links?.map(l => ({ url: l.url, title: l.title || '' })) || [])
-    setEditModalOpen(true)
-  }
-
-  const closeEditModal = () => {
-    setEditModalOpen(false)
-    setSelectedTask(null)
-    resetForm()
-  }
-
-
-  async function handleDeleteTask() {
-    if (!selectedTask) return
-
-    // Check if user has permission to delete this task
-    if (!canEditTask(selectedTask)) {
-      setError('لا يمكنك حذف هذه المهمة. فقط المسؤول أو منشئ المهمة أو الأعضاء المعينين يمكنهم الحذف.')
-      setShowToast(true)
-      return
-    }
-
-    const confirmDelete = window.confirm(`هل أنت متأكد من حذف المهمة "${selectedTask.title}"؟ هذا الإجراء لا يمكن التراجع عنه.`)
-    if (!confirmDelete) return
-
-    setError(null)
-    setLoading(true)
-    try {
-      await deleteTask(selectedTask.id)
-      setTasks((prev) => prev.filter((t) => t.id !== selectedTask.id))
-      closeEditModal()
-    } catch (e: unknown) {
-      const err = e as { message?: string; response?: { data?: { message?: string } } }
-      setError(err.response?.data?.message ?? err.message ?? 'فشل حذف المهمة')
-      setShowToast(true)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleChecklistUpdate(taskId: string, itemId: string, update: { completed?: boolean; text?: string }) {
-    // Find the task to check permissions
-    const task = tasks.find(t => t.id === taskId)
-    if (!task || !canEditTask(task)) {
-      setError('لا يمكنك تعديل هذه المهمة. فقط المسؤول أو منشئ المهمة يمكنه التعديل.')
-      return
-    }
-
-    setError(null)
-    try {
-      await updateChecklistItem(taskId, itemId, update)
-      await refresh()
-    } catch (e: unknown) {
-      const err = e as { message?: string; response?: { data?: { message?: string } } }
-      setError(err.response?.data?.message ?? err.message ?? 'فشل تحديث عنصر قائمة التحقق')
-    }
-  }
-
-  const reorderTasks = useCallback(
-    (current: Task[], movingTaskId: string, toStatus: TaskStatus, targetIndex?: number) => {
-      const movingTask = current.find((item) => item.id === movingTaskId)
-      if (!movingTask) return current
-
-      const remaining = current.filter((item) => item.id !== movingTaskId)
-      const groupedByStatus: Record<TaskStatus, Task[]> = {
-        todo: [],
-        in_progress: [],
-        done: [],
-      }
-
-      remaining.forEach((item) => {
-        groupedByStatus[item.status].push(item)
-      })
-
-      const movedTask: Task = { ...movingTask, status: toStatus }
-      const targetList = groupedByStatus[toStatus]
-      const insertIndex = targetIndex !== undefined ? targetIndex : targetList.length
-
-      targetList.splice(insertIndex, 0, movedTask)
-
-      return STATUS_ORDER.flatMap((statusKey) => groupedByStatus[statusKey])
-    },
-    []
+  // Render skeleton loaders
+  const renderSkeletons = () => (
+    <>
+      <ColumnSkeleton />
+      <ColumnSkeleton />
+      <ColumnSkeleton />
+    </>
   )
-
-  const handleDragOver = useCallback((event: DragOverEvent) => {
-    const { over } = event
-    if (!over) {
-      setOverColumn(null)
-      return
-    }
-    // Check if we're over a column (droppable ID that matches a status)
-    const overId = over.id as string
-    if (STATUS_ORDER.includes(overId as TaskStatus)) {
-      setOverColumn(overId as TaskStatus)
-    } else {
-      // We're over a task, find its status
-      const task = tasks.find(t => t.id === overId)
-      if (task) {
-        setOverColumn(task.status)
-      }
-    }
-  }, [tasks])
-
-  const handleDragStart = useCallback((event: DragStartEvent) => {
-    setActiveId(event.active.id as string)
-    setOverColumn(null)
-  }, [])
-
-  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
-    const { active, over } = event
-    setActiveId(null)
-    setOverColumn(null)
-
-    if (!over) return
-
-    const activeId = active.id as string
-    const overId = over.id as string
-
-    const activeTask = tasks.find((t) => t.id === activeId)
-    if (!activeTask) return
-
-    // Check if user has permission to edit this task
-    if (!canEditTask(activeTask)) {
-      setError('لا يمكنك تعديل هذه المهمة. فقط المسؤول أو منشئ المهمة يمكنه التعديل.')
-      return
-    }
-
-    // Determine target status
-    let targetStatus: TaskStatus
-    const overTask = tasks.find((t) => t.id === overId)
-
-    if (overTask) {
-      targetStatus = overTask.status
-    } else if (STATUS_ORDER.includes(overId as TaskStatus)) {
-      // Dropped on a column (not a task)
-      targetStatus = overId as TaskStatus
-    } else {
-      return
-    }
-
-    if (activeId === overId) return
-
-    const currentStatusTasks = tasks.filter(t => t.status === targetStatus)
-    const newIndex = currentStatusTasks.findIndex(t => t.id === overId)
-
-    let nextTasks: Task[]
-    if (overTask && activeTask.status === targetStatus) {
-      // Reordering within same column
-      nextTasks = arrayMove(
-        tasks,
-        tasks.findIndex(t => t.id === activeId),
-        tasks.findIndex(t => t.id === overId)
-      )
-    } else {
-      // Moving to different column or new position
-      const targetIndex = overTask ? newIndex : currentStatusTasks.length
-      nextTasks = reorderTasks(tasks, activeId, targetStatus, targetIndex)
-    }
-
-    const previousTasks = tasks
-    setTasks(nextTasks)
-
-    // Only update if status changed
-    if (activeTask.status !== targetStatus) {
-      setError(null)
-      try {
-        const updated = await updateTask(activeId, { status: targetStatus })
-        setTasks((current) => current.map((item) => (item.id === activeId ? updated : item)))
-      } catch (e: unknown) {
-        setTasks(previousTasks)
-        const err = e as { message?: string; response?: { data?: { message?: string } } }
-        setError(err.response?.data?.message ?? err.message ?? 'فشل تحديث حالة المهمة')
-      }
-    }
-  }, [tasks, reorderTasks, canEditTask])
-
-  const activeTask = useMemo(() => tasks.find(t => t.id === activeId), [tasks, activeId])
-
-  function DroppableColumn({ s }: { s: TaskStatus }) {
-    const list = grouped[s]
-    const { setNodeRef, isOver } = useDroppable({
-      id: s,
-    })
-
-    const isHighlighted = isOver || overColumn === s
-
-    return (
-      <Paper
-        elevation={0}
-        ref={setNodeRef}
-        sx={{
-          p: 2,
-          borderRadius: 2,
-          flex: '1 1 280px',
-          minHeight: 220,
-          border: isHighlighted
-            ? '2px solid #1976d2'
-            : '1px solid rgba(25, 118, 210, 0.12)',
-          bgcolor: isHighlighted
-            ? 'rgba(25, 118, 210, 0.08)'
-            : 'background.paper',
-          transition: 'all 0.15s ease-in-out',
-        }}
-      >
-        <Typography sx={{ fontWeight: 800, mb: 1 }}>{STATUS_LABEL[s]}</Typography>
-        {list.length === 0 ? (
-          <Typography variant="body2" sx={{ opacity: 0.7 }}>
-            لا توجد مهام
-          </Typography>
-        ) : (
-          <SortableContext items={list.map(t => t.id)} strategy={verticalListSortingStrategy}>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {list.map((t) => (
-                <SortableTaskCard
-                  key={t.id}
-                  task={t}
-                  onChecklistUpdate={handleChecklistUpdate}
-                  onTaskClick={openEditModal}
-                />
-              ))}
-            </Box>
-          </SortableContext>
-        )}
-      </Paper>
-    )
-  }
 
   return (
     <Container
@@ -585,51 +216,32 @@ export default function TasksPage() {
       {isMobile ? (
         // Mobile view - no drag and drop
         <Box sx={{ display: 'flex', gap: 2, mt: 2, flexWrap: 'wrap' }}>
-          {loading && tasks.length === 0 ? (
-            <>
-              <ColumnSkeleton />
-              <ColumnSkeleton />
-              <ColumnSkeleton />
-            </>
-          ) : (
-            <>
-              <DroppableColumn s="todo" />
-              <DroppableColumn s="in_progress" />
-              <DroppableColumn s="done" />
-            </>
-          )}
+          {loading && tasks.length === 0 ? renderSkeletons() : renderColumns()}
         </Box>
       ) : (
         // Desktop view - with drag and drop
         <DndContext
-          sensors={sensors}
+          sensors={dragAndDrop.sensors}
           collisionDetection={pointerWithin}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragEnd={handleDragEnd}
+          onDragStart={dragAndDrop.handleDragStart}
+          onDragOver={dragAndDrop.handleDragOver}
+          onDragEnd={dragAndDrop.handleDragEnd}
         >
           <Box sx={{ display: 'flex', gap: 2, mt: 2, flexWrap: 'wrap' }}>
-            {loading && tasks.length === 0 ? (
-              <>
-                <ColumnSkeleton />
-                <ColumnSkeleton />
-                <ColumnSkeleton />
-              </>
-            ) : (
-              <>
-                <DroppableColumn s="todo" />
-                <DroppableColumn s="in_progress" />
-                <DroppableColumn s="done" />
-              </>
-            )}
+            {loading && tasks.length === 0 ? renderSkeletons() : renderColumns()}
           </Box>
           <DragOverlay>
-            {activeTask ? (
-              <Box sx={{ transform: 'rotate(2deg)', border: '1px solid rgba(25, 118, 210, 0.2)' }}>
+            {dragAndDrop.activeTask ? (
+              <Box
+                sx={{
+                  transform: 'rotate(2deg)',
+                  border: '1px solid rgba(25, 118, 210, 0.2)',
+                }}
+              >
                 <EnhancedTaskCard
-                  task={activeTask}
+                  task={dragAndDrop.activeTask}
                   onChecklistUpdate={handleChecklistUpdate}
-                  onTaskClick={openEditModal}
+                  onTaskClick={handleTaskClick}
                 />
               </Box>
             ) : null}
@@ -657,12 +269,10 @@ export default function TasksPage() {
       <Fab
         color="primary"
         aria-label="add task"
-        onClick={openCreateModal}
-        className='left-8 bottom-24 md:left-16 md:bottom-10'
+        onClick={modals.openCreateModal}
+        className="left-8 bottom-24 md:left-16 md:bottom-10"
         sx={{
           position: 'fixed',
-          // bottom: 80,
-          // left: 16,
           zIndex: 1000,
           border: '1px solid rgba(25, 118, 210, 0.2)',
           '&:hover': {
@@ -676,140 +286,38 @@ export default function TasksPage() {
       </Fab>
 
       {/* Create Task Modal */}
-      <Dialog
-        open={createModalOpen}
-        onClose={closeCreateModal}
-        maxWidth="md"
-        fullWidth
-        PaperProps={{
-          sx: {
-            borderRadius: 2,
-            bgcolor: 'background.paper',
-          }
-        }}
-      >
-        <DialogTitle sx={{ fontWeight: 800, pb: 1 }}>
-          إنشاء مهمة جديدة
-        </DialogTitle>
-        <DialogContent sx={{ pt: 1 }}>
-          <EnhancedTaskForm
-            title={title}
-            description={description}
-            status={status}
-            priority={priority}
-            dueDate={dueDate}
-            selectedAssignees={selectedAssignees}
-            checklistItems={checklistItems}
-            links={links}
-            workspaceUsers={workspaceUsers}
-            newChecklistItem={newChecklistItem}
-            newLink={newLink}
-            onTitleChange={setTitle}
-            onDescriptionChange={setDescription}
-            onStatusChange={setStatus}
-            onPriorityChange={setPriority}
-            onDueDateChange={setDueDate}
-            onAssigneesChange={setSelectedAssignees}
-            onChecklistItemsChange={setChecklistItems}
-            onNewChecklistItemChange={setNewChecklistItem}
-            onNewLinkChange={setNewLink}
-            onAddChecklistItem={addChecklistItem}
-            onRemoveChecklistItem={removeChecklistItem}
-            onAddLink={addLink}
-            onRemoveLink={removeLink}
-          />
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 3 }}>
-          <Button onClick={closeCreateModal} color="inherit" disabled={loading}>
-            إلغاء
-          </Button>
-          <Button onClick={onCreate} variant="contained" disabled={!title.trim() || loading}>
-            {loading ? <CircularProgress size={20} color="inherit" /> : 'إنشاء مهمة'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <TaskCreateModal
+        open={modals.isCreateOpen}
+        onClose={modals.closeCreateModal}
+        onSubmit={handleSubmit}
+        loading={loading}
+        workspaceUsers={workspaceUsers}
+        {...form}
+      />
 
       {/* Edit Task Modal */}
-      <Dialog
-        open={editModalOpen}
-        onClose={closeEditModal}
-        maxWidth="md"
-        fullWidth
-        PaperProps={{
-          sx: {
-            borderRadius: 2,
-            bgcolor: 'background.paper',
-          }
-        }}
-      >
-        <DialogTitle sx={{ fontWeight: 800, pb: 1 }}>
-          {selectedTask ? 'تعديل المهمة' : 'عرض تفاصيل المهمة'}
-        </DialogTitle>
-        <DialogContent sx={{ pt: 1 }}>
-          <EnhancedTaskForm
-            title={title}
-            description={description}
-            status={status}
-            priority={priority}
-            dueDate={dueDate}
-            selectedAssignees={selectedAssignees}
-            checklistItems={checklistItems}
-            links={links}
-            workspaceUsers={workspaceUsers}
-            newChecklistItem={newChecklistItem}
-            newLink={newLink}
-            onTitleChange={setTitle}
-            onDescriptionChange={setDescription}
-            onStatusChange={setStatus}
-            onPriorityChange={setPriority}
-            onDueDateChange={setDueDate}
-            onAssigneesChange={setSelectedAssignees}
-            onChecklistItemsChange={setChecklistItems}
-            onNewChecklistItemChange={setNewChecklistItem}
-            onNewLinkChange={setNewLink}
-            onAddChecklistItem={addChecklistItem}
-            onRemoveChecklistItem={removeChecklistItem}
-            onAddLink={addLink}
-            onRemoveLink={removeLink}
-          />
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 3 }}>
-          <Button onClick={closeEditModal} color="inherit" disabled={loading}>
-            إلغاء
-          </Button>
-          {selectedTask && canEditTask(selectedTask) && (
-            <Button
-              onClick={handleDeleteTask}
-              color="error"
-              variant="outlined"
-              disabled={loading}
-              startIcon={<TrashBinTrash size={20} />}
-            >
-              {loading ? <CircularProgress size={20} color="inherit" /> : 'حذف المهمة'}
-            </Button>
-          )}
-          {selectedTask && (
-            <Button onClick={onCreate} variant="contained" disabled={!title.trim() || loading}>
-              {loading ? <CircularProgress size={20} color="inherit" /> : 'حفظ التغييرات'}
-            </Button>
-          )}
-        </DialogActions>
-      </Dialog>
+      <TaskEditModal
+        open={modals.isEditOpen}
+        onClose={modals.closeEditModal}
+        onSubmit={handleSubmit}
+        onDelete={handleDelete}
+        loading={loading}
+        selectedTask={modals.selectedTask}
+        workspaceUsers={workspaceUsers}
+        canEdit={modals.selectedTask ? checkCanEditTask(modals.selectedTask) : false}
+        {...form}
+      />
 
       {/* Toast Notification */}
-      {
-        showToast && error && (
-          <Toast
-            message={error}
-            type="error"
-            onClose={() => {
-              setShowToast(false)
-              setError(null)
-            }}
-          />
-        )
-      }
+      {error && (
+        <Toast
+          message={error}
+          type="error"
+          onClose={() => {
+            setError(null)
+          }}
+        />
+      )}
     </Container>
   )
 }
-

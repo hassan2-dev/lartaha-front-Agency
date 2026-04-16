@@ -1,8 +1,8 @@
-import { useState } from "react"
-import { Mail, ArrowLeft, CheckCircle } from "lucide-react"
+import { useState } from 'react'
+import { Mail, ArrowLeft, CheckCircle } from 'lucide-react'
 
 export function Newsletter() {
-  const [email, setEmail] = useState("")
+  const [email, setEmail] = useState('')
   const [submitted, setSubmitted] = useState(false)
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -19,7 +19,7 @@ export function Newsletter() {
           <div className="w-16 h-16 rounded-full bg-primary-foreground/10 flex items-center justify-center mx-auto mb-6">
             <Mail className="w-8 h-8 text-primary-foreground" />
           </div>
-          
+
           <h2 className="text-3xl md:text-4xl font-bold text-primary-foreground mb-4">
             ابقَ على اطلاع
           </h2>
@@ -35,11 +35,14 @@ export function Newsletter() {
               </span>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-4 max-w-xl mx-auto">
+            <form
+              onSubmit={handleSubmit}
+              className="flex flex-col sm:flex-row gap-4 max-w-xl mx-auto"
+            >
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={e => setEmail(e.target.value)}
                 placeholder="أدخل بريدك الإلكتروني"
                 className="flex-1 px-6 py-4 rounded-xl bg-primary-foreground/10 border border-primary-foreground/20 text-primary-foreground placeholder:text-primary-foreground/50 focus:outline-none focus:border-primary-foreground/40 transition-colors"
                 required

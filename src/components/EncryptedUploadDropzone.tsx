@@ -1,6 +1,6 @@
 /**
  * Enhanced Upload Dropzone with Uppy and E2E Encryption
- * 
+ *
  * Supports:
  * - Chunked uploads via tus protocol
  * - Pause/resume for large files
@@ -74,7 +74,9 @@ function buildImageThumbnailKey(originalKey: string): string {
   const basename = filename.replace(/\.[^.]+$/, '') || filename
   const directory = parts.join('/')
   const thumbnailFilename = `${basename}__thumb.jpg`
-  return directory ? `${directory}/.thumbnails/${thumbnailFilename}` : `.thumbnails/${thumbnailFilename}`
+  return directory
+    ? `${directory}/.thumbnails/${thumbnailFilename}`
+    : `.thumbnails/${thumbnailFilename}`
 }
 
 export type SelectedUploadFile = {
@@ -113,16 +115,14 @@ interface EncryptedUploadDropzoneProps {
 function toSelectedFiles(files: FileList | File[] | null | undefined): SelectedUploadFile[] {
   if (!files) return []
   const arr = Array.isArray(files) ? files : Array.from(files)
-  return arr
-    .filter(Boolean)
-    .map((f) => {
-      const rel = (f as File & { webkitRelativePath?: string }).webkitRelativePath
-      const relativePath = rel && rel.length > 0 ? rel : f.name
-      return {
-        file: f,
-        relativePath,
-      }
-    })
+  return arr.filter(Boolean).map(f => {
+    const rel = (f as File & { webkitRelativePath?: string }).webkitRelativePath
+    const relativePath = rel && rel.length > 0 ? rel : f.name
+    return {
+      file: f,
+      relativePath,
+    }
+  })
 }
 
 function fmtBytes(bytes: number) {
@@ -162,7 +162,7 @@ export default function EncryptedUploadDropzone({
   const [isEncrypting, setIsEncrypting] = useState(false)
   const [encryptionProgress, setEncryptionProgress] = useState(0)
   const [showUppyDashboard, setShowUppyDashboard] = useState(false)
-  const [_currentUploadId, setCurrentUploadId] = useState<string | null>(null)
+  const [currentUploadId, setCurrentUploadId] = useState<string | null>(null)
   const uppyInstancesRef = useRef<Map<string, Uppy>>(new Map())
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -185,7 +185,7 @@ export default function EncryptedUploadDropzone({
         uppyRef.current?.cancelAll()
         // Some Uppy builds expose close(); guard for type compatibility
         if (typeof (uppyRef.current as unknown as { close?: () => void }).close === 'function') {
-          (uppyRef.current as unknown as { close: () => void }).close()
+          ;(uppyRef.current as unknown as { close: () => void }).close()
         }
         uppyRef.current = null
       }
@@ -254,103 +254,120 @@ export default function EncryptedUploadDropzone({
   }
 
   // Encrypt all files before upload
-  const encryptFiles = useCallback(async (filesToEncrypt: SelectedUploadFile[]) => {
-    if (!encryptEnabled || !encryptionPasswordRef.current) {
-      return filesToEncrypt
-    }
-
-    setIsEncrypting(true)
-    setEncryptionProgress(0)
-
-    const encryptedFiles: SelectedUploadFile[] = []
-    const totalFiles = filesToEncrypt.length
-
-    for (let i = 0; i < totalFiles; i++) {
-      const sf = filesToEncrypt[i]
-      
-      try {
-        // Generate thumbnail and encrypt it (E2E)
-        const rawThumbnailBlob = await generateThumbnail(sf.file, 200)
-        const encryptedThumbnailBlob = rawThumbnailBlob
-          ? await encryptThumbnailBlob(rawThumbnailBlob, encryptionPasswordRef.current)
-          : null
-
-        // Create a preview URL from the raw thumbnail for display
-        let thumbnailPreviewUrl: string | undefined
-        if (rawThumbnailBlob) {
-          thumbnailPreviewUrl = URL.createObjectURL(rawThumbnailBlob)
-        }
-
-        const encryptionResult = await encryptSingleFile(
-          sf.file,
-          encryptionPasswordRef.current,
-          (chunkProgress) => {
-            // Report progress for current file
-            const overallProgress = Math.round(
-              ((i + chunkProgress / 100) / totalFiles) * 100
-            )
-            setEncryptionProgress(overallProgress)
-          }
-        )
-
-        let uploadFile = sf.file
-        if ('encryptedData' in encryptionResult) {
-          uploadFile = new File([encryptionResult.encryptedData], sf.relativePath, {
-            type: 'application/octet-stream',
-          })
-        } else if (Array.isArray(encryptionResult.encryptedChunks)) {
-          // For very large files, creating a blob from all chunks causes memory exhaustion
-          // Skip encryption to prevent browser crash
-          const MAX_BLOB_SIZE = 200 * 1024 * 1024 // 200MB
-          const estimatedSize = encryptionResult.encryptedChunks.reduce((sum, chunk) => sum + chunk.byteLength, 0)
-          
-          if (estimatedSize > MAX_BLOB_SIZE) {
-            console.warn('[DEBUG] encryptFiles: file too large for in-memory encryption, uploading unencrypted:', sf.relativePath, estimatedSize)
-            encryptedFiles.push({
-              ...sf,
-              encrypted: false,
-              uploadFile: sf.file,
-              thumbnailUploadFile: null,
-              thumbnailPreviewUrl,
-            })
-            continue
-          }
-          
-          const blob = new Blob(encryptionResult.encryptedChunks, {
-            type: 'application/octet-stream',
-          })
-          uploadFile = new File([blob], sf.relativePath, { type: 'application/octet-stream' })
-        }
-
-        console.log('[DEBUG] encryptFiles: thumbnailBlob for', sf.relativePath, encryptedThumbnailBlob?.size, 'bytes', 'preview:', thumbnailPreviewUrl)
-        encryptedFiles.push({
-          ...sf,
-          encrypted: true,
-          encryptionResult,
-          uploadFile,
-          thumbnailUploadFile: encryptedThumbnailBlob
-            ? new File([encryptedThumbnailBlob], `thumb_${sf.relativePath}.bin`, { type: 'application/octet-stream' })
-            : null,
-          thumbnailPreviewUrl, // Add preview URL for display
-        })
-      } catch (err) {
-        console.error(`Failed to encrypt ${sf.relativePath}:`, err)
-        // Continue with unencrypted file if encryption fails
-        encryptedFiles.push({ ...sf, uploadFile: sf.file })
+  const encryptFiles = useCallback(
+    async (filesToEncrypt: SelectedUploadFile[]) => {
+      if (!encryptEnabled || !encryptionPasswordRef.current) {
+        return filesToEncrypt
       }
 
-      setEncryptionProgress(Math.round(((i + 1) / totalFiles) * 100))
-    }
+      setIsEncrypting(true)
+      setEncryptionProgress(0)
 
-    setIsEncrypting(false)
-    return encryptedFiles
-  }, [encryptEnabled])
+      const encryptedFiles: SelectedUploadFile[] = []
+      const totalFiles = filesToEncrypt.length
+
+      for (let i = 0; i < totalFiles; i++) {
+        const sf = filesToEncrypt[i]
+
+        try {
+          // Generate thumbnail and encrypt it (E2E)
+          const rawThumbnailBlob = await generateThumbnail(sf.file, 200)
+          const encryptedThumbnailBlob = rawThumbnailBlob
+            ? await encryptThumbnailBlob(rawThumbnailBlob, encryptionPasswordRef.current)
+            : null
+
+          // Create a preview URL from the raw thumbnail for display
+          let thumbnailPreviewUrl: string | undefined
+          if (rawThumbnailBlob) {
+            thumbnailPreviewUrl = URL.createObjectURL(rawThumbnailBlob)
+          }
+
+          const encryptionResult = await encryptSingleFile(
+            sf.file,
+            encryptionPasswordRef.current,
+            chunkProgress => {
+              // Report progress for current file
+              const overallProgress = Math.round(((i + chunkProgress / 100) / totalFiles) * 100)
+              setEncryptionProgress(overallProgress)
+            }
+          )
+
+          let uploadFile = sf.file
+          if ('encryptedData' in encryptionResult) {
+            uploadFile = new File([encryptionResult.encryptedData], sf.relativePath, {
+              type: 'application/octet-stream',
+            })
+          } else if (Array.isArray(encryptionResult.encryptedChunks)) {
+            // For very large files, creating a blob from all chunks causes memory exhaustion
+            // Skip encryption to prevent browser crash
+            const MAX_BLOB_SIZE = 200 * 1024 * 1024 // 200MB
+            const estimatedSize = encryptionResult.encryptedChunks.reduce(
+              (sum, chunk) => sum + chunk.byteLength,
+              0
+            )
+
+            if (estimatedSize > MAX_BLOB_SIZE) {
+              console.warn(
+                '[DEBUG] encryptFiles: file too large for in-memory encryption, uploading unencrypted:',
+                sf.relativePath,
+                estimatedSize
+              )
+              encryptedFiles.push({
+                ...sf,
+                encrypted: false,
+                uploadFile: sf.file,
+                thumbnailUploadFile: null,
+                thumbnailPreviewUrl,
+              })
+              continue
+            }
+
+            const blob = new Blob(encryptionResult.encryptedChunks, {
+              type: 'application/octet-stream',
+            })
+            uploadFile = new File([blob], sf.relativePath, { type: 'application/octet-stream' })
+          }
+
+          console.log(
+            '[DEBUG] encryptFiles: thumbnailBlob for',
+            sf.relativePath,
+            encryptedThumbnailBlob?.size,
+            'bytes',
+            'preview:',
+            thumbnailPreviewUrl
+          )
+          encryptedFiles.push({
+            ...sf,
+            encrypted: true,
+            encryptionResult,
+            uploadFile,
+            thumbnailUploadFile: encryptedThumbnailBlob
+              ? new File([encryptedThumbnailBlob], `thumb_${sf.relativePath}.bin`, {
+                  type: 'application/octet-stream',
+                })
+              : null,
+            thumbnailPreviewUrl, // Add preview URL for display
+          })
+        } catch (err) {
+          console.error(`Failed to encrypt ${sf.relativePath}:`, err)
+          // Continue with unencrypted file if encryption fails
+          encryptedFiles.push({ ...sf, uploadFile: sf.file })
+        }
+
+        setEncryptionProgress(Math.round(((i + 1) / totalFiles) * 100))
+      }
+
+      setIsEncrypting(false)
+      return encryptedFiles
+    },
+    [encryptEnabled]
+  )
 
   // Handle file selection with encryption
   const handleFileSelection = async (selectedFiles: SelectedUploadFile[]) => {
     // Prepend currentPath to relativePath for each file if currentPath is set
     const filesWithPath = currentPath
-      ? selectedFiles.map((sf) => ({
+      ? selectedFiles.map(sf => ({
           ...sf,
           relativePath: `${currentPath}/${sf.relativePath}`.replace(/\/+/g, '/'),
         }))
@@ -389,307 +406,358 @@ export default function EncryptedUploadDropzone({
   }
 
   // Initialize Uppy with S3 multipart for chunked uploads
-  const initUppy = useCallback(async (fileToUpload: SelectedUploadFile) => {
-    const dataFile = fileToUpload.uploadFile || fileToUpload.file
-    // Use original file size for key to match UploadPage's fileKey format
-    const fileKey = `${fileToUpload.relativePath}_${fileToUpload.file.size}`
+  const initUppy = useCallback(
+    async (fileToUpload: SelectedUploadFile) => {
+      const dataFile = fileToUpload.uploadFile || fileToUpload.file
+      // Use original file size for key to match UploadPage's fileKey format
+      const fileKey = `${fileToUpload.relativePath}_${fileToUpload.file.size}`
 
-    // Prevent duplicate uploads for the same fileKey
-    if (uppyInstancesRef.current.has(fileKey)) {
-      console.warn('File already being uploaded:', fileKey)
-      return uppyInstancesRef.current.get(fileKey)!
-    }
-
-    const useMultipart = (dataFile.size ?? 0) > 5 * 1024 * 1024
-    let uploadId = ''
-    let uploadKey = ''
-    let multipartUploadId = ''
-    let uploadUrl = ''
-
-    if (useMultipart) {
-      const createResult = await createMultipartUpload({
-        filename: fileToUpload.relativePath,
-        mimeType: dataFile.type || 'application/octet-stream',
-        size: dataFile.size,
-      })
-
-      if (!createResult.ok || !createResult.multipartUploadId || !createResult.key || !createResult.uploadId) {
-        throw new Error('Failed to create multipart upload')
+      // Prevent duplicate uploads for the same fileKey
+      if (uppyInstancesRef.current.has(fileKey)) {
+        console.warn('File already being uploaded:', fileKey)
+        return uppyInstancesRef.current.get(fileKey)!
       }
 
-      multipartUploadId = createResult.multipartUploadId
-      uploadKey = createResult.key
-      uploadId = createResult.uploadId
-    } else {
-      const encryptionIv = fileToUpload.encryptionResult?.iv
-      const encryptionSalt = fileToUpload.encryptionResult?.salt
-      const signed = await requestUploadUrl({
-        filename: fileToUpload.relativePath,
-        mimeType: dataFile.type || 'application/octet-stream',
-        size: dataFile.size,
-        encryptionEnabled: encryptEnabled,
-        encryptionIv,
-        encryptionSalt,
-      })
+      const useMultipart = (dataFile.size ?? 0) > 5 * 1024 * 1024
+      let uploadId = ''
+      let uploadKey = ''
+      let multipartUploadId = ''
+      let uploadUrl = ''
 
-      if (!signed.ok || !signed.url || !signed.key || !signed.uploadId) {
-        throw new Error('Failed to create upload URL')
-      }
-
-      uploadId = signed.uploadId
-      uploadKey = signed.key
-      uploadUrl = signed.url
-    }
-
-    // Create Uppy instance FIRST and store it immediately
-    const uppy = new Uppy({
-      restrictions: {
-        maxFileSize: 10 * 1024 * 1024 * 1024, // 10GB
-        allowedFileTypes: null,
-      },
-      autoProceed: false,
-    })
-
-    // Store uppy instance immediately so it's available for pause/resume
-    uppyInstancesRef.current.set(fileKey, uppy)
-
-    setCurrentUploadId(uploadId || null)
-
-    if (useMultipart) {
-      uppy.use(AwsS3Multipart, {
-        limit: 4,
-        shouldUseMultipart: (file: { size: number | null }) => (file.size ?? 0) > 5 * 1024 * 1024,
-        createMultipartUpload: async (_file: unknown) => {
-          if (!multipartUploadId || !uploadKey) {
-            throw new Error('Missing multipart upload details')
-          }
-          return {
-            uploadId: multipartUploadId,
-            key: uploadKey,
-          }
-        },
-        listParts: async (_file: unknown, _opts: unknown) => {
-          try {
-            const result = await listMultipartParts({
-              key: uploadKey,
-              multipartUploadId,
-            })
-            
-            if (!result.ok || !result.parts) {
-              return []
-            }
-            
-            return result.parts.map((part) => ({
-              PartNumber: part.PartNumber,
-              ETag: part.ETag,
-              Size: part.Size,
-            }))
-          } catch (error) {
-            console.error('Failed to list parts:', error)
-            return []
-          }
-        },
-        signPart: async (_file: unknown, partData: { partNumber: number }) => {
-          const partNumber = partData.partNumber
-          const signed = await signMultipartPart({
-            key: uploadKey,
-            multipartUploadId,
-            partNumber,
-          })
-          if (!signed.ok || !signed.url) {
-            throw new Error('Failed to sign upload part')
-          }
-          return { url: signed.url }
-        },
-        getUploadParameters: async () => {
-          // Not used for multipart uploads, but required by typings
-          return {
-            method: 'PUT',
-            url: uploadUrl || '',
-            headers: {
-              'Content-Type': dataFile.type || 'application/octet-stream',
-            },
-          }
-        },
-        completeMultipartUpload: async (_file: unknown, { parts }: { parts: Array<{ ETag?: string; PartNumber?: number }> }) => {
-          await completeMultipartUpload({
-            uploadId,
-            key: uploadKey,
-            multipartUploadId,
-            parts,
-          })
-          return {}
-        },
-        abortMultipartUpload: async () => {
-          if (multipartUploadId && uploadKey) {
-            await abortMultipartUpload({
-              key: uploadKey,
-              multipartUploadId,
-            })
-          }
-        },
-      })
-    } else {
-      uppy.use(XHRUpload, {
-        endpoint: uploadUrl,
-        method: 'PUT',
-        formData: false,
-        headers: {
-          'Content-Type': dataFile.type || 'application/octet-stream',
-        },
-        // S3/R2 returns empty response on successful PUT, so we need to handle that
-        getResponseData: () => {
-          // Return a fake response with the upload URL as the file URL
-          return { url: uploadUrl }
-        },
-      })
-    }
-
-    // Add the file
-    try {
-      uppy.addFile({
-        name: fileToUpload.relativePath,
-        type: dataFile.type || 'application/octet-stream',
-        data: dataFile,
-        size: dataFile.size,
-      })
-    } catch (err) {
-      console.error('Failed to add file to uppy:', err)
-      return uppy
-    }
-
-    // Get the file ID from uppy's state
-    const uppyFiles = uppy.getFiles()
-    const uppyFile = uppyFiles[0]
-    const fileId = uppyFile?.id
-    
-    if (fileId) {
-      setUploadItems((prev) => ({
-        ...prev,
-        [fileKey]: {
-          fileKey,
-          fileId,
-          status: 'uploading',
-          progress: 0,
-          relativePath: fileToUpload.relativePath,
-          source: 'uppy',
-          totalBytes: dataFile.size,
-          ...(fileToUpload.thumbnailPreviewUrl ? {
-            thumbnailPreviewUrl: fileToUpload.thumbnailPreviewUrl,
-            'has-thumbnail': true,
-          } : {}),
-        },
-      }))
-    } else {
-      console.warn('No fileId from uppy for', fileKey)
-    }
-
-    // Track progress
-    uppy.on('progress', (progress: number) => {
-      onUploadProgress?.({
-        progressPercent: progress,
-        bytesUploaded: 0,
-        totalBytes: dataFile.size,
-        uploadSpeed: 0,
-        currentFileIndex: 1,
-        totalFiles: 1,
-        currentFilePath: fileToUpload.relativePath,
-      })
-    })
-
-    uppy.on('upload-progress', (fileMaybe, progress) => {
-      const file = fileMaybe as { name?: string; size?: number; id?: string } | undefined
-      if (!file?.name || !file?.size) return
-      // Use the fileKey from the closure to ensure consistency
-      const bytesTotal = progress?.bytesTotal ?? file.size
-      const bytesUploaded = progress?.bytesUploaded ?? 0
-      const pct = bytesTotal > 0 ? Math.round((bytesUploaded * 100) / bytesTotal) : 0
-
-      // Calculate speed (approximate)
-      const now = Date.now()
-      const timeSinceStart = now - ((uppy as unknown as { _startTime?: number })._startTime || now)
-      const uploadSpeed = timeSinceStart > 0 ? bytesUploaded / (timeSinceStart / 1000) : 0
-
-      setUploadItems((prev) => {
-        const existing = prev[fileKey]
-        if (!existing) return prev
-        return {
-          ...prev,
-          [fileKey]: {
-            ...existing,
-            fileId: file.id || existing.fileId,
-            status: 'uploading',
-            progress: pct,
-            speed: uploadSpeed,
-            bytesUploaded,
-            totalBytes: bytesTotal,
-            relativePath: fileToUpload.relativePath,
-            source: 'uppy',
-          },
-        }
-      })
-    })
-
-    uppy.on('complete', async (result) => {
-      // Check if upload actually succeeded (failed files will be in result.failed)
-      const hasFailedFiles = result.failed && result.failed.length > 0
-      const hasSuccessfulFiles = result.successful && result.successful.length > 0
-
-      // Only mark as completed if at least one file succeeded
-      if (hasSuccessfulFiles) {
-        await confirmUpload({
-          uploadId,
-          key: uploadKey,
+      if (useMultipart) {
+        const createResult = await createMultipartUpload({
           filename: fileToUpload.relativePath,
-          mimeType: dataFile.type || undefined,
+          mimeType: dataFile.type || 'application/octet-stream',
           size: dataFile.size,
-          encryptionEnabled: encryptEnabled,
-          encryptionIv: fileToUpload.encryptionResult?.iv,
-          encryptionSalt: fileToUpload.encryptionResult?.salt,
         })
 
-        // Upload non-encrypted thumbnail for encrypted images
-        console.log('[DEBUG] thumbnail check:', { hasThumbnailUploadFile: !!fileToUpload.thumbnailUploadFile, isEncrypted: fileToUpload.encrypted, thumbnailFileSize: fileToUpload.thumbnailUploadFile?.size })
-        if (fileToUpload.thumbnailUploadFile && fileToUpload.encrypted) {
-          const thumbnailKey = buildImageThumbnailKey(uploadKey)
-          console.log('[DEBUG] Uploading thumbnail:', { uploadKey, thumbnailKey, hasFile: !!fileToUpload.thumbnailUploadFile, size: fileToUpload.thumbnailUploadFile.size })
-          try {
-            const result = await uploadImageThumbnail(uploadKey, thumbnailKey, fileToUpload.thumbnailUploadFile)
-            console.log('[DEBUG] Thumbnail upload success:', result)
-          } catch (err) {
-            console.error('[DEBUG] Failed to upload thumbnail:', err)
-            // Continue without thumbnail - not critical
-          }
+        if (
+          !createResult.ok ||
+          !createResult.multipartUploadId ||
+          !createResult.key ||
+          !createResult.uploadId
+        ) {
+          throw new Error('Failed to create multipart upload')
         }
 
-        setUploadItems((prev) => {
+        multipartUploadId = createResult.multipartUploadId
+        uploadKey = createResult.key
+        uploadId = createResult.uploadId
+      } else {
+        const encryptionIv = fileToUpload.encryptionResult?.iv
+        const encryptionSalt = fileToUpload.encryptionResult?.salt
+        const signed = await requestUploadUrl({
+          filename: fileToUpload.relativePath,
+          mimeType: dataFile.type || 'application/octet-stream',
+          size: dataFile.size,
+          encryptionEnabled: encryptEnabled,
+          encryptionIv,
+          encryptionSalt,
+        })
+
+        if (!signed.ok || !signed.url || !signed.key || !signed.uploadId) {
+          throw new Error('Failed to create upload URL')
+        }
+
+        uploadId = signed.uploadId
+        uploadKey = signed.key
+        uploadUrl = signed.url
+      }
+
+      // Create Uppy instance FIRST and store it immediately
+      const uppy = new Uppy({
+        restrictions: {
+          maxFileSize: 10 * 1024 * 1024 * 1024, // 10GB
+          allowedFileTypes: null,
+        },
+        autoProceed: false,
+      })
+
+      // Store uppy instance immediately so it's available for pause/resume
+      uppyInstancesRef.current.set(fileKey, uppy)
+
+      setCurrentUploadId(uploadId || null)
+
+      if (useMultipart) {
+        uppy.use(AwsS3Multipart, {
+          limit: 4,
+          shouldUseMultipart: (file: { size: number | null }) => (file.size ?? 0) > 5 * 1024 * 1024,
+          createMultipartUpload: async () => {
+            if (!multipartUploadId || !uploadKey) {
+              throw new Error('Missing multipart upload details')
+            }
+            return {
+              uploadId: multipartUploadId,
+              key: uploadKey,
+            }
+          },
+          listParts: async () => {
+            try {
+              const result = await listMultipartParts({
+                key: uploadKey,
+                multipartUploadId,
+              })
+
+              if (!result.ok || !result.parts) {
+                return []
+              }
+
+              return result.parts.map(part => ({
+                PartNumber: part.PartNumber,
+                ETag: part.ETag,
+                Size: part.Size,
+              }))
+            } catch (error) {
+              console.error('Failed to list parts:', error)
+              return []
+            }
+          },
+          signPart: async (_file: unknown, partData: { partNumber: number }) => {
+            const partNumber = partData.partNumber
+            const signed = await signMultipartPart({
+              key: uploadKey,
+              multipartUploadId,
+              partNumber,
+            })
+            if (!signed.ok || !signed.url) {
+              throw new Error('Failed to sign upload part')
+            }
+            return { url: signed.url }
+          },
+          getUploadParameters: async () => {
+            // Not used for multipart uploads, but required by typings
+            return {
+              method: 'PUT',
+              url: uploadUrl || '',
+              headers: {
+                'Content-Type': dataFile.type || 'application/octet-stream',
+              },
+            }
+          },
+          completeMultipartUpload: async (
+            _file: unknown,
+            { parts }: { parts: Array<{ ETag?: string; PartNumber?: number }> }
+          ) => {
+            await completeMultipartUpload({
+              uploadId,
+              key: uploadKey,
+              multipartUploadId,
+              parts,
+            })
+            return {}
+          },
+          abortMultipartUpload: async () => {
+            if (multipartUploadId && uploadKey) {
+              await abortMultipartUpload({
+                key: uploadKey,
+                multipartUploadId,
+              })
+            }
+          },
+        })
+      } else {
+        uppy.use(XHRUpload, {
+          endpoint: uploadUrl,
+          method: 'PUT',
+          formData: false,
+          headers: {
+            'Content-Type': dataFile.type || 'application/octet-stream',
+          },
+          // S3/R2 returns empty response on successful PUT, so we need to handle that
+          getResponseData: () => {
+            // Return a fake response with the upload URL as the file URL
+            return { url: uploadUrl }
+          },
+        })
+      }
+
+      // Add the file
+      try {
+        uppy.addFile({
+          name: fileToUpload.relativePath,
+          type: dataFile.type || 'application/octet-stream',
+          data: dataFile,
+          size: dataFile.size,
+        })
+      } catch (err) {
+        console.error('Failed to add file to uppy:', err)
+        return uppy
+      }
+
+      // Get the file ID from uppy's state
+      const uppyFiles = uppy.getFiles()
+      const uppyFile = uppyFiles[0]
+      const fileId = uppyFile?.id
+
+      if (fileId) {
+        setUploadItems(prev => ({
+          ...prev,
+          [fileKey]: {
+            fileKey,
+            fileId,
+            status: 'uploading',
+            progress: 0,
+            relativePath: fileToUpload.relativePath,
+            source: 'uppy',
+            totalBytes: dataFile.size,
+            ...(fileToUpload.thumbnailPreviewUrl
+              ? {
+                  thumbnailPreviewUrl: fileToUpload.thumbnailPreviewUrl,
+                  'has-thumbnail': true,
+                }
+              : {}),
+          },
+        }))
+      } else {
+        console.warn('No fileId from uppy for', fileKey)
+      }
+
+      // Track progress
+      uppy.on('progress', (progress: number) => {
+        onUploadProgress?.({
+          progressPercent: progress,
+          bytesUploaded: 0,
+          totalBytes: dataFile.size,
+          uploadSpeed: 0,
+          currentFileIndex: 1,
+          totalFiles: 1,
+          currentFilePath: fileToUpload.relativePath,
+        })
+      })
+
+      uppy.on('upload-progress', (fileMaybe, progress) => {
+        const file = fileMaybe as { name?: string; size?: number; id?: string } | undefined
+        if (!file?.name || !file?.size) return
+        // Use the fileKey from the closure to ensure consistency
+        const bytesTotal = progress?.bytesTotal ?? file.size
+        const bytesUploaded = progress?.bytesUploaded ?? 0
+        const pct = bytesTotal > 0 ? Math.round((bytesUploaded * 100) / bytesTotal) : 0
+
+        // Calculate speed (approximate)
+        const now = Date.now()
+        const timeSinceStart =
+          now - ((uppy as unknown as { _startTime?: number })._startTime || now)
+        const uploadSpeed = timeSinceStart > 0 ? bytesUploaded / (timeSinceStart / 1000) : 0
+
+        setUploadItems(prev => {
           const existing = prev[fileKey]
           if (!existing) return prev
           return {
             ...prev,
             [fileKey]: {
               ...existing,
-              status: 'completed',
-              progress: 100,
+              fileId: file.id || existing.fileId,
+              status: 'uploading',
+              progress: pct,
+              speed: uploadSpeed,
+              bytesUploaded,
+              totalBytes: bytesTotal,
+              relativePath: fileToUpload.relativePath,
+              source: 'uppy',
             },
           }
         })
+      })
 
-        // Check if all uploads are now complete
-        setUploadItems((prev) => {
-          const allItems = Object.values(prev)
-          const completedCount = allItems.filter(item => item.status === 'completed').length
-          const totalCount = allItems.filter(item => item.status !== 'idle').length
-          if (totalCount > 0 && completedCount === totalCount) {
-            setShowSuccess(true)
+      uppy.on('complete', async result => {
+        // Check if upload actually succeeded (failed files will be in result.failed)
+        const hasFailedFiles = result.failed && result.failed.length > 0
+        const hasSuccessfulFiles = result.successful && result.successful.length > 0
+
+        // Only mark as completed if at least one file succeeded
+        if (hasSuccessfulFiles) {
+          await confirmUpload({
+            uploadId,
+            key: uploadKey,
+            filename: fileToUpload.relativePath,
+            mimeType: dataFile.type || undefined,
+            size: dataFile.size,
+            encryptionEnabled: encryptEnabled,
+            encryptionIv: fileToUpload.encryptionResult?.iv,
+            encryptionSalt: fileToUpload.encryptionResult?.salt,
+          })
+
+          // Upload non-encrypted thumbnail for encrypted images
+          console.log('[DEBUG] thumbnail check:', {
+            hasThumbnailUploadFile: !!fileToUpload.thumbnailUploadFile,
+            isEncrypted: fileToUpload.encrypted,
+            thumbnailFileSize: fileToUpload.thumbnailUploadFile?.size,
+          })
+          if (fileToUpload.thumbnailUploadFile && fileToUpload.encrypted) {
+            const thumbnailKey = buildImageThumbnailKey(uploadKey)
+            console.log('[DEBUG] Uploading thumbnail:', {
+              uploadKey,
+              thumbnailKey,
+              hasFile: !!fileToUpload.thumbnailUploadFile,
+              size: fileToUpload.thumbnailUploadFile.size,
+            })
+            try {
+              const result = await uploadImageThumbnail(
+                uploadKey,
+                thumbnailKey,
+                fileToUpload.thumbnailUploadFile
+              )
+              console.log('[DEBUG] Thumbnail upload success:', result)
+            } catch (err) {
+              console.error('[DEBUG] Failed to upload thumbnail:', err)
+              // Continue without thumbnail - not critical
+            }
           }
-          return prev
-        })
-      }
 
-      // Only mark as error if all files failed
-      if (hasFailedFiles && !hasSuccessfulFiles) {
-        setUploadItems((prev) => {
+          setUploadItems(prev => {
+            const existing = prev[fileKey]
+            if (!existing) return prev
+            return {
+              ...prev,
+              [fileKey]: {
+                ...existing,
+                status: 'completed',
+                progress: 100,
+              },
+            }
+          })
+
+          // Check if all uploads are now complete
+          setUploadItems(prev => {
+            const allItems = Object.values(prev)
+            const completedCount = allItems.filter(item => item.status === 'completed').length
+            const totalCount = allItems.filter(item => item.status !== 'idle').length
+            if (totalCount > 0 && completedCount === totalCount) {
+              setShowSuccess(true)
+            }
+            return prev
+          })
+        }
+
+        // Only mark as error if all files failed
+        if (hasFailedFiles && !hasSuccessfulFiles) {
+          setUploadItems(prev => {
+            const existing = prev[fileKey]
+            if (!existing) return prev
+            return {
+              ...prev,
+              [fileKey]: {
+                ...existing,
+                status: 'error',
+                progress: existing.progress ?? 0,
+              },
+            }
+          })
+        }
+
+        setCurrentUploadId(null)
+        const current = uppyInstancesRef.current.get(fileKey)
+        if (current) {
+          uppyInstancesRef.current.delete(fileKey)
+          current.destroy()
+        }
+
+        // Don't auto-remove completed items - let user see and close them manually
+      })
+
+      uppy.on('error', (err: Error) => {
+        console.error('Uppy error:', err)
+        setUploadItems(prev => {
           const existing = prev[fileKey]
           if (!existing) return prev
           return {
@@ -701,48 +769,24 @@ export default function EncryptedUploadDropzone({
             },
           }
         })
-      }
-
-      setCurrentUploadId(null)
-      const current = uppyInstancesRef.current.get(fileKey)
-      if (current) {
-        uppyInstancesRef.current.delete(fileKey)
-        current.destroy()
-      }
-
-      // Don't auto-remove completed items - let user see and close them manually
-    })
-
-    uppy.on('error', (err: Error) => {
-      console.error('Uppy error:', err)
-      setUploadItems((prev) => {
-        const existing = prev[fileKey]
-        if (!existing) return prev
-        return {
-          ...prev,
-          [fileKey]: {
-            ...existing,
-            status: 'error',
-            progress: existing.progress ?? 0,
-          },
+        setCurrentUploadId(null)
+        const current = uppyInstancesRef.current.get(fileKey)
+        if (current) {
+          uppyInstancesRef.current.delete(fileKey)
+          current.destroy()
         }
+
+        // Don't clean up error items automatically - let user see and close them manually
       })
-      setCurrentUploadId(null)
-      const current = uppyInstancesRef.current.get(fileKey)
-      if (current) {
-        uppyInstancesRef.current.delete(fileKey)
-        current.destroy()
-      }
 
-      // Don't clean up error items automatically - let user see and close them manually
-    })
+      // Start upload
+      ;(uppy as unknown as { _startTime?: number })._startTime = Date.now()
+      uppy.upload()
 
-    // Start upload
-    ;(uppy as unknown as { _startTime?: number })._startTime = Date.now()
-    uppy.upload()
-
-    return uppy
-  }, [encryptEnabled, onUploadProgress])
+      return uppy
+    },
+    [encryptEnabled, onUploadProgress]
+  )
 
   const togglePauseResume = (fileKey: string) => {
     // Get the uppy instance from ref
@@ -751,34 +795,34 @@ export default function EncryptedUploadDropzone({
       console.warn('No uppy instance found for', fileKey)
       return
     }
-    
+
     // Get the file ID from uppy's state
     const files = uppy.getFiles()
     if (files.length === 0) {
       console.warn('No files found in uppy instance for', fileKey)
       return
     }
-    
+
     const fileId = files[0].id
     if (!fileId) {
       console.warn('No fileId found in uppy files for', fileKey)
       return
     }
-    
+
     try {
       // Pause/resume the upload
       uppy.pauseResume(fileId)
 
       const isPaused = !!uppy.getState()?.files?.[fileId]?.isPaused
-      
+
       // Update local state
-      setUploadItems((prev) => {
+      setUploadItems(prev => {
         const existing = prev[fileKey]
         if (!existing) return prev
         return {
           ...prev,
-          [fileKey]: { 
-            ...existing, 
+          [fileKey]: {
+            ...existing,
             status: isPaused ? 'paused' : 'uploading',
             fileId,
           },
@@ -806,9 +850,9 @@ export default function EncryptedUploadDropzone({
       }
     }
 
-    const readAllEntries = async (
-      reader: { readEntries: (cb: (entries: AnyEntry[]) => void, err?: (e: unknown) => void) => void },
-    ): Promise<AnyEntry[]> => {
+    const readAllEntries = async (reader: {
+      readEntries: (cb: (entries: AnyEntry[]) => void, err?: (e: unknown) => void) => void
+    }): Promise<AnyEntry[]> => {
       const all: AnyEntry[] = []
       while (true) {
         const chunk = await new Promise<AnyEntry[]>((resolve, reject) => {
@@ -828,7 +872,10 @@ export default function EncryptedUploadDropzone({
     const traverse = async (entry: AnyEntry) => {
       if (entry.isFile && entry.file) {
         const file = await new Promise<File>((resolve, reject) => {
-          entry.file!((f) => resolve(f), (err) => reject(err))
+          entry.file!(
+            f => resolve(f),
+            err => reject(err)
+          )
         })
         const relativePath = (entry.fullPath ?? '').replace(/^\/+/, '') || file.name
         selected.push({ file, relativePath })
@@ -843,7 +890,9 @@ export default function EncryptedUploadDropzone({
     }
 
     const roots = Array.from(items)
-      .map((it) => (it as unknown as { webkitGetAsEntry?: () => AnyEntry | null }).webkitGetAsEntry?.())
+      .map(it =>
+        (it as unknown as { webkitGetAsEntry?: () => AnyEntry | null }).webkitGetAsEntry?.()
+      )
       .filter(Boolean) as AnyEntry[]
 
     await Promise.all(roots.map(traverse))
@@ -858,11 +907,11 @@ export default function EncryptedUploadDropzone({
   function onPickFiles(next: FileList | File[], source: 'files' | 'folder' | 'drop') {
     const selected = toSelectedFiles(next)
     const deduped = Array.from(
-      new Map(selected.map((sf) => [`${sf.relativePath}_${sf.file.size}`, sf])).values()
+      new Map(selected.map(sf => [`${sf.relativePath}_${sf.file.size}`, sf])).values()
     )
 
     if (source === 'folder') {
-      const hasAnyPath = deduped.some((sf) => sf.relativePath.includes('/'))
+      const hasAnyPath = deduped.some(sf => sf.relativePath.includes('/'))
       if (!hasAnyPath) {
         setPendingFolderFiles(deduped)
         setPendingFolderName('')
@@ -881,29 +930,28 @@ export default function EncryptedUploadDropzone({
     const root = pendingFolderName.trim().replace(/^\/+|\/+$/g, '')
     if (!root) return
 
-    const transformed = pendingFolderFiles.map((sf) => ({
+    const transformed = pendingFolderFiles.map(sf => ({
       ...sf,
       relativePath: `${root}/${sf.relativePath}`,
     }))
 
     const deduped = Array.from(
-      new Map(transformed.map((sf) => [`${sf.relativePath}_${sf.file.size}`, sf])).values()
+      new Map(transformed.map(sf => [`${sf.relativePath}_${sf.file.size}`, sf])).values()
     )
     setPendingFolderFiles(null)
     setPendingFolderName('')
     handleFileSelection(deduped)
   }
 
-
   // Merge external and internal upload items, with internal taking precedence
   // Deduplicate by file path (not by key) to prevent showing same file twice with different sizes
   const mergedUploadItems = React.useMemo(() => {
     const seenPaths = new Set<string>()
     const result: Record<string, UploadItemState> = {}
-    
+
     // Extract relative path from fileKey by removing trailing `_SIZE`
     const getRelativePath = (key: string): string => {
-      const fromSelected = files.find((f) => `${f.relativePath}_${f.file.size}` === key)
+      const fromSelected = files.find(f => `${f.relativePath}_${f.file.size}` === key)
       if (fromSelected) return fromSelected.relativePath
       const lastUnderscore = key.lastIndexOf('_')
       if (lastUnderscore > 0) {
@@ -915,7 +963,7 @@ export default function EncryptedUploadDropzone({
       }
       return key
     }
-    
+
     // First add external items
     if (externalUploadItems) {
       Object.entries(externalUploadItems).forEach(([key, value]) => {
@@ -932,7 +980,7 @@ export default function EncryptedUploadDropzone({
         }
       })
     }
-    
+
     // Then add internal items (will overwrite duplicates based on path match)
     Object.entries(uploadItems).forEach(([key, value]) => {
       if (!key.includes('thumb_')) {
@@ -949,11 +997,11 @@ export default function EncryptedUploadDropzone({
           ...value,
           relativePath: value.relativePath || filePath,
           source: value.source || 'uppy',
-        }  // Always use internal for consistency
+        } // Always use internal for consistency
         seenPaths.add(filePath)
       }
     })
-    
+
     return result
   }, [externalUploadItems, uploadItems, files])
 
@@ -965,13 +1013,22 @@ export default function EncryptedUploadDropzone({
           p: 2,
           borderRadius: 2,
           borderColor: dragOver ? 'primary.main' : 'rgba(255,255,255,0.10)',
-          background: (t) => `linear-gradient(135deg, ${t.palette.primary.main}14, transparent 55%)`,
+          background: t => `linear-gradient(135deg, ${t.palette.primary.main}14, transparent 55%)`,
           transition: 'border-color 150ms ease',
         }}
-        onDragEnter={(e) => { e.preventDefault(); setDragOver(true) }}
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
-        onDragLeave={(e) => { e.preventDefault(); setDragOver(false) }}
-        onDrop={(e) => {
+        onDragEnter={e => {
+          e.preventDefault()
+          setDragOver(true)
+        }}
+        onDragOver={e => {
+          e.preventDefault()
+          setDragOver(true)
+        }}
+        onDragLeave={e => {
+          e.preventDefault()
+          setDragOver(false)
+        }}
+        onDrop={e => {
           e.preventDefault()
           setDragOver(false)
           void (async () => {
@@ -987,20 +1044,24 @@ export default function EncryptedUploadDropzone({
         }}
       >
         {/* Encryption Toggle */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, p: 1.5, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.03)' }}>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            mb: 2,
+            p: 1.5,
+            borderRadius: 2,
+            bgcolor: 'rgba(255,255,255,0.03)',
+          }}
+        >
           <Box sx={{ color: encryptEnabled ? 'success.main' : 'text.secondary' }}>
             <LockIcon />
           </Box>
           <Typography variant="body2" sx={{ flex: 1 }}>
             تشفير الملفات (E2E) — مفعّل دائمًا
           </Typography>
-          <Button
-            size="small"
-            variant="contained"
-            color="success"
-            disabled
-            sx={{ minWidth: 100 }}
-          >
+          <Button size="small" variant="contained" color="success" disabled sx={{ minWidth: 100 }}>
             مفعّل
           </Button>
         </Box>
@@ -1024,16 +1085,18 @@ export default function EncryptedUploadDropzone({
           PaperProps={{
             sx: {
               borderRadius: 3,
-              background: (theme) => `linear-gradient(145deg, ${theme.palette.background.paper} 0%, ${theme.palette.background.default} 100%)`,
+              background: theme =>
+                `linear-gradient(145deg, ${theme.palette.background.paper} 0%, ${theme.palette.background.default} 100%)`,
               boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
               overflow: 'hidden',
-            }
+            },
           }}
         >
           {/* Header with gradient background */}
           <Box
             sx={{
-              background: (theme) => `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+              background: theme =>
+                `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
               p: 3,
               position: 'relative',
               overflow: 'hidden',
@@ -1062,8 +1125,16 @@ export default function EncryptedUploadDropzone({
                 background: 'rgba(255,255,255,0.05)',
               }}
             />
-            
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, position: 'relative', zIndex: 1 }}>
+
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 2,
+                position: 'relative',
+                zIndex: 1,
+              }}
+            >
               <Box
                 sx={{
                   width: 56,
@@ -1086,8 +1157,11 @@ export default function EncryptedUploadDropzone({
                 <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.8)' }}>
                   {showSuccess ? (
                     <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                      <Box component="span" sx={{ color: 'success.main', fontSize: '1.2em' }}>✓</Box>
-                      {Object.values(mergedUploadItems).length} من {Object.values(mergedUploadItems).length} ملفات اكتملت
+                      <Box component="span" sx={{ color: 'success.main', fontSize: '1.2em' }}>
+                        ✓
+                      </Box>
+                      {Object.values(mergedUploadItems).length} من{' '}
+                      {Object.values(mergedUploadItems).length} ملفات اكتملت
                     </Box>
                   ) : (
                     `${Object.values(mergedUploadItems).filter(item => item.status === 'completed').length} من ${Object.values(mergedUploadItems).length} ملفات اكتملت`
@@ -1147,8 +1221,11 @@ export default function EncryptedUploadDropzone({
                     mb: 3,
                     p: 3,
                     borderRadius: 2,
-                    background: (theme) => theme.palette.mode === 'dark' ? 'rgba(76, 175, 80, 0.15)' : 'rgba(76, 175, 80, 0.1)',
-                    border: (theme) => `1px solid ${theme.palette.success.main}`,
+                    background: theme =>
+                      theme.palette.mode === 'dark'
+                        ? 'rgba(76, 175, 80, 0.15)'
+                        : 'rgba(76, 175, 80, 0.1)',
+                    border: theme => `1px solid ${theme.palette.success.main}`,
                     textAlign: 'center',
                   }}
                 >
@@ -1165,7 +1242,9 @@ export default function EncryptedUploadDropzone({
                       mb: 2,
                     }}
                   >
-                    <Typography sx={{ color: 'white', fontSize: 28, fontWeight: 700 }}>✓</Typography>
+                    <Typography sx={{ color: 'white', fontSize: 28, fontWeight: 700 }}>
+                      ✓
+                    </Typography>
                   </Box>
                   <Typography variant="h6" sx={{ color: 'success.main', fontWeight: 700, mb: 1 }}>
                     تم رفع جميع الملفات بنجاح!
@@ -1183,11 +1262,19 @@ export default function EncryptedUploadDropzone({
                     mb: 3,
                     p: 2.5,
                     borderRadius: 2,
-                    background: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
-                    border: (theme) => `1px solid ${theme.palette.divider}`,
+                    background: theme =>
+                      theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+                    border: theme => `1px solid ${theme.palette.divider}`,
                   }}
                 >
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      mb: 2,
+                    }}
+                  >
                     <Typography variant="body2" sx={{ fontWeight: 500, opacity: 0.9 }}>
                       التقدم الإجمالي
                     </Typography>
@@ -1200,46 +1287,74 @@ export default function EncryptedUploadDropzone({
                       }}
                     >
                       {(() => {
-                        const allItems = Object.values(mergedUploadItems).filter(item => item.status !== 'idle')
+                        const allItems = Object.values(mergedUploadItems).filter(
+                          item => item.status !== 'idle'
+                        )
                         if (allItems.length === 0) return '0%'
-                        const avgProgress = Math.round(allItems.reduce((sum, item) => sum + item.progress, 0) / allItems.length)
+                        const avgProgress = Math.round(
+                          allItems.reduce((sum, item) => sum + item.progress, 0) / allItems.length
+                        )
                         return `${avgProgress}%`
                       })()}
                     </Typography>
                   </Box>
-                  
+
                   <Box sx={{ position: 'relative' }}>
                     <LinearProgress
                       variant="determinate"
                       value={(() => {
-                        const allItems = Object.values(mergedUploadItems).filter(item => item.status !== 'idle')
+                        const allItems = Object.values(mergedUploadItems).filter(
+                          item => item.status !== 'idle'
+                        )
                         if (allItems.length === 0) return 0
-                        return Math.round(allItems.reduce((sum, item) => sum + item.progress, 0) / allItems.length)
+                        return Math.round(
+                          allItems.reduce((sum, item) => sum + item.progress, 0) / allItems.length
+                        )
                       })()}
                       sx={{
                         height: 10,
                         borderRadius: 5,
-                        backgroundColor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+                        backgroundColor: theme =>
+                          theme.palette.mode === 'dark'
+                            ? 'rgba(255,255,255,0.1)'
+                            : 'rgba(0,0,0,0.08)',
                         '& .MuiLinearProgress-bar': {
                           borderRadius: 5,
-                          background: (theme) => `linear-gradient(90deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.light} 100%)`,
-                        }
+                          background: theme =>
+                            `linear-gradient(90deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.light} 100%)`,
+                        },
                       }}
                     />
                   </Box>
 
                   {/* Stats row */}
                   {(() => {
-                    const uploadingItems = Object.values(mergedUploadItems).filter(item => item.status === 'uploading')
-                    const totalSpeed = uploadingItems.reduce((sum, item) => sum + (item.speed || 0), 0)
+                    const uploadingItems = Object.values(mergedUploadItems).filter(
+                      item => item.status === 'uploading'
+                    )
+                    const totalSpeed = uploadingItems.reduce(
+                      (sum, item) => sum + (item.speed || 0),
+                      0
+                    )
                     const totalUploaded = Object.values(mergedUploadItems).reduce((sum, item) => {
                       if (item.status === 'completed') return sum + (item.totalBytes || 0)
                       return sum + (item.bytesUploaded || 0)
                     }, 0)
-                    const totalSize = Object.values(mergedUploadItems).reduce((sum, item) => sum + (item.totalBytes || 0), 0)
-                    
+                    const totalSize = Object.values(mergedUploadItems).reduce(
+                      (sum, item) => sum + (item.totalBytes || 0),
+                      0
+                    )
+
                     return (
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2, flexWrap: 'wrap', gap: 1 }}>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          mt: 2,
+                          flexWrap: 'wrap',
+                          gap: 1,
+                        }}
+                      >
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <Box
                             sx={{
@@ -1251,11 +1366,13 @@ export default function EncryptedUploadDropzone({
                               '@keyframes pulse': {
                                 '0%, 100%': { opacity: 1 },
                                 '50%': { opacity: 0.5 },
-                              }
+                              },
                             }}
                           />
                           <Typography variant="caption" sx={{ opacity: 0.8, fontWeight: 500 }}>
-                            {totalSize > 0 ? `${fmtBytes(totalUploaded)} / ${fmtBytes(totalSize)}` : 'جاري التحضير...'}
+                            {totalSize > 0
+                              ? `${fmtBytes(totalUploaded)} / ${fmtBytes(totalSize)}`
+                              : 'جاري التحضير...'}
                           </Typography>
                         </Box>
                         {totalSpeed > 0 && (
@@ -1264,7 +1381,8 @@ export default function EncryptedUploadDropzone({
                             sx={{
                               color: 'primary.main',
                               fontWeight: 600,
-                              background: (theme) => `linear-gradient(135deg, ${theme.palette.primary.main}15, ${theme.palette.primary.light}10)`,
+                              background: theme =>
+                                `linear-gradient(135deg, ${theme.palette.primary.main}15, ${theme.palette.primary.light}10)`,
                               px: 1.5,
                               py: 0.5,
                               borderRadius: 5,
@@ -1280,169 +1398,217 @@ export default function EncryptedUploadDropzone({
               )}
 
               {/* Individual Files List - Thumbnails are hidden (uploaded in background) */}
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  mb: 2,
+                }}
+              >
                 <Typography variant="subtitle2" sx={{ fontWeight: 600, opacity: 0.9 }}>
                   الملفات قيد الرفع
                 </Typography>
                 <Typography variant="caption" sx={{ opacity: 0.6 }}>
-                  {Object.values(mergedUploadItems).filter(item => item.status === 'uploading' || item.status === 'paused').length} نشط
+                  {
+                    Object.values(mergedUploadItems).filter(
+                      item => item.status === 'uploading' || item.status === 'paused'
+                    ).length
+                  }{' '}
+                  نشط
                 </Typography>
               </Box>
-              
+
               <Box
                 sx={{
                   maxHeight: 280,
                   overflow: 'auto',
                   borderRadius: 2,
-                  border: (theme) => `1px solid ${theme.palette.divider}`,
-                  background: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)',
+                  border: theme => `1px solid ${theme.palette.divider}`,
+                  background: theme =>
+                    theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)',
                 }}
               >
                 {Object.entries(mergedUploadItems).map(([key, item], index, arr) => (
-                    <Box
-                      key={key}
-                      sx={{
-                        p: 2,
-                        borderBottom: index < arr.length - 1 ? (theme) => `1px solid ${theme.palette.divider}` : 'none',
-                        background: item.status === 'completed' 
-                          ? (theme) => theme.palette.mode === 'dark' ? 'rgba(76, 175, 80, 0.08)' : 'rgba(76, 175, 80, 0.04)'
+                  <Box
+                    key={key}
+                    sx={{
+                      p: 2,
+                      borderBottom:
+                        index < arr.length - 1
+                          ? theme => `1px solid ${theme.palette.divider}`
+                          : 'none',
+                      background:
+                        item.status === 'completed'
+                          ? theme =>
+                              theme.palette.mode === 'dark'
+                                ? 'rgba(76, 175, 80, 0.08)'
+                                : 'rgba(76, 175, 80, 0.04)'
                           : item.status === 'error'
-                          ? (theme) => theme.palette.mode === 'dark' ? 'rgba(244, 67, 54, 0.08)' : 'rgba(244, 67, 54, 0.04)'
-                          : 'transparent',
-                        transition: 'background-color 0.2s ease',
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 1.5 }}>
-                        {/* Thumbnail or File Icon */}
-                        <Box
-                          sx={{
-                            minWidth: 50,
-                            width: 50,
-                            height: 50,
-                            borderRadius: 2,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            flexShrink: 0,
-                            background: item.thumbnailPreviewUrl
-                              ? 'transparent'
-                              : item.status === 'completed'
-                              ? (theme) => `linear-gradient(135deg, ${theme.palette.success.main}20, ${theme.palette.success.dark}10)`
+                            ? theme =>
+                                theme.palette.mode === 'dark'
+                                  ? 'rgba(244, 67, 54, 0.08)'
+                                  : 'rgba(244, 67, 54, 0.04)'
+                            : 'transparent',
+                      transition: 'background-color 0.2s ease',
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 1.5 }}>
+                      {/* Thumbnail or File Icon */}
+                      <Box
+                        sx={{
+                          minWidth: 50,
+                          width: 50,
+                          height: 50,
+                          borderRadius: 2,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          background: item.thumbnailPreviewUrl
+                            ? 'transparent'
+                            : item.status === 'completed'
+                              ? theme =>
+                                  `linear-gradient(135deg, ${theme.palette.success.main}20, ${theme.palette.success.dark}10)`
                               : item.status === 'error'
-                              ? (theme) => `linear-gradient(135deg, ${theme.palette.error.main}20, ${theme.palette.error.dark}10)`
-                              : (theme) => `linear-gradient(135deg, ${theme.palette.primary.main}15, ${theme.palette.primary.light}10)`,
-                            overflow: 'hidden',
-                            border: item.thumbnailPreviewUrl ? (theme) => `1px solid ${theme.palette.divider}` : 'none',
-                            position: 'relative',
-                          }}
-                        >
-                          {item.thumbnailPreviewUrl ? (
-                            <>
-                              <Box
-                                component="img"
-                                src={item.thumbnailPreviewUrl}
-                                alt="Thumbnail"
-                                sx={{
-                                  width: '100%',
-                                  height: '100%',
-                                  objectFit: 'cover',
-                                }}
-                              />
-                              {item.status === 'completed' && (
-                                <Box
-                                  sx={{
-                                    position: 'absolute',
-                                    top: 0,
-                                    right: 0,
-                                    width: 20,
-                                    height: 20,
-                                    borderRadius: '50%',
-                                    backgroundColor: 'success.main',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    border: '2px solid white',
-                                  }}
-                                >
-                                  <Typography sx={{ color: 'white', fontSize: 10, fontWeight: 700 }}>✓</Typography>
-                                </Box>
-                              )}
-                            </>
-                          ) : item.status === 'completed' ? (
+                                ? theme =>
+                                    `linear-gradient(135deg, ${theme.palette.error.main}20, ${theme.palette.error.dark}10)`
+                                : theme =>
+                                    `linear-gradient(135deg, ${theme.palette.primary.main}15, ${theme.palette.primary.light}10)`,
+                          overflow: 'hidden',
+                          border: item.thumbnailPreviewUrl
+                            ? theme => `1px solid ${theme.palette.divider}`
+                            : 'none',
+                          position: 'relative',
+                        }}
+                      >
+                        {item.thumbnailPreviewUrl ? (
+                          <>
                             <Box
+                              component="img"
+                              src={item.thumbnailPreviewUrl}
+                              alt="Thumbnail"
                               sx={{
-                                width: 20,
-                                height: 20,
-                                borderRadius: '50%',
-                                backgroundColor: 'success.main',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'cover',
                               }}
-                            >
-                              <Typography sx={{ color: 'white', fontSize: 12, fontWeight: 700 }}>✓</Typography>
-                            </Box>
-                          ) : item.status === 'error' ? (
-                            <CloseIcon sx={{ fontSize: 20, color: 'error.main' }} />
-                          ) : item.status === 'paused' ? (
-                            <PauseIcon sx={{ fontSize: 20, color: 'warning.main' }} />
-                          ) : (
-                            <FileIcon sx={{ fontSize: 20, color: 'primary.main' }} />
-                          )}
-                        </Box>
-
-                        {/* File info */}
-                        <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              fontWeight: 500,
-                              mb: 0.5,
-                              wordBreak: 'break-word',
-                              lineHeight: 1.4,
-                            }}
-                          >
-                            {item.relativePath || key.split('_').slice(0, -1).join('_')}
-                          </Typography>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
-                            <Typography variant="caption" sx={{ opacity: 0.6, fontSize: '0.75rem' }}>
-                              {item.totalBytes ? fmtBytes(item.totalBytes) : '—'}
-                            </Typography>
-                            {item.status === 'uploading' && item.speed && item.speed > 0 && (
-                              <Typography
-                                variant="caption"
+                            />
+                            {item.status === 'completed' && (
+                              <Box
                                 sx={{
-                                  color: 'primary.main',
-                                  fontSize: '0.75rem',
-                                  fontWeight: 500,
+                                  position: 'absolute',
+                                  top: 0,
+                                  right: 0,
+                                  width: 20,
+                                  height: 20,
+                                  borderRadius: '50%',
+                                  backgroundColor: 'success.main',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  border: '2px solid white',
                                 }}
                               >
-                                {fmtBytes(item.speed)}/ث
-                              </Typography>
+                                <Typography sx={{ color: 'white', fontSize: 10, fontWeight: 700 }}>
+                                  ✓
+                                </Typography>
+                              </Box>
                             )}
+                          </>
+                        ) : item.status === 'completed' ? (
+                          <Box
+                            sx={{
+                              width: 20,
+                              height: 20,
+                              borderRadius: '50%',
+                              backgroundColor: 'success.main',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                          >
+                            <Typography sx={{ color: 'white', fontSize: 12, fontWeight: 700 }}>
+                              ✓
+                            </Typography>
+                          </Box>
+                        ) : item.status === 'error' ? (
+                          <CloseIcon sx={{ fontSize: 20, color: 'error.main' }} />
+                        ) : item.status === 'paused' ? (
+                          <PauseIcon sx={{ fontSize: 20, color: 'warning.main' }} />
+                        ) : (
+                          <FileIcon sx={{ fontSize: 20, color: 'primary.main' }} />
+                        )}
+                      </Box>
+
+                      {/* File info */}
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontWeight: 500,
+                            mb: 0.5,
+                            wordBreak: 'break-word',
+                            lineHeight: 1.4,
+                          }}
+                        >
+                          {item.relativePath || key.split('_').slice(0, -1).join('_')}
+                        </Typography>
+                        <Box
+                          sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}
+                        >
+                          <Typography variant="caption" sx={{ opacity: 0.6, fontSize: '0.75rem' }}>
+                            {item.totalBytes ? fmtBytes(item.totalBytes) : '—'}
+                          </Typography>
+                          {item.status === 'uploading' && item.speed && item.speed > 0 && (
                             <Typography
                               variant="caption"
                               sx={{
-                                fontWeight: 600,
+                                color: 'primary.main',
                                 fontSize: '0.75rem',
-                                color: item.status === 'completed' ? 'success.main' : item.status === 'error' ? 'error.main' : 'primary.main',
+                                fontWeight: 500,
                               }}
                             >
-                              {item.status === 'completed' ? 'اكتمل' : item.status === 'error' ? 'فشل' : item.status === 'paused' ? 'متوقف' : `${item.progress}%`}
+                              {fmtBytes(item.speed)}/ث
                             </Typography>
-                          </Box>
+                          )}
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              fontWeight: 600,
+                              fontSize: '0.75rem',
+                              color:
+                                item.status === 'completed'
+                                  ? 'success.main'
+                                  : item.status === 'error'
+                                    ? 'error.main'
+                                    : 'primary.main',
+                            }}
+                          >
+                            {item.status === 'completed'
+                              ? 'اكتمل'
+                              : item.status === 'error'
+                                ? 'فشل'
+                                : item.status === 'paused'
+                                  ? 'متوقف'
+                                  : `${item.progress}%`}
+                          </Typography>
                         </Box>
+                      </Box>
 
-                        {/* Actions - Pause/Resume and Cancel Icon Buttons */}
-                        {/* Only show control buttons if Uppy instance exists and upload is not completed/errored */}
-                        {item.status !== 'completed' && item.status !== 'error' && item.source === 'uppy' && uppyInstancesRef.current.has(key) && (
+                      {/* Actions - Pause/Resume and Cancel Icon Buttons */}
+                      {/* Only show control buttons if Uppy instance exists and upload is not completed/errored */}
+                      {item.status !== 'completed' &&
+                        item.status !== 'error' &&
+                        item.source === 'uppy' &&
+                        uppyInstancesRef.current.has(key) && (
                           <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
                             {/* Pause/Resume Button */}
                             <IconButton
                               component="button"
                               type="button"
                               size="small"
-                              onClick={(e) => {
+                              onClick={e => {
                                 e.preventDefault()
                                 e.stopPropagation()
                                 togglePauseResume(key)
@@ -1452,27 +1618,31 @@ export default function EncryptedUploadDropzone({
                                 width: 32,
                                 height: 32,
                                 color: item.status === 'paused' ? 'success.main' : 'warning.main',
-                                backgroundColor: (theme) => item.status === 'paused'
-                                  ? `${theme.palette.success.main}15`
-                                  : `${theme.palette.warning.main}15`,
+                                backgroundColor: theme =>
+                                  item.status === 'paused'
+                                    ? `${theme.palette.success.main}15`
+                                    : `${theme.palette.warning.main}15`,
                                 '&:hover': {
-                                  backgroundColor: (theme) => item.status === 'paused'
-                                    ? `${theme.palette.success.main}25`
-                                    : `${theme.palette.warning.main}25`,
-                                }
+                                  backgroundColor: theme =>
+                                    item.status === 'paused'
+                                      ? `${theme.palette.success.main}25`
+                                      : `${theme.palette.warning.main}25`,
+                                },
                               }}
                             >
-                              {item.status === 'paused'
-                                ? <PlayArrowIcon sx={{ fontSize: 18 }} />
-                                : <PauseIcon sx={{ fontSize: 18 }} />}
+                              {item.status === 'paused' ? (
+                                <PlayArrowIcon sx={{ fontSize: 18 }} />
+                              ) : (
+                                <PauseIcon sx={{ fontSize: 18 }} />
+                              )}
                             </IconButton>
-                            
+
                             {/* Cancel Button */}
                             <IconButton
                               component="button"
                               type="button"
                               size="small"
-                              onClick={(e) => {
+                              onClick={e => {
                                 e.preventDefault()
                                 e.stopPropagation()
                                 console.log('[DEBUG] Cancel clicked for', key)
@@ -1498,48 +1668,54 @@ export default function EncryptedUploadDropzone({
                                 width: 32,
                                 height: 32,
                                 color: 'error.main',
-                                backgroundColor: (theme) => `${theme.palette.error.main}15`,
+                                backgroundColor: theme => `${theme.palette.error.main}15`,
                                 '&:hover': {
-                                  backgroundColor: (theme) => `${theme.palette.error.main}25`,
-                                }
+                                  backgroundColor: theme => `${theme.palette.error.main}25`,
+                                },
                               }}
                             >
                               <CloseIcon sx={{ fontSize: 18 }} />
                             </IconButton>
                           </Box>
                         )}
-                      </Box>
-
-                      {/* Progress bar */}
-                      {item.status !== 'completed' && item.status !== 'error' && (
-                        <Box sx={{ ml: 7 }}>
-                          <LinearProgress
-                            variant="determinate"
-                            value={item.progress}
-                            sx={{
-                              height: 6,
-                              borderRadius: 3,
-                              backgroundColor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-                              '& .MuiLinearProgress-bar': {
-                                borderRadius: 3,
-                                background: item.status === 'paused'
-                                  ? (theme) => `linear-gradient(90deg, ${theme.palette.warning.main} 0%, ${theme.palette.warning.light} 100%)`
-                                  : (theme) => `linear-gradient(90deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.light} 100%)`,
-                                transition: 'transform 0.3s ease',
-                              }
-                            }}
-                          />
-                          {item.status === 'uploading' && item.bytesUploaded && item.totalBytes && (
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.75 }}>
-                              <Typography variant="caption" sx={{ opacity: 0.5, fontSize: '0.7rem' }}>
-                                {fmtBytes(item.bytesUploaded)} / {fmtBytes(item.totalBytes)}
-                              </Typography>
-                            </Box>
-                          )}
-                        </Box>
-                      )}
                     </Box>
-                  ))}
+
+                    {/* Progress bar */}
+                    {item.status !== 'completed' && item.status !== 'error' && (
+                      <Box sx={{ ml: 7 }}>
+                        <LinearProgress
+                          variant="determinate"
+                          value={item.progress}
+                          sx={{
+                            height: 6,
+                            borderRadius: 3,
+                            backgroundColor: theme =>
+                              theme.palette.mode === 'dark'
+                                ? 'rgba(255,255,255,0.08)'
+                                : 'rgba(0,0,0,0.06)',
+                            '& .MuiLinearProgress-bar': {
+                              borderRadius: 3,
+                              background:
+                                item.status === 'paused'
+                                  ? theme =>
+                                      `linear-gradient(90deg, ${theme.palette.warning.main} 0%, ${theme.palette.warning.light} 100%)`
+                                  : theme =>
+                                      `linear-gradient(90deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.light} 100%)`,
+                              transition: 'transform 0.3s ease',
+                            },
+                          }}
+                        />
+                        {item.status === 'uploading' && item.bytesUploaded && item.totalBytes && (
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.75 }}>
+                            <Typography variant="caption" sx={{ opacity: 0.5, fontSize: '0.7rem' }}>
+                              {fmtBytes(item.bytesUploaded)} / {fmtBytes(item.totalBytes)}
+                            </Typography>
+                          </Box>
+                        )}
+                      </Box>
+                    )}
+                  </Box>
+                ))}
               </Box>
             </Box>
           </DialogContent>
@@ -1566,7 +1742,7 @@ export default function EncryptedUploadDropzone({
           type="file"
           multiple
           style={{ display: 'none' }}
-          onChange={(e) => onPickFiles(e.target.files ? Array.from(e.target.files) : [], 'files')}
+          onChange={e => onPickFiles(e.target.files ? Array.from(e.target.files) : [], 'files')}
         />
 
         <input
@@ -1576,7 +1752,7 @@ export default function EncryptedUploadDropzone({
           // @ts-expect-error: webkitdirectory is non-standard but supported in Chromium/WebKit browsers.
           webkitdirectory=""
           style={{ display: 'none' }}
-          onChange={(e) => onPickFiles(e.target.files ? Array.from(e.target.files) : [], 'folder')}
+          onChange={e => onPickFiles(e.target.files ? Array.from(e.target.files) : [], 'folder')}
         />
 
         <Box sx={{ display: 'flex', gap: 1, mt: 2, flexWrap: 'wrap' }}>
@@ -1618,13 +1794,15 @@ export default function EncryptedUploadDropzone({
                   const fileKey = `${file.relativePath}_${file.file.size}`
                   return !externalUploadItems || !(fileKey in externalUploadItems)
                 })
-                
+
                 // If no files to upload locally, they're already being handled by parent
                 if (filesToUpload.length === 0) {
-                  console.log('[DEBUG] All files already uploading via parent, skipping local upload')
+                  console.log(
+                    '[DEBUG] All files already uploading via parent, skipping local upload'
+                  )
                   return
                 }
-                
+
                 // Upload remaining files using Uppy
                 for (const file of filesToUpload) {
                   try {
@@ -1667,13 +1845,17 @@ export default function EncryptedUploadDropzone({
             {pendingFolderFiles && (
               <Alert severity="info" sx={{ mb: 1 }}>
                 المتصفح ما وفّر مسار المجلد. حتى نسوي مجلد داخل `uploads/`، اكتب اسم المجلد:
-                <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+                <Box
+                  sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}
+                >
                   <Box sx={{ flex: '1 1 220px' }}>
                     <TextField
                       size="small"
                       label="اسم المجلد داخل uploads"
                       value={pendingFolderName}
-                      onChange={(e: ChangeEvent<HTMLInputElement>) => setPendingFolderName(e.target.value)}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                        setPendingFolderName(e.target.value)
+                      }
                       fullWidth
                     />
                   </Box>
@@ -1697,7 +1879,7 @@ export default function EncryptedUploadDropzone({
                   border: '1px solid rgba(255,255,255,0.08)',
                 }}
               >
-                {files.slice(0, 80).map((sf) => (
+                {files.slice(0, 80).map(sf => (
                   <Box
                     key={`${sf.relativePath}_${sf.file.size}`}
                     sx={{
@@ -1715,7 +1897,10 @@ export default function EncryptedUploadDropzone({
                         <LockIcon sx={{ fontSize: 14 }} />
                       </Box>
                     )}
-                    <Typography variant="body2" sx={{ wordBreak: 'break-word', opacity: 0.92, flex: 1 }}>
+                    <Typography
+                      variant="body2"
+                      sx={{ wordBreak: 'break-word', opacity: 0.92, flex: 1 }}
+                    >
                       {sf.relativePath}
                     </Typography>
                     <Typography variant="body2" sx={{ opacity: 0.6, fontSize: '0.75rem' }}>
@@ -1724,10 +1909,20 @@ export default function EncryptedUploadDropzone({
                     {(() => {
                       // Use original file size for key to match UploadPage's fileKey format
                       const fileKeyForLookup = `${sf.relativePath}_${sf.file.size}`
-                      return mergedUploadItems[fileKeyForLookup] && (
-                        <Typography variant="body2" sx={{ opacity: 0.6, fontSize: '0.75rem', minWidth: 45, textAlign: 'left' }}>
-                          {mergedUploadItems[fileKeyForLookup].progress}%
-                        </Typography>
+                      return (
+                        mergedUploadItems[fileKeyForLookup] && (
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              opacity: 0.6,
+                              fontSize: '0.75rem',
+                              minWidth: 45,
+                              textAlign: 'left',
+                            }}
+                          >
+                            {mergedUploadItems[fileKeyForLookup].progress}%
+                          </Typography>
+                        )
                       )
                     })()}
                     <Button
@@ -1770,21 +1965,24 @@ export default function EncryptedUploadDropzone({
         PaperProps={{
           sx: {
             minHeight: 600,
-          }
+          },
         }}
       >
-        <DialogTitle sx={{ 
-          background: (theme) => `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
-          color: 'white',
-          fontWeight: 700,
-        }}>
+        <DialogTitle
+          sx={{
+            background: theme =>
+              `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+            color: 'white',
+            fontWeight: 700,
+          }}
+        >
           رفع الملفات
         </DialogTitle>
         <DialogContent sx={{ p: 0, overflow: 'hidden' }}>
           <Box ref={dashboardContainerRef} sx={{ height: 450 }} />
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
-          <Button 
+          <Button
             onClick={() => setShowUppyDashboard(false)}
             variant="outlined"
             sx={{ borderRadius: 999 }}
@@ -1798,4 +1996,4 @@ export default function EncryptedUploadDropzone({
 }
 
 // Re-export types
-export type { }
+export type {}

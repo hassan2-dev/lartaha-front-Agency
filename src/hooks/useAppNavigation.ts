@@ -12,7 +12,7 @@ export function useAppNavigation() {
   const goToTasks = () => navigate('/dashboard/tasks')
   const goToUpload = () => navigate('/dashboard/upload')
   const goToChat = () => navigate('/dashboard/chat')
-  const goToTeams = () => user?.isAdmin ? navigate('/dashboard/teams') : goToDashboard()
+  const goToTeams = () => (user?.isAdmin ? navigate('/dashboard/teams') : goToDashboard())
   const goToActivity = () => navigate('/dashboard/activity')
   const goToSettings = () => navigate('/dashboard/settings')
   const goToProfile = () => navigate('/dashboard/profile')
