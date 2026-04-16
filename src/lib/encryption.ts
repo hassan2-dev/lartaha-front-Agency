@@ -202,7 +202,6 @@ export async function encryptFileChunked(
   const key = await deriveKey(password, salt)
 
   let offset = 0
-  const chunkIndex = 0
 
   while (offset < totalSize) {
     const chunk = file.slice(offset, offset + CHUNK_SIZE)
@@ -667,15 +666,15 @@ export async function downloadAndDecryptStream(
 
     if (cachedFile) {
       console.log('[downloadAndDecryptStream] Found file in cache:', fileId)
+      onProgress?.(100)
       return cachedFile.decryptedBlob
     }
 
     console.log('[downloadAndDecryptStream] File not in cache, downloading...')
   }
 
-  // For encrypted files, we need to download the entire file first
-  // because the encrypted chunks are concatenated together
-  console.log('[downloadAndDecryptStream] Downloading entire encrypted file...')
+  // Download with progress tracking using ReadableStream
+  console.log('[downloadAndDecryptStream] Downloading encrypted file with progress tracking...')
 
   const response = await fetch(url, {
     headers: {
@@ -687,32 +686,99 @@ export async function downloadAndDecryptStream(
     throw new Error(`Failed to download file: ${response.status}`)
   }
 
-  const encryptedData = await response.arrayBuffer()
-  console.log(
-    '[downloadAndDecryptStream] Downloaded encrypted data:',
-    encryptedData.byteLength,
-    'bytes'
-  )
+  // Use ReadableStream to track download progress
+  const reader = response.body?.getReader()
+  if (!reader) {
+    // Fall back to simple fetch if streaming not supported
+    const encryptedData = await response.arrayBuffer()
+    onProgress?.(50) // Report 50% when download completes
 
-  // For encrypted files, we need to split into chunks based on the encryption format
-  // Each chunk has format: [IV (12 bytes)] + [Encrypted data]
-  // We need to parse the encrypted data to find chunk boundaries
+    console.log(
+      '[downloadAndDecryptStream] Downloaded (simple mode):',
+      encryptedData.byteLength,
+      'bytes'
+    )
 
-  // First, try to decrypt as a single file
+    // Try single file decryption first
+    try {
+      console.log('[downloadAndDecryptStream] Trying to decrypt as single file...')
+      const decrypted = await decryptFile(encryptedData, iv, salt, password)
+      console.log('[downloadAndDecryptStream] Successfully decrypted as single file')
+
+      if (fileId && mimeType && filename) {
+        const { putFileInCache, generateCacheKey } = await import('./fileCache')
+        const cacheKey = generateCacheKey(fileId, password)
+        await putFileInCache(cacheKey, decrypted, { mimeType, filename, size: fileSize })
+        console.log('[downloadAndDecryptStream] Cached decrypted file:', fileId)
+      }
+
+      onProgress?.(100)
+      return decrypted
+    } catch {
+      console.log(
+        '[downloadAndDecryptStream] Failed to decrypt as single file, trying chunked approach...'
+      )
+    }
+
+    // Try chunked decryption
+    try {
+      const decrypted = await decryptFileChunked(
+        { encryptedChunks: [encryptedData], iv, salt, password },
+        onProgress
+      )
+      console.log('[downloadAndDecryptStream] Successfully decrypted chunked file')
+
+      if (fileId && mimeType && filename) {
+        const { putFileInCache, generateCacheKey } = await import('./fileCache')
+        const cacheKey = generateCacheKey(fileId, password)
+        await putFileInCache(cacheKey, decrypted, { mimeType, filename, size: fileSize })
+        console.log('[downloadAndDecryptStream] Cached decrypted file:', fileId)
+      }
+
+      return decrypted
+    } catch (err) {
+      console.error('[downloadAndDecryptStream] Failed to decrypt chunked file:', err)
+      throw err
+    }
+  }
+
+  // Progressive download with progress tracking
+  const chunks: Uint8Array[] = []
+  let downloadedBytes = 0
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    chunks.push(value)
+    downloadedBytes += value.length
+
+    // Report download progress (0-50% of total progress)
+    const downloadProgress = fileSize > 0 ? Math.round((downloadedBytes / fileSize) * 50) : 0
+    onProgress?.(downloadProgress)
+  }
+
+  console.log('[downloadAndDecryptStream] Downloaded:', downloadedBytes, 'bytes')
+
+  // Combine chunks into single ArrayBuffer
+  const encryptedData = new Uint8Array(downloadedBytes)
+  let offset = 0
+  for (const chunk of chunks) {
+    encryptedData.set(chunk, offset)
+    offset += chunk.length
+  }
+
+  // Try single file decryption first
   try {
     console.log('[downloadAndDecryptStream] Trying to decrypt as single file...')
-    const decrypted = await decryptFile(encryptedData, iv, salt, password)
+    const decrypted = await decryptFile(encryptedData.buffer, iv, salt, password)
     console.log('[downloadAndDecryptStream] Successfully decrypted as single file')
+    onProgress?.(100)
 
-    // Cache the decrypted file if fileId is provided
     if (fileId && mimeType && filename) {
       const { putFileInCache, generateCacheKey } = await import('./fileCache')
       const cacheKey = generateCacheKey(fileId, password)
-      await putFileInCache(cacheKey, decrypted, {
-        mimeType,
-        filename,
-        size: fileSize,
-      })
+      await putFileInCache(cacheKey, decrypted, { mimeType, filename, size: fileSize })
       console.log('[downloadAndDecryptStream] Cached decrypted file:', fileId)
     }
 
@@ -724,25 +790,19 @@ export async function downloadAndDecryptStream(
   }
 
   // If that fails, try to decrypt as chunked file
-  // The new format has a header with chunk metadata
   console.log('[downloadAndDecryptStream] Trying to decrypt as chunked file...')
 
   try {
     const decrypted = await decryptFileChunked(
-      { encryptedChunks: [encryptedData], iv, salt, password },
-      onProgress
+      { encryptedChunks: [encryptedData.buffer], iv, salt, password },
+      p => onProgress?.(50 + Math.round(p * 50)) // Decryption is 50-100% of progress
     )
     console.log('[downloadAndDecryptStream] Successfully decrypted chunked file')
 
-    // Cache the decrypted file if fileId is provided
     if (fileId && mimeType && filename) {
       const { putFileInCache, generateCacheKey } = await import('./fileCache')
       const cacheKey = generateCacheKey(fileId, password)
-      await putFileInCache(cacheKey, decrypted, {
-        mimeType,
-        filename,
-        size: fileSize,
-      })
+      await putFileInCache(cacheKey, decrypted, { mimeType, filename, size: fileSize })
       console.log('[downloadAndDecryptStream] Cached decrypted file:', fileId)
     }
 
@@ -754,10 +814,126 @@ export async function downloadAndDecryptStream(
 }
 
 /**
+ * Create a streaming video URL for encrypted files
+ * Downloads and decrypts chunks progressively so video can start playing before full download
+ *
+ * @param fileId - The file ID to stream
+ * @param iv - Base64 encoded IV
+ * @param salt - Base64 encoded Salt
+ * @param password - Decryption password
+ * @param onProgress - Progress callback (0-100)
+ * @returns Object URL that can be used as video src
+ */
+export async function createStreamingVideoUrl(
+  fileId: string,
+  iv: string,
+  salt: string,
+  password: string,
+  onProgress?: (progress: number) => void
+): Promise<{ url: string; cleanup: () => void }> {
+  console.log('[createStreamingVideoUrl] Starting for fileId:', fileId)
+
+  // Get the download URL from our server
+  const { getDownloadUrl } = await import('../api/uploadApi')
+  const result = await getDownloadUrl(fileId)
+  if (!result.ok || !result.url) {
+    throw new Error('Failed to get download URL')
+  }
+
+  // Fetch as a stream
+  const response = await fetch(result.url, {
+    headers: {
+      Origin: window.location.origin,
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to download file: ${response.status}`)
+  }
+
+  // Check if we can stream directly (non-encrypted) or need decryption
+  if (!result.encryptionEnabled) {
+    // Non-encrypted - return direct URL
+    console.log('[createStreamingVideoUrl] Non-encrypted file, returning direct URL')
+    return {
+      url: result.url,
+      cleanup: () => {},
+    }
+  }
+
+  // For encrypted files, we need to download and decrypt
+  // Use ReadableStream for progressive reading
+  const reader = response.body?.getReader()
+  if (!reader) {
+    throw new Error('Response body is not readable')
+  }
+
+  // Read all encrypted data first (necessary due to chunk format)
+  const chunks: Uint8Array[] = []
+  let totalBytes = 0
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    chunks.push(value)
+    totalBytes += value.length
+    onProgress?.(Math.min(50, Math.round((totalBytes / (result.size || totalBytes || 1)) * 50)))
+  }
+
+  console.log('[createStreamingVideoUrl] Downloaded:', totalBytes, 'bytes')
+
+  // Combine all chunks
+  const encryptedData = new Uint8Array(totalBytes)
+  let offset = 0
+  for (const chunk of chunks) {
+    encryptedData.set(chunk, offset)
+    offset += chunk.length
+  }
+
+  // Decrypt - try single file first
+  try {
+    console.log('[createStreamingVideoUrl] Attempting single-file decryption')
+    const decrypted = await decryptFile(encryptedData.buffer, iv, salt, password)
+    console.log('[createStreamingVideoUrl] Single-file decryption succeeded')
+    onProgress?.(100)
+
+    const blob = new Blob([decrypted], { type: result.mimeType || 'video/mp4' })
+    const url = URL.createObjectURL(blob)
+
+    return {
+      url,
+      cleanup: () => URL.revokeObjectURL(url),
+    }
+  } catch (err) {
+    console.log('[createStreamingVideoUrl] Single-file failed, trying chunked:', err)
+  }
+
+  // Try chunked decryption
+  try {
+    const decrypted = await decryptFileChunked(
+      { encryptedChunks: [encryptedData.buffer], iv, salt, password },
+      p => onProgress?.(50 + Math.round(p * 50))
+    )
+    console.log('[createStreamingVideoUrl] Chunked decryption succeeded')
+
+    const blob = new Blob([decrypted], { type: result.mimeType || 'video/mp4' })
+    const url = URL.createObjectURL(blob)
+
+    return {
+      url,
+      cleanup: () => URL.revokeObjectURL(url),
+    }
+  } catch (err) {
+    console.error('[createStreamingVideoUrl] All decryption methods failed:', err)
+    throw err
+  }
+}
+
+/**
  * Stream encrypt a file for upload (for very large files)
  * Returns a function that encrypts chunks on-demand
  */
-export function createEncryptedStream(): {
+export function createEncryptedStream(file: File): {
   chunks: ArrayBuffer[]
   iv: string
   salt: string
@@ -767,7 +943,7 @@ export function createEncryptedStream(): {
   // In production, you might want to use Streams API for true streaming
   const salt = generateRandomBytes(SALT_LENGTH)
   const iv = generateRandomBytes(IV_LENGTH)
-  const totalSize = _file.size
+  const totalSize = file.size
 
   // This is a sync wrapper - actual encryption happens in encryptFileChunked
   return {

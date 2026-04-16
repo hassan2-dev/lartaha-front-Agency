@@ -19,9 +19,7 @@ import {
   Paper,
   Alert,
   Dialog,
-  DialogTitle,
   DialogContent,
-  DialogActions,
   LinearProgress,
 } from '@mui/material'
 import {
@@ -63,6 +61,7 @@ import {
   uploadImageThumbnail,
 } from '../api/uploadApi'
 import { useUpload, type UploadItemState } from '../contexts/UploadContext'
+import { KeyMinimalisticSquare3 } from '@solar-icons/react'
 
 // Build thumbnail key following server naming convention
 function buildImageThumbnailKey(originalKey: string): string {
@@ -161,8 +160,6 @@ export default function EncryptedUploadDropzone({
   const [encryptEnabled] = useState(true)
   const [isEncrypting, setIsEncrypting] = useState(false)
   const [encryptionProgress, setEncryptionProgress] = useState(0)
-  const [showUppyDashboard, setShowUppyDashboard] = useState(false)
-  const [currentUploadId, setCurrentUploadId] = useState<string | null>(null)
   const uppyInstancesRef = useRef<Map<string, Uppy>>(new Map())
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -194,7 +191,7 @@ export default function EncryptedUploadDropzone({
 
   // Initialize Uppy Dashboard when dialog opens
   useEffect(() => {
-    if (!showUppyDashboard || !dashboardContainerRef.current) return
+    if (!dashboardContainerRef.current) return
 
     // Create main Uppy instance with Dashboard
     const uppy = new Uppy({
@@ -239,7 +236,7 @@ export default function EncryptedUploadDropzone({
         uppyRef.current = null
       }
     }
-  }, [showUppyDashboard])
+  }, [])
 
   // Encrypt a single file
   const encryptSingleFile = async (
@@ -475,8 +472,6 @@ export default function EncryptedUploadDropzone({
 
       // Store uppy instance immediately so it's available for pause/resume
       uppyInstancesRef.current.set(fileKey, uppy)
-
-      setCurrentUploadId(uploadId || null)
 
       if (useMultipart) {
         uppy.use(AwsS3Multipart, {
@@ -745,7 +740,6 @@ export default function EncryptedUploadDropzone({
           })
         }
 
-        setCurrentUploadId(null)
         const current = uppyInstancesRef.current.get(fileKey)
         if (current) {
           uppyInstancesRef.current.delete(fileKey)
@@ -769,7 +763,6 @@ export default function EncryptedUploadDropzone({
             },
           }
         })
-        setCurrentUploadId(null)
         const current = uppyInstancesRef.current.get(fileKey)
         if (current) {
           uppyInstancesRef.current.delete(fileKey)
@@ -1048,22 +1041,20 @@ export default function EncryptedUploadDropzone({
           sx={{
             display: 'flex',
             alignItems: 'center',
-            gap: 1,
+            gap: 0.5,
             mb: 2,
             p: 1.5,
             borderRadius: 2,
             bgcolor: 'rgba(255,255,255,0.03)',
+            // opacity: 0.8,
           }}
         >
-          <Box sx={{ color: encryptEnabled ? 'success.main' : 'text.secondary' }}>
-            <LockIcon />
+          <Box sx={{ color: 'success.main' }}>
+            <KeyMinimalisticSquare3 weight={'Bold'} size={24} />
           </Box>
           <Typography variant="body2" sx={{ flex: 1 }}>
             تشفير الملفات (E2E) — مفعّل دائمًا
           </Typography>
-          <Button size="small" variant="contained" color="success" disabled sx={{ minWidth: 100 }}>
-            مفعّل
-          </Button>
         </Box>
 
         {/* Encryption Progress */}
@@ -1724,9 +1715,9 @@ export default function EncryptedUploadDropzone({
         {/* Note: Minimized upload toast is now handled globally in SideNav */}
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
-          <Box sx={{ color: 'primary.main', display: 'flex' }}>
-            <CloudUploadIcon />
-          </Box>
+          {/* <Box sx={{ color: 'primary.main', display: 'flex' }}>
+            <Cloud weight="Bold" size={48} />
+          </Box> */}
           <Box>
             <Typography variant="h6" sx={{ fontWeight: 700 }}>
               اسحب الملفات هنا، أو اختر من جهازك
@@ -1757,15 +1748,6 @@ export default function EncryptedUploadDropzone({
 
         <Box sx={{ display: 'flex', gap: 1, mt: 2, flexWrap: 'wrap' }}>
           <Button
-            variant="contained"
-            onClick={() => setShowUppyDashboard(true)}
-            disabled={uploading || isEncrypting}
-            startIcon={<CloudUploadIcon />}
-            sx={{ borderRadius: 999, gap: 1 }}
-          >
-            فتح لوحة الرفع
-          </Button>
-          <Button
             variant="outlined"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading || isEncrypting}
@@ -1783,42 +1765,7 @@ export default function EncryptedUploadDropzone({
           >
             اختر مجلد
           </Button>
-          {files.length > 0 && (
-            <Button
-              variant="contained"
-              color="success"
-              onClick={async () => {
-                // Only upload files NOT already in externalUploadItems (parent is handling those)
-                // This prevents duplicate uploads
-                const filesToUpload = files.filter(file => {
-                  const fileKey = `${file.relativePath}_${file.file.size}`
-                  return !externalUploadItems || !(fileKey in externalUploadItems)
-                })
 
-                // If no files to upload locally, they're already being handled by parent
-                if (filesToUpload.length === 0) {
-                  console.log(
-                    '[DEBUG] All files already uploading via parent, skipping local upload'
-                  )
-                  return
-                }
-
-                // Upload remaining files using Uppy
-                for (const file of filesToUpload) {
-                  try {
-                    await initUppy(file)
-                  } catch (err) {
-                    console.error('Upload failed:', err)
-                  }
-                }
-              }}
-              disabled={uploading || isEncrypting || files.length === 0}
-              startIcon={<CloudUploadIcon />}
-              sx={{ borderRadius: 999, gap: 1 }}
-            >
-              رفع {files.length} ملف
-            </Button>
-          )}
           <Box sx={{ flex: '1 1 auto' }} />
           <Typography variant="body2" sx={{ opacity: 0.8, mt: 1 }}>
             {files.length} عنصر · {fmtBytes(totals.totalBytes)}
@@ -1955,42 +1902,6 @@ export default function EncryptedUploadDropzone({
           </Typography>
         )}
       </Paper>
-
-      {/* Uppy Dashboard Dialog */}
-      <Dialog
-        open={showUppyDashboard}
-        onClose={() => setShowUppyDashboard(false)}
-        maxWidth="lg"
-        fullWidth
-        PaperProps={{
-          sx: {
-            minHeight: 600,
-          },
-        }}
-      >
-        <DialogTitle
-          sx={{
-            background: theme =>
-              `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
-            color: 'white',
-            fontWeight: 700,
-          }}
-        >
-          رفع الملفات
-        </DialogTitle>
-        <DialogContent sx={{ p: 0, overflow: 'hidden' }}>
-          <Box ref={dashboardContainerRef} sx={{ height: 450 }} />
-        </DialogContent>
-        <DialogActions sx={{ px: 3, py: 2 }}>
-          <Button
-            onClick={() => setShowUppyDashboard(false)}
-            variant="outlined"
-            sx={{ borderRadius: 999 }}
-          >
-            إغلاق
-          </Button>
-        </DialogActions>
-      </Dialog>
     </>
   )
 }

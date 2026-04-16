@@ -29,6 +29,7 @@ export const StepContent = ({
   adminData,
   workspaceData,
   loading,
+  error,
   showPassword,
   showConfirmPassword,
   onAdminChange,

@@ -65,7 +65,7 @@ export function formatActivityDescription(activity: Activity) {
     case 'deleted_task':
       return `حذف المهمة: ${details.taskTitle || 'غير محدد'}`
     case 'uploaded_files': {
-      const count = details.fileCount || 1
+      const count = (details.fileCount as number) || 1
       return `رفع ${count} ملف${count > 1 ? 'ات' : ''}`
     }
     case 'deleted_file':

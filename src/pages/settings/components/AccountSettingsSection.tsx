@@ -11,7 +11,7 @@ import {
   ListItemSecondaryAction,
   Divider,
 } from '@mui/material'
-import { User, ArrowRight } from '@solar-icons/react'
+import { User as UserIcon, ArrowRight } from '@solar-icons/react'
 import type { User } from '../../../contexts/AuthContext'
 
 interface AccountSettingsSectionProps {
@@ -37,7 +37,7 @@ export const AccountSettingsSection = ({
       <Box sx={{ mb: 3, p: 2, bgcolor: 'rgba(0,0,0,0.02)', borderRadius: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
           <Avatar src={user?.avatar} sx={{ width: 60, height: 60, bgcolor: 'primary.main' }}>
-            {user?.name?.charAt(0).toUpperCase() || <User size={24} />}
+            {user?.name?.charAt(0).toUpperCase() || <UserIcon size={24} />}
           </Avatar>
           <Box sx={{ flex: 1 }}>
             <Typography variant="h6" sx={{ fontWeight: 600 }}>

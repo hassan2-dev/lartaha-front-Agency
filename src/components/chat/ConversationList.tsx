@@ -59,7 +59,7 @@ export default function ConversationList() {
         : 0
       return bTime - aTime
     })
-  }, [bootstrap.users, user?.id, conversations, unreadMessageCounts])
+  }, [bootstrap.users, user, conversations, unreadMessageCounts])
 
   return (
     <Box sx={{ borderLeft: { md: '1px solid rgba(255,255,255,0.08)' }, p: 2 }}>
@@ -107,7 +107,13 @@ export default function ConversationList() {
       ) : (
         <List sx={{ p: 0 }}>
           {memberList.map(
-            (member: { id: string; name?: string; email?: string; avatar?: string | null }) => {
+            (member: {
+              id: string
+              name?: string
+              email?: string
+              avatar?: string | null
+              isOnline?: boolean
+            }) => {
               const memberDirectConversation = conversations.find(
                 conversation =>
                   conversation.type === 'direct' &&

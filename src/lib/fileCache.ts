@@ -1,12 +1,12 @@
 /**
  * IndexedDB-based file cache for decrypted files using Dexie.js
- * Stores decrypted files with 7-day expiration
+ * Stores decrypted files with 5-day expiration
  */
 
 import Dexie, { type Table } from 'dexie'
 
 const DB_NAME = 'EncryptedFileCache'
-const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
+const FIVE_DAYS = 5 * 24 * 60 * 60 * 1000 // 5 days in milliseconds
 
 export interface CachedFile {
   fileId: string
@@ -71,7 +71,7 @@ export async function putFileInCache(
 ): Promise<void> {
   try {
     const timestamp = Date.now()
-    const expiresAt = timestamp + SEVEN_DAYS
+    const expiresAt = timestamp + FIVE_DAYS
 
     const cachedFile: CachedFile = {
       fileId,

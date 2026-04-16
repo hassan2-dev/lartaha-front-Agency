@@ -43,8 +43,11 @@ interface Attachment {
   key?: string
 }
 
-export function isImageAttachment(attachment: Attachment) {
-  const byMime = (attachment.mimeType || '').toLowerCase().startsWith('image/')
+export function isImageAttachment(
+  attachment: Attachment | { mimeType?: string | null; name?: string; key?: string }
+) {
+  const mimeType = attachment.mimeType || ''
+  const byMime = (mimeType as string).toLowerCase().startsWith('image/')
   const byName = /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i.test(attachment.name || '')
   const byKey = /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i.test(attachment.key || '')
   return byMime || byName || byKey

@@ -26,20 +26,19 @@ export interface TaskFormState {
 }
 
 export interface TaskFormActions {
-  setTitle: (value: string) => void
-  setDescription: (value: string) => void
-  setStatus: (value: TaskStatus) => void
-  setPriority: (value: TaskPriority) => void
-  setDueDate: (value: string) => void
-  setSelectedAssignees: (value: string[]) => void
-  setChecklistItems: (value: ChecklistItemInput[]) => void
-  setLinks: (value: LinkInput[]) => void
-  setNewChecklistItem: (value: string) => void
-  setNewLink: (value: { url: string; title: string }) => void
-  addChecklistItem: () => void
-  removeChecklistItem: (index: number) => void
-  addLink: () => void
-  removeLink: (index: number) => void
+  onTitleChange: (value: string) => void
+  onDescriptionChange: (value: string) => void
+  onStatusChange: (value: TaskStatus) => void
+  onPriorityChange: (value: TaskPriority) => void
+  onDueDateChange: (value: string) => void
+  onAssigneesChange: (value: string[]) => void
+  onChecklistItemsChange: (value: ChecklistItemInput[]) => void
+  onNewChecklistItemChange: (value: string) => void
+  onNewLinkChange: (value: { url: string; title: string }) => void
+  onAddChecklistItem: () => void
+  onRemoveChecklistItem: (index: number) => void
+  onAddLink: () => void
+  onRemoveLink: (index: number) => void
   resetForm: () => void
   populateFromTask: (task: Task) => void
 }
@@ -117,20 +116,19 @@ export function useTaskForm(): TaskFormState & TaskFormActions {
     newChecklistItem,
     newLink,
     // Actions
-    setTitle,
-    setDescription,
-    setStatus,
-    setPriority,
-    setDueDate,
-    setSelectedAssignees,
-    setChecklistItems,
-    setLinks,
-    setNewChecklistItem,
-    setNewLink,
-    addChecklistItem,
-    removeChecklistItem,
-    addLink,
-    removeLink,
+    onTitleChange: setTitle,
+    onDescriptionChange: setDescription,
+    onStatusChange: setStatus,
+    onPriorityChange: setPriority,
+    onDueDateChange: setDueDate,
+    onAssigneesChange: setSelectedAssignees,
+    onChecklistItemsChange: setChecklistItems,
+    onNewChecklistItemChange: setNewChecklistItem,
+    onNewLinkChange: setNewLink,
+    onAddChecklistItem: addChecklistItem,
+    onRemoveChecklistItem: removeChecklistItem,
+    onAddLink: addLink,
+    onRemoveLink: removeLink,
     resetForm,
     populateFromTask,
   }

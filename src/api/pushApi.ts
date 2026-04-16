@@ -178,7 +178,7 @@ export async function subscribeUserToPush() {
 
       console.warn(
         '🔔 [pushApi] Retry after cleanup failed, performing hard SW reset:',
-        retryError?.message || retryError
+        (retryError as Error)?.message || retryError
       )
       const resetRegistration = await resetPushRuntimeState()
       subscription = await createFreshSubscription(resetRegistration, applicationServerKey)

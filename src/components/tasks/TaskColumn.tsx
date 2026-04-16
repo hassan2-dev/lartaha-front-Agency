@@ -1,5 +1,6 @@
 import { Box, Paper, Typography } from '@mui/material'
-import { useDroppable, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { useDroppable } from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import type { Task, TaskStatus } from '../../api/tasksApi'
 import { STATUS_LABEL } from '../../constants/tasks'
 import SortableTaskCard from '../SortableTaskCard'
@@ -12,7 +13,7 @@ interface TaskColumnProps {
     taskId: string,
     itemId: string,
     update: { completed?: boolean; text?: string }
-  ) => void
+  ) => Promise<void>
   onTaskClick: (task: Task) => void
 }
 

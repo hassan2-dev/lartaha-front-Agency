@@ -15,7 +15,7 @@ import LandingPage from '../pages/LandingPage'
 import SideNav from '../components/SideNav'
 import { ProtectedRoute } from '../components/ProtectedRoute'
 import { AdminRoute } from '../components/AdminRoute'
-import UploadPage from '../pages/upload/UploadPage'
+import UploadPage from '../pages/UploadPage'
 
 export default function AppRoutes() {
   return (
