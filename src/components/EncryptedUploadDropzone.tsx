@@ -370,13 +370,6 @@ export default function EncryptedUploadDropzone({
         }))
       : selectedFiles
 
-    // Auto-open the upload modal when files are selected
-    if (filesWithPath.length > 0) {
-      setShowUploadModal(true)
-      setIsMinimized(false)
-      setShowSuccess(false)
-    }
-
     // If encryption is enabled and we have a password, encrypt files first
     if (encryptEnabled && encryptionPasswordRef.current) {
       const encrypted = await encryptFiles(filesWithPath)
@@ -399,6 +392,14 @@ export default function EncryptedUploadDropzone({
           console.error('Upload failed:', err)
         }
       }
+    }
+
+    // Auto-open the upload modal AFTER upload items are added to state
+    // This ensures the dialog condition Object.keys(mergedUploadItems).length > 0 is true
+    if (filesWithPath.length > 0) {
+      setShowUploadModal(true)
+      setIsMinimized(false)
+      setShowSuccess(false)
     }
   }
 
