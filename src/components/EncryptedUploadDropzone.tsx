@@ -52,6 +52,7 @@ import {
 } from '../api/uploadApi'
 import { useUpload, type UploadItemState } from '../contexts/UploadContext'
 import { KeyMinimalisticSquare3 } from '@solar-icons/react'
+import Toast from './Toast'
 
 // Build thumbnail key following server naming convention
 function buildImageThumbnailKey(originalKey: string): string {
@@ -98,6 +99,7 @@ interface EncryptedUploadDropzoneProps {
   }) => void
   externalUploadItems?: Record<string, UploadItemState>
   currentPath?: string // Current folder path in UploadPage (e.g., "folder1/subfolder")
+  foldersHere?: string[] // Existing folder names for duplicate validation
 }
 
 // Simple file selection (without Uppy) for initial selection
@@ -131,6 +133,7 @@ export default function EncryptedUploadDropzone({
   onUploadProgress,
   externalUploadItems,
   currentPath = '',
+  foldersHere = [],
 }: EncryptedUploadDropzoneProps) {
   // Use global upload context for persistent state across pages
   const {
@@ -150,6 +153,9 @@ export default function EncryptedUploadDropzone({
   const [encryptEnabled] = useState(true)
   const [isEncrypting, setIsEncrypting] = useState(false)
   const [encryptionProgress, setEncryptionProgress] = useState(0)
+  const [toastMessage, setToastMessage] = useState('')
+  const [toastOpen, setToastOpen] = useState(false)
+  const [toastType, setToastType] = useState<'error' | 'success' | 'info'>('error')
   const uppyInstancesRef = useRef<Map<string, Uppy>>(new Map())
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -178,6 +184,16 @@ export default function EncryptedUploadDropzone({
       }
     }
   }, [])
+
+  // Helper function to show toast notifications
+  const showToastNotification = useCallback(
+    (message: string, type: 'error' | 'success' | 'info' = 'error') => {
+      setToastMessage(message)
+      setToastType(type)
+      setToastOpen(true)
+    },
+    []
+  )
 
   // Initialize Uppy Dashboard when dialog opens
   useEffect(() => {
@@ -359,6 +375,25 @@ export default function EncryptedUploadDropzone({
           relativePath: `${currentPath}/${sf.relativePath}`.replace(/\/+/g, '/'),
         }))
       : selectedFiles
+
+    // Check for duplicate folder name in current location (same logic as handleCreateFolder)
+    const hasFolderStructure = filesWithPath.some(sf => sf.relativePath.includes('/'))
+    if (hasFolderStructure && foldersHere.length > 0) {
+      const firstFileWithPath = filesWithPath.find(sf => sf.relativePath.includes('/'))
+      if (firstFileWithPath) {
+        const rootFolderName = firstFileWithPath.relativePath.split('/')[0]
+        const existingFolders = foldersHere.map(folder => {
+          const cleaned = folder.endsWith('/') ? folder.slice(0, -1) : folder
+          return cleaned.split('/').pop() || cleaned
+        })
+
+        if (existingFolders.includes(rootFolderName)) {
+          showToastNotification('مجلد بهذا الاسم موجود بالفعل في هذا الموقع', 'error')
+          onFilesChange([])
+          return
+        }
+      }
+    }
 
     // If encryption is enabled and we have a password, encrypt files first
     if (encryptEnabled && encryptionPasswordRef.current) {
@@ -914,6 +949,19 @@ export default function EncryptedUploadDropzone({
     const root = pendingFolderName.trim().replace(/^\/+|\/+$/g, '')
     if (!root) return
 
+    // Check for duplicate folder name
+    if (foldersHere.length > 0) {
+      const existingFolders = foldersHere.map(folder => {
+        const cleaned = folder.endsWith('/') ? folder.slice(0, -1) : folder
+        return cleaned.split('/').pop() || cleaned
+      })
+
+      if (existingFolders.includes(root)) {
+        showToastNotification('مجلد بهذا الاسم موجود بالفعل في هذا الموقع', 'error')
+        return
+      }
+    }
+
     const transformed = pendingFolderFiles.map(sf => ({
       ...sf,
       relativePath: `${root}/${sf.relativePath}`,
@@ -991,6 +1039,9 @@ export default function EncryptedUploadDropzone({
 
   return (
     <>
+      {toastOpen && (
+        <Toast message={toastMessage} type={toastType} onClose={() => setToastOpen(false)} />
+      )}
       <Paper
         variant="outlined"
         sx={{
