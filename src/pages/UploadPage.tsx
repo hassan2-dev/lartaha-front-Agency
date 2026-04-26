@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   Box,
   Button,
@@ -2413,6 +2414,7 @@ function DownloadProgressDialog() {
 // Download progress tracking functions - must be used within component context
 export default function UploadPage() {
   const { user } = useAuth()
+  const [searchParams] = useSearchParams()
 
   // Download progress — backed by global DownloadContext
   const { addDownload, updateDownload, downloads, abortControllers, pausedChunks } = useDownload()
@@ -2973,6 +2975,46 @@ export default function UploadPage() {
 
   // Auto-upload when files are selected (but not during initial render)
   const [hasTriggeredUpload, setHasTriggeredUpload] = useState(false)
+
+  // Handle folder parameter from query string (e.g., from activity page)
+  const fetchExplorerRef = useRef<typeof fetchExplorer | null>(null)
+  const queryParamHandledRef = useRef(false)
+  const initialFetchDoneRef = useRef(false)
+
+  // Effect to handle query param and initiate fetch
+  // Combined into single effect to avoid race condition between query param and currentPath effects
+  useEffect(() => {
+    const workspaceId = user?.workspaceId?.trim()
+    if (!workspaceId) return // Wait for workspaceId to be available
+
+    const folder = searchParams.get('folder')
+    const cleanPath = folder ? decodeURIComponent(folder).replace(/^\/+/, '') : ''
+    const ROOT_PREFIX = `uploads/${workspaceId}`
+    const computedExplorerPrefix = cleanPath ? `${ROOT_PREFIX}/${cleanPath}` : ROOT_PREFIX
+    queryParamHandledRef.current = true
+    initialFetchDoneRef.current = true
+    setCurrentPath(cleanPath)
+    // Fetch directly with computed prefix to avoid stale closure race
+    void fetchExplorer(true, computedExplorerPrefix)
+  }, [searchParams, user?.workspaceId])
+
+  // This effect fetches when currentPath changes (user navigation, not query param)
+  useEffect(() => {
+    const hasPendingFolderParam = searchParams.get('folder')
+    // Skip fetch when currentPath is empty AND there's a folder param pending.
+    // This handles the race where setCurrentPath hasn't propagated yet.
+    if (currentPath === '' && hasPendingFolderParam != null) {
+      return
+    }
+    initialFetchDoneRef.current = true
+    // Use direct call instead of ref since ref isn't set up on first render
+    if (fetchExplorerRef.current) {
+      fetchExplorerRef.current(true)
+    } else {
+      // Fallback: call fetchExplorer directly (works because fetchExplorer reads current state)
+      void fetchExplorer(true)
+    }
+  }, [currentPath])
 
   useEffect(() => {
     if (useStreamUpload && canUpload && selectedFiles.length > 0 && !hasTriggeredUpload) {
@@ -3900,7 +3942,8 @@ export default function UploadPage() {
   }
 
   const fetchExplorer = useCallback(
-    async (reset: boolean = true, continuationTokenOverride?: string | null) => {
+    async (reset: boolean = true, explorerPrefixOverride?: string | null, continuationTokenOverride?: string | null) => {
+      const effectivePrefix = explorerPrefixOverride ?? explorerPrefix
       if (reset) {
         setLoadingExplorer(true)
         setFilesHere([])
@@ -3914,7 +3957,7 @@ export default function UploadPage() {
       try {
         const limit = 50
         const continuationToken = reset ? undefined : continuationTokenOverride || undefined
-        const res = await listUploadedObjects(explorerPrefix, limit, true, continuationToken)
+        const res = await listUploadedObjects(effectivePrefix, limit, true, continuationToken)
         const visibleObjects = (res.objects ?? []).filter(obj => !isHiddenChatUploadPath(obj.key))
 
         if (reset) {
@@ -3973,6 +4016,11 @@ export default function UploadPage() {
     [currentPath, explorerPrefix]
   )
 
+  // Keep fetchExplorerRef updated
+  useEffect(() => {
+    fetchExplorerRef.current = fetchExplorer
+  }, [fetchExplorer])
+
   const loadMoreFiles = useCallback(async () => {
     if (!hasMoreFiles || isLoadingMoreFiles || loadingExplorer) return
 
@@ -3991,10 +4039,6 @@ export default function UploadPage() {
     },
     [loadMoreFiles]
   )
-
-  useEffect(() => {
-    void fetchExplorer(true)
-  }, [fetchExplorer])
 
   useEffect(() => {
     const unsubscribe = subscribeRealtime(

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Box,
   Card,
@@ -22,6 +23,7 @@ import { ExpandMore, ExpandLess } from '@mui/icons-material'
 import { ClockCircle, Refresh } from '@solar-icons/react'
 import { fetchActivities, type Activity } from '../api/activitiesApi'
 import { ActivityItemSkeleton, PageHeaderSkeleton } from '../components/SkeletonLoaders'
+import { ROUTES } from '../constants/routes'
 import {
   formatActivityDescription,
   formatTimeAgo,
@@ -40,6 +42,16 @@ function extractFileInfo(key: string) {
   const directory = parts.slice(0, -1).join('/')
   const extension = filename.split('.').pop()?.toLowerCase() || ''
   return { filename, directory, extension }
+}
+
+function stripUploadsPrefix(path: string): string {
+  // Remove 'uploads/{workspaceId}/' prefix.
+  // Path format: uploads/{workspaceId}/folder/subfolder or uploads/{workspaceId}
+  // Result should be: folder/subfolder or empty (relative path within workspace)
+
+  // Remove the uploads/ prefix and workspace ID folder
+  let result = path.replace(/^uploads\/[^/]+\/?/, '')
+  return result
 }
 
 function getFileIcon(extension: string) {
@@ -70,7 +82,13 @@ function getFileIcon(extension: string) {
   return icons[extension] || '📁'
 }
 
-function FileListDetails({ files }: { files: FileDetails[] }) {
+function FileListDetails({
+  files,
+  onNavigate,
+}: {
+  files: FileDetails[]
+  onNavigate: (path: string) => void
+}) {
   const [expanded, setExpanded] = useState(false)
 
   if (!files || files.length === 0) return null
@@ -78,9 +96,12 @@ function FileListDetails({ files }: { files: FileDetails[] }) {
   if (files.length === 1) {
     const { filename, directory, extension } = extractFileInfo(files[0].key)
     const icon = getFileIcon(extension)
+    const cleanPath = stripUploadsPrefix(directory)
     return (
       <Tooltip title={directory || 'Root directory'}>
         <Box
+          component="button"
+          onClick={() => onNavigate(cleanPath)}
           sx={{
             mt: 0.75,
             ml: 1,
@@ -92,6 +113,13 @@ function FileListDetails({ files }: { files: FileDetails[] }) {
             py: 0.4,
             borderRadius: 0.75,
             maxWidth: '100%',
+            border: 'none',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            '&:hover': {
+              bgcolor: 'rgba(25, 118, 210, 0.15)',
+              transform: 'translateY(-1px)',
+            },
           }}
         >
           <Typography variant="caption" sx={{ fontSize: '0.75rem' }}>
@@ -143,9 +171,12 @@ function FileListDetails({ files }: { files: FileDetails[] }) {
           {files.map((file, idx) => {
             const { filename, directory, extension } = extractFileInfo(file.key)
             const icon = getFileIcon(extension)
+            const cleanPath = stripUploadsPrefix(directory)
             return (
               <Tooltip key={idx} title={directory || 'Root directory'}>
                 <Box
+                  component="button"
+                  onClick={() => onNavigate(cleanPath)}
                   sx={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -156,6 +187,13 @@ function FileListDetails({ files }: { files: FileDetails[] }) {
                     borderRadius: 0.5,
                     maxWidth: '100%',
                     width: 'fit-content',
+                    border: 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    '&:hover': {
+                      bgcolor: 'rgba(25, 118, 210, 0.12)',
+                      transform: 'translateY(-1px)',
+                    },
                   }}
                 >
                   <Typography variant="caption" sx={{ fontSize: '0.75rem' }}>
@@ -185,11 +223,18 @@ function FileListDetails({ files }: { files: FileDetails[] }) {
 
 export default function ActivityPage() {
   const theme = useTheme()
+  const navigate = useNavigate()
   const [activities, setActivities] = useState<Activity[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [offset, setOffset] = useState(0)
+
+  const handleNavigateToFolder = (folderPath: string) => {
+    const cleanPath = stripUploadsPrefix(folderPath)
+    const encodedPath = encodeURIComponent(cleanPath || '/')
+    navigate(`${ROUTES.APP.UPLOAD}?folder=${encodedPath}`)
+  }
 
   const loadActivities = async (reset = false) => {
     try {
@@ -324,6 +369,7 @@ export default function ActivityPage() {
                                   ? (activity.details.files as FileDetails[]) || []
                                   : [{ key: activity.details.fileKey as string }]
                               }
+                              onNavigate={handleNavigateToFolder}
                             />
                           )}
                           <span
