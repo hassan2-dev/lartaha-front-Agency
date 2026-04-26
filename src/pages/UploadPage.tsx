@@ -684,6 +684,7 @@ function FileItem({
   obj: {
     key: string
     size?: number
+    createdAt?: string
     thumbnailKey?: string | null
     encryptionEnabled?: boolean
     fileId?: string
@@ -723,6 +724,7 @@ function FileItem({
     <ListItem
       key={obj.key}
       onClick={() => hasAccess && onPreview(obj.key, url)}
+      className="flex-col md:flex-row"
       sx={{
         py: 1.5,
         px: 2,
@@ -757,17 +759,20 @@ function FileItem({
         },
       }}
     >
-      {onToggleSelect && (
-        <Checkbox
-          checked={!!selected}
-          onClick={e => {
-            e.stopPropagation()
-            onToggleSelect(obj.key)
-          }}
-          sx={{ p: 0, mr: 1 }}
-        />
-      )}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
+      <div className="hidden md:block">
+        {onToggleSelect && (
+          <Checkbox
+            checked={!!selected}
+            onClick={e => {
+              e.stopPropagation()
+              onToggleSelect(obj.key)
+            }}
+            sx={{ p: 0, mr: 1 }}
+          />
+        )}
+      </div>
+
+      <div className="flex flex-col md:flex-row items-center gap-1 flex-1">
         {isImage && url && hasAccess ? (
           <Box sx={{ position: 'relative' }}>
             <ImageThumbnail
@@ -842,11 +847,22 @@ function FileItem({
           >
             {filename}
           </Typography>
-          {obj.size && (
-            <Typography variant="caption" sx={{ opacity: 0.7, textAlign: 'start' }}>
-              {fmtBytes(obj.size)}
-            </Typography>
-          )}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', mt: 0.5 }}>
+            {obj.size && (
+              <Typography variant="caption" sx={{ opacity: 0.7, textAlign: 'start' }}>
+                {fmtBytes(obj.size)}
+              </Typography>
+            )}
+            {obj.createdAt && (
+              <Typography variant="caption" sx={{ opacity: 0.7, textAlign: 'start' }}>
+                {new Date(obj.createdAt).toLocaleDateString('ar-SA', {
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric',
+                })}
+              </Typography>
+            )}
+          </Box>
           {isRestricted && (
             <Typography
               variant="caption"
@@ -856,7 +872,7 @@ function FileItem({
             </Typography>
           )}
         </Box>
-      </Box>
+      </div>
 
       {url && (
         <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
@@ -925,7 +941,13 @@ function FileItemGrid({
   selected,
   onToggleSelect,
 }: {
-  obj: { key: string; size?: number; thumbnailKey?: string | null; encryptionEnabled?: boolean }
+  obj: {
+    key: string
+    size?: number
+    createdAt?: string
+    thumbnailKey?: string | null
+    encryptionEnabled?: boolean
+  }
   url: string
   thumbnailUrl?: string
   onDelete: (key: string) => void
@@ -1019,7 +1041,7 @@ function FileItemGrid({
               <ImageThumbnail
                 url={url}
                 filename={filename}
-                size={60}
+                size={80}
                 encryptionEnabled={obj.encryptionEnabled}
                 thumbnailKey={resolvedThumbnailKey}
               />
@@ -1048,7 +1070,7 @@ function FileItemGrid({
               <VideoThumbnail
                 url={thumbnailUrl || ''}
                 thumbnailKey={resolvedThumbnailKey}
-                size={60}
+                size={80}
                 encryptionEnabled={obj.encryptionEnabled}
               />
               <ThumbnailTypeBadge fileType={fileType} size={14} />
@@ -1083,7 +1105,7 @@ function FileItemGrid({
               {isRestricted ? <LockIcon /> : getFileIcon(fileType)}
             </Avatar>
           )}
-          <Box sx={{ minWidth: 0, maxWidth: 120, flex: 1 }}>
+          {/* <Box sx={{ minWidth: 0, maxWidth: 120, flex: 1 }}>
             <Typography
               variant="body2"
               sx={{
@@ -1096,7 +1118,7 @@ function FileItemGrid({
             >
               {filename}
             </Typography>
-          </Box>
+          </Box> */}
         </Box>
         {obj.size && (
           <Typography
@@ -1107,6 +1129,21 @@ function FileItemGrid({
             }}
           >
             {fmtBytes(obj.size)}
+          </Typography>
+        )}
+        {obj.createdAt && (
+          <Typography
+            variant="caption"
+            sx={{
+              opacity: 0.7,
+              textAlign: 'center',
+            }}
+          >
+            {new Date(obj.createdAt).toLocaleDateString('ar-SA', {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+            })}
           </Typography>
         )}
         {isRestricted && (

@@ -15,7 +15,10 @@ import {
   Container,
   Divider,
   useTheme,
+  Collapse,
+  Tooltip,
 } from '@mui/material'
+import { ExpandMore, ExpandLess } from '@mui/icons-material'
 import { ClockCircle, Refresh } from '@solar-icons/react'
 import { fetchActivities, type Activity } from '../api/activitiesApi'
 import { ActivityItemSkeleton, PageHeaderSkeleton } from '../components/SkeletonLoaders'
@@ -25,6 +28,160 @@ import {
   getActivityColor,
   getActivityIcon,
 } from '../utils/activity'
+
+interface FileDetails {
+  key: string
+  size?: string
+}
+
+function extractFileInfo(key: string) {
+  const parts = key.split('/')
+  const filename = parts[parts.length - 1]
+  const directory = parts.slice(0, -1).join('/')
+  const extension = filename.split('.').pop()?.toLowerCase() || ''
+  return { filename, directory, extension }
+}
+
+function getFileIcon(extension: string) {
+  const icons: Record<string, string> = {
+    pdf: '📄',
+    doc: '📝',
+    docx: '📝',
+    xls: '📊',
+    xlsx: '📊',
+    ppt: '📽️',
+    pptx: '📽️',
+    zip: '📦',
+    rar: '📦',
+    jpg: '🖼️',
+    jpeg: '🖼️',
+    png: '🖼️',
+    gif: '🖼️',
+    svg: '🖼️',
+    mp4: '🎬',
+    mp3: '🎵',
+    txt: '📄',
+    csv: '📊',
+    json: '⚙️',
+    js: '⚙️',
+    ts: '⚙️',
+    tsx: '⚙️',
+  }
+  return icons[extension] || '📁'
+}
+
+function FileListDetails({ files }: { files: FileDetails[] }) {
+  const [expanded, setExpanded] = useState(false)
+
+  if (!files || files.length === 0) return null
+
+  if (files.length === 1) {
+    const { filename, directory, extension } = extractFileInfo(files[0].key)
+    const icon = getFileIcon(extension)
+    return (
+      <Tooltip title={directory || 'Root directory'}>
+        <Box
+          sx={{
+            mt: 0.75,
+            ml: 1,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 0.5,
+            bgcolor: 'rgba(25, 118, 210, 0.08)',
+            px: 1,
+            py: 0.4,
+            borderRadius: 0.75,
+            maxWidth: '100%',
+          }}
+        >
+          <Typography variant="caption" sx={{ fontSize: '0.75rem' }}>
+            {icon}
+          </Typography>
+          <Typography
+            variant="caption"
+            sx={{
+              fontSize: '0.75rem',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              color: 'text.secondary',
+            }}
+          >
+            {filename}
+          </Typography>
+        </Box>
+      </Tooltip>
+    )
+  }
+
+  return (
+    <Box sx={{ mt: 0.75 }}>
+      <Button
+        size="small"
+        onClick={() => setExpanded(!expanded)}
+        sx={{
+          textTransform: 'none',
+          p: 0.25,
+          gap: 0.5,
+          fontSize: '0.75rem',
+          bgcolor: 'rgba(25, 118, 210, 0.08)',
+          color: 'primary.main',
+          '&:hover': { bgcolor: 'rgba(25, 118, 210, 0.12)' },
+        }}
+        endIcon={
+          expanded ? (
+            <ExpandLess sx={{ fontSize: '0.875rem' }} />
+          ) : (
+            <ExpandMore sx={{ fontSize: '0.875rem' }} />
+          )
+        }
+      >
+        {files.length} ملفات
+      </Button>
+      <Collapse in={expanded}>
+        <Box sx={{ mt: 0.75, ml: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          {files.map((file, idx) => {
+            const { filename, directory, extension } = extractFileInfo(file.key)
+            const icon = getFileIcon(extension)
+            return (
+              <Tooltip key={idx} title={directory || 'Root directory'}>
+                <Box
+                  sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 0.5,
+                    bgcolor: 'rgba(25, 118, 210, 0.06)',
+                    px: 0.75,
+                    py: 0.3,
+                    borderRadius: 0.5,
+                    maxWidth: '100%',
+                    width: 'fit-content',
+                  }}
+                >
+                  <Typography variant="caption" sx={{ fontSize: '0.75rem' }}>
+                    {icon}
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      fontSize: '0.75rem',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      color: 'text.secondary',
+                    }}
+                  >
+                    {filename}
+                  </Typography>
+                </Box>
+              </Tooltip>
+            )
+          })}
+        </Box>
+      </Collapse>
+    </Box>
+  )
+}
 
 export default function ActivityPage() {
   const theme = useTheme()
@@ -159,12 +316,23 @@ export default function ActivityPage() {
                           >
                             {formatActivityDescription(activity)}
                           </Typography>
+                          {(activity.action === 'uploaded_files' ||
+                            activity.action === 'deleted_file') && (
+                            <FileListDetails
+                              files={
+                                activity.action === 'uploaded_files'
+                                  ? (activity.details.files as FileDetails[]) || []
+                                  : [{ key: activity.details.fileKey as string }]
+                              }
+                            />
+                          )}
                           <span
                             style={{
                               display: 'flex',
                               alignItems: 'center',
                               gap: '4px',
                               color: 'text.secondary',
+                              marginTop: '8px',
                             }}
                           >
                             <Box sx={{ color: 'text.secondary', display: 'flex' }}>
