@@ -2414,7 +2414,7 @@ function DownloadProgressDialog() {
 // Download progress tracking functions - must be used within component context
 export default function UploadPage() {
   const { user } = useAuth()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   // Download progress — backed by global DownloadContext
   const { addDownload, updateDownload, downloads, abortControllers, pausedChunks } = useDownload()
@@ -2968,8 +2968,20 @@ export default function UploadPage() {
 
   // Filtered and sorted files
   const filteredAndSortedFiles = useMemo(() => {
+    console.log('[DEBUG] Filtering and sorting files:', {
+      filesHereCount: filesHere.length,
+      fileFilter,
+      sortBy,
+      sortOrder,
+    })
     const filtered = filterFiles(filesHere)
+    console.log('[DEBUG] After filtering:', {
+      filteredCount: filtered.length,
+    })
     const sorted = sortFiles(filtered)
+    console.log('[DEBUG] After sorting:', {
+      sortedCount: sorted.length,
+    })
     return sorted
   }, [filesHere, fileFilter, sortBy, sortOrder])
 
@@ -2985,28 +2997,55 @@ export default function UploadPage() {
   // Combined into single effect to avoid race condition between query param and currentPath effects
   useEffect(() => {
     const workspaceId = user?.workspaceId?.trim()
+    console.log('[DEBUG] Query param effect fired:', {
+      workspaceId,
+      folder: searchParams.get('folder'),
+      currentPath,
+    })
     if (!workspaceId) return // Wait for workspaceId to be available
 
     const folder = searchParams.get('folder')
     const cleanPath = folder ? decodeURIComponent(folder).replace(/^\/+/, '') : ''
     const ROOT_PREFIX = `uploads/${workspaceId}`
     const computedExplorerPrefix = cleanPath ? `${ROOT_PREFIX}/${cleanPath}` : ROOT_PREFIX
+    console.log('[DEBUG] Setting currentPath and explorerPrefix:', {
+      cleanPath,
+      computedExplorerPrefix,
+    })
     queryParamHandledRef.current = true
     initialFetchDoneRef.current = true
     setCurrentPath(cleanPath)
     // Fetch directly with computed prefix to avoid stale closure race
-    void fetchExplorer(true, computedExplorerPrefix)
+    // Pass the cleanPath as currentPathOverride to ensure correct path is used
+    void fetchExplorer(true, computedExplorerPrefix, null)
   }, [searchParams, user?.workspaceId])
 
   // This effect fetches when currentPath changes (user navigation, not query param)
   useEffect(() => {
     const hasPendingFolderParam = searchParams.get('folder')
+    console.log('[DEBUG] currentPath effect fired:', {
+      currentPath,
+      hasPendingFolderParam,
+      queryParamHandled: queryParamHandledRef.current,
+    })
+
+    // Skip fetch if query param was just handled (to avoid double fetch)
+    if (queryParamHandledRef.current) {
+      console.log('[DEBUG] Skipping fetch - query param was just handled')
+      queryParamHandledRef.current = false
+      return
+    }
+
     // Skip fetch when currentPath is empty AND there's a folder param pending.
     // This handles the race where setCurrentPath hasn't propagated yet.
     if (currentPath === '' && hasPendingFolderParam != null) {
+      console.log(
+        '[DEBUG] Skipping fetch - pending folder param not yet handled or still processing'
+      )
       return
     }
     initialFetchDoneRef.current = true
+    console.log('[DEBUG] Calling fetchExplorer with currentPath:', currentPath)
     // Use direct call instead of ref since ref isn't set up on first render
     if (fetchExplorerRef.current) {
       fetchExplorerRef.current(true)
@@ -3773,8 +3812,17 @@ export default function UploadPage() {
 
   function canAccessFile(fileKey: string): boolean {
     const privacy = filePrivacySettings[fileKey]
-    if (!privacy) return true
-    return privacy.canAccess !== false
+    if (!privacy) {
+      console.log('[DEBUG] canAccessFile - no privacy settings for:', fileKey)
+      return true
+    }
+    const canAccess = privacy.canAccess !== false
+    console.log('[DEBUG] canAccessFile:', {
+      fileKey,
+      privacy,
+      canAccess,
+    })
+    return canAccess
   }
 
   // Helper functions for filtering and sorting
@@ -3942,8 +3990,18 @@ export default function UploadPage() {
   }
 
   const fetchExplorer = useCallback(
-    async (reset: boolean = true, explorerPrefixOverride?: string | null, continuationTokenOverride?: string | null) => {
+    async (
+      reset: boolean = true,
+      explorerPrefixOverride?: string | null,
+      continuationTokenOverride?: string | null
+    ) => {
       const effectivePrefix = explorerPrefixOverride ?? explorerPrefix
+      console.log('[DEBUG] fetchExplorer called:', {
+        reset,
+        explorerPrefixOverride,
+        effectivePrefix,
+        currentPath,
+      })
       if (reset) {
         setLoadingExplorer(true)
         setFilesHere([])
@@ -3971,6 +4029,11 @@ export default function UploadPage() {
               !isHiddenChatRootFolder(folder, currentPath)
             )
           })
+          console.log('[DEBUG] fetchExplorer result:', {
+            foldersCount: filteredFolders.length,
+            filesCount: visibleObjects.length,
+            explorerPrefix: effectivePrefix,
+          })
           setFoldersHere(filteredFolders)
           setFilesHere(visibleObjects)
         } else {
@@ -3988,11 +4051,16 @@ export default function UploadPage() {
         // Fetch privacy settings for all files (only on reset or first load)
         if (reset || (!continuationToken && res.objects)) {
           const fileKeys = visibleObjects.map(obj => obj.key)
+          console.log('[DEBUG] Fetching privacy settings for files:', fileKeys)
           if (fileKeys.length > 0) {
             try {
               const privacyRes = await fetchBulkPrivacySettings(fileKeys)
+              console.log('[DEBUG] Privacy settings response:', privacyRes)
               if (privacyRes.settings) {
+                console.log('[DEBUG] Setting privacy settings:', privacyRes.settings)
                 setFilePrivacySettings(prev => ({ ...prev, ...privacyRes.settings }))
+              } else {
+                console.log('[DEBUG] No privacy settings in response')
               }
             } catch (privacyError) {
               console.error('Failed to fetch privacy settings:', privacyError)
@@ -4063,12 +4131,19 @@ export default function UploadPage() {
     const safeKey = key.startsWith('/') ? key.slice(1) : key
     if (publicBase) {
       const base = publicBase.endsWith('/') ? publicBase.slice(0, -1) : publicBase
-      return `${base}/${safeKey}`
+      const url = `${base}/${safeKey}`
+      console.log('[DEBUG] keyToPublicUrl (R2):', { key, publicBase, base, safeKey, url })
+      return url
     }
     const base = API_ENV.apiBaseUrl?.trim() || ''
-    if (!base) return ''
+    if (!base) {
+      console.log('[DEBUG] keyToPublicUrl: apiBaseUrl is empty!', { key, publicBase, base })
+      return ''
+    }
     const normalized = base.endsWith('/') ? base.slice(0, -1) : base
-    return `${normalized}/api/image/${encodeURIComponent(safeKey)}`
+    const url = `${normalized}/api/image/${encodeURIComponent(safeKey)}`
+    console.log('[DEBUG] keyToPublicUrl (API):', { key, base, normalized, safeKey, url })
+    return url
   }
 
   const breadcrumbs = useMemo(() => {
@@ -4079,6 +4154,17 @@ export default function UploadPage() {
       acc.push(seg)
       crumbs.push({ label: seg, path: acc.join('/') })
     }
+    // Debug logging for breadcrumbs
+    console.log('[DEBUG] Breadcrumbs:', {
+      currentPath,
+      parts,
+      crumbs,
+    })
+    // Debug logging for API configuration
+    console.log('[DEBUG] API_ENV config:', {
+      apiBaseUrl: API_ENV.apiBaseUrl,
+      r2PublicBaseUrl: API_ENV.r2PublicBaseUrl,
+    })
     return crumbs
   }, [currentPath])
 
@@ -4278,7 +4364,15 @@ export default function UploadPage() {
                 )}
                 <Button
                   size="small"
-                  onClick={() => setCurrentPath(c.path)}
+                  onClick={() => {
+                    setCurrentPath(c.path)
+                    // Update URL query parameter to match the new path
+                    if (c.path) {
+                      setSearchParams({ folder: c.path })
+                    } else {
+                      setSearchParams({})
+                    }
+                  }}
                   sx={{
                     borderRadius: 999,
                     minWidth: 'auto',
@@ -4417,11 +4511,22 @@ export default function UploadPage() {
                                 const cleaned = p.endsWith('/') ? p.slice(0, -1) : p
                                 // The server returns relative folder names (e.g., "subfolder/"), so we need to construct the full path
                                 const fullPath = currentPath ? `${currentPath}/${cleaned}` : cleaned
+                                console.log('[DEBUG] Folder item:', {
+                                  serverFolder: p,
+                                  cleaned,
+                                  currentPath,
+                                  fullPath,
+                                })
                                 return (
                                   <FolderItem
                                     key={p}
                                     folderPath={fullPath}
-                                    onClick={() => setCurrentPath(fullPath)}
+                                    onClick={() => {
+                                      console.log('[DEBUG] Folder clicked:', { fullPath })
+                                      setCurrentPath(fullPath)
+                                      // Update URL query parameter to match the new path
+                                      setSearchParams({ folder: fullPath })
+                                    }}
                                     onDelete={handleDeleteFolder}
                                     onDownload={handleDownloadFolder}
                                     isDeleting={deletingFolders.has(fullPath)}
@@ -4446,11 +4551,22 @@ export default function UploadPage() {
                                 const cleaned = p.endsWith('/') ? p.slice(0, -1) : p
                                 // The server returns relative folder names (e.g., "subfolder/"), so we need to construct the full path
                                 const fullPath = currentPath ? `${currentPath}/${cleaned}` : cleaned
+                                console.log('[DEBUG] Folder item (grid):', {
+                                  serverFolder: p,
+                                  cleaned,
+                                  currentPath,
+                                  fullPath,
+                                })
                                 return (
                                   <FolderItemGrid
                                     key={p}
                                     folderPath={fullPath}
-                                    onClick={() => setCurrentPath(fullPath)}
+                                    onClick={() => {
+                                      console.log('[DEBUG] Folder clicked (grid):', { fullPath })
+                                      setCurrentPath(fullPath)
+                                      // Update URL query parameter to match the new path
+                                      setSearchParams({ folder: fullPath })
+                                    }}
                                     onDelete={handleDeleteFolder}
                                     onDownload={handleDownloadFolder}
                                     isDeleting={deletingFolders.has(fullPath)}
@@ -4485,6 +4601,12 @@ export default function UploadPage() {
                                 const thumbnailUrl = obj.thumbnailKey
                                   ? keyToPublicUrl(obj.thumbnailKey)
                                   : ''
+                                console.log('[DEBUG] Rendering file:', {
+                                  key: obj.key,
+                                  url,
+                                  thumbnailUrl,
+                                  hasAccess: canAccessFile(obj.key),
+                                })
                                 return (
                                   <FileItem
                                     key={obj.key}
