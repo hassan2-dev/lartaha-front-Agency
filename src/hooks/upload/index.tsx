@@ -1732,7 +1732,7 @@ export default function useUpload() {
       return ''
     }
     const normalized = base.endsWith('/') ? base.slice(0, -1) : base
-    return `${normalized}/api/image/${encodeURIComponent(safeKey)}`
+    return `${normalized}/api/image?key=${encodeURIComponent(safeKey)}`
   }
 
   const breadcrumbs = useMemo(() => {

@@ -256,13 +256,13 @@ function ImageThumbnail({
   const apiBaseNormalized = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase
   const displayUrl = (() => {
     // If url is provided and looks like a thumbnail URL, use it
-    if (url && url.includes('/api/image/')) {
+    if (url && (url.includes('/api/image?') || url.includes('/api/image/'))) {
       return url
     }
     // Otherwise, construct URL from thumbnailKey
     if (thumbnailKey && typeof thumbnailKey === 'string' && thumbnailKey.trim() !== '') {
       const safeKey = thumbnailKey.startsWith('/') ? thumbnailKey.slice(1) : thumbnailKey
-      return `${apiBaseNormalized}/api/image/${encodeURIComponent(safeKey)}`
+      return `${apiBaseNormalized}/api/image?key=${encodeURIComponent(safeKey)}`
     }
     return url
   })()
@@ -279,8 +279,8 @@ function ImageThumbnail({
       return
     }
 
-    const apiPrefix = `${apiBaseNormalized}/api/image/`
-    // For direct R2/public URLs (not /api/image/ paths), use the URL directly
+    const apiPrefix = `${apiBaseNormalized}/api/image`
+    // For direct R2/public URLs (not /api/image paths), use the URL directly
     if (!displayUrl.startsWith(apiPrefix)) {
       setProtectedThumbnailUrl(displayUrl)
       return
@@ -345,7 +345,7 @@ function ImageThumbnail({
         if (!key) return
 
         const safeKey = thumbnailKey.startsWith('/') ? thumbnailKey.slice(1) : thumbnailKey
-        const fetchUrl = `${apiBaseNormalized}/api/image/${encodeURIComponent(safeKey)}`
+        const fetchUrl = `${apiBaseNormalized}/api/image?key=${encodeURIComponent(safeKey)}`
 
         const headers: Record<string, string> = {}
         const token = localStorage.getItem(TOKEN_STORAGE_KEY)
@@ -469,17 +469,17 @@ function VideoThumbnail({
   const apiBaseNormalized = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase
   const displayUrl = (() => {
     // If url is provided and looks like a thumbnail URL, use it directly
-    if (url && url.includes('/api/image/')) {
+    if (url && (url.includes('/api/image?') || url.includes('/api/image/'))) {
       return url
     }
-    // If url is a direct R2/public URL (not /api/image/), use it directly
-    if (url && !url.includes('/api/image/')) {
+    // If url is a direct R2/public URL (not /api/image path), use it directly
+    if (url && !url.includes('/api/image?') && !url.includes('/api/image/')) {
       return url
     }
     // Otherwise, construct URL from thumbnailKey (for encrypted or newer files)
     if (thumbnailKey) {
       const safeKey = thumbnailKey.startsWith('/') ? thumbnailKey.slice(1) : thumbnailKey
-      return `${apiBaseNormalized}/api/image/${encodeURIComponent(safeKey)}`
+      return `${apiBaseNormalized}/api/image?key=${encodeURIComponent(safeKey)}`
     }
     return ''
   })()
@@ -496,8 +496,8 @@ function VideoThumbnail({
       return
     }
 
-    const apiPrefix = `${apiBaseNormalized}/api/image/`
-    // For direct R2/public URLs (not /api/image/ paths), use the URL directly
+    const apiPrefix = `${apiBaseNormalized}/api/image`
+    // For direct R2/public URLs (not /api/image path), use the URL directly
     if (!displayUrl.startsWith(apiPrefix)) {
       setProtectedThumbnailUrl(displayUrl)
       return
@@ -563,7 +563,7 @@ function VideoThumbnail({
         if (!key) return
 
         const safeKey = thumbnailKey.startsWith('/') ? thumbnailKey.slice(1) : thumbnailKey
-        const fetchUrl = `${apiBaseNormalized}/api/image/${encodeURIComponent(safeKey)}`
+        const fetchUrl = `${apiBaseNormalized}/api/image?key=${encodeURIComponent(safeKey)}`
 
         const headers: Record<string, string> = {}
         const token = localStorage.getItem(TOKEN_STORAGE_KEY)
@@ -1265,7 +1265,7 @@ function TrashFileItem({
           : imageThumbnailKey
         return `${base}/${safeKey}`
       }
-      return `${apiBase}/api/image/${encodeURIComponent(imageThumbnailKey)}`
+      return `${apiBase}/api/image?key=${encodeURIComponent(imageThumbnailKey)}`
     }
     if (isVideo) {
       const videoThumbnailKey = buildVideoThumbnailKeyFromFileKey(file.originalKey)
@@ -1277,7 +1277,7 @@ function TrashFileItem({
           : videoThumbnailKey
         return `${base}/${safeKey}`
       }
-      return `${apiBase}/api/image/${encodeURIComponent(videoThumbnailKey)}`
+      return `${apiBase}/api/image?key=${encodeURIComponent(videoThumbnailKey)}`
     }
     return null
   }
@@ -4122,7 +4122,7 @@ export default function UploadPage() {
       return ''
     }
     const normalized = base.endsWith('/') ? base.slice(0, -1) : base
-    return `${normalized}/api/image/${encodeURIComponent(safeKey)}`
+    return `${normalized}/api/image?key=${encodeURIComponent(safeKey)}`
   }
 
   const breadcrumbs = useMemo(() => {
