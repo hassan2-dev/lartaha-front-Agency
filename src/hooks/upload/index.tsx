@@ -811,7 +811,9 @@ export default function useUpload() {
               if (fileType === 'image') {
                 const thumb = await createImageThumbnailBlob(sf.file)
                 if (thumb) {
-                  const encryptedThumb = await encryptThumbnailBlob(thumb, encryptionPassword)
+                  const thumbBlob = hasEncryption
+                    ? await encryptThumbnailBlob(thumb, encryptionPassword)
+                    : thumb
                   return {
                     file: sf.uploadFile ?? sf.file,
                     relativePath: sf.relativePath,
@@ -819,16 +821,18 @@ export default function useUpload() {
                     encryptionIv: iv,
                     encryptionSalt: salt,
                     thumbnailUploadFile: new File(
-                      [encryptedThumb],
-                      `thumb_${sf.relativePath}.bin`,
-                      { type: 'application/octet-stream' }
+                      [thumbBlob],
+                      `thumb_${sf.relativePath}.${hasEncryption ? 'bin' : 'jpg'}`,
+                      { type: hasEncryption ? 'application/octet-stream' : 'image/jpeg' }
                     ),
                   }
                 }
               } else if (fileType === 'video') {
                 const thumb = await createVideoThumbnailBlob(sf.file)
                 if (thumb) {
-                  const encryptedThumb = await encryptThumbnailBlob(thumb, encryptionPassword)
+                  const thumbBlob = hasEncryption
+                    ? await encryptThumbnailBlob(thumb, encryptionPassword)
+                    : thumb
                   return {
                     file: sf.uploadFile ?? sf.file,
                     relativePath: sf.relativePath,
@@ -836,9 +840,9 @@ export default function useUpload() {
                     encryptionIv: iv,
                     encryptionSalt: salt,
                     thumbnailUploadFile: new File(
-                      [encryptedThumb],
-                      `thumb_${sf.relativePath}.bin`,
-                      { type: 'application/octet-stream' }
+                      [thumbBlob],
+                      `thumb_${sf.relativePath}.${hasEncryption ? 'bin' : 'jpg'}`,
+                      { type: hasEncryption ? 'application/octet-stream' : 'image/jpeg' }
                     ),
                   }
                 }
