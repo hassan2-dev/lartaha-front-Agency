@@ -1,32 +1,10 @@
+/* eslint-disable no-case-declarations */
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import {
-  Box,
-  Button,
-  Typography,
-  Tooltip,
-  CircularProgress,
-  ListItem,
-  Avatar,
-  useTheme,
-  alpha,
-  Card,
-  Checkbox,
-} from '@mui/material'
-
-import VideoFileIcon from '@mui/icons-material/VideoFile'
-
-import DeleteIcon from '@mui/icons-material/Delete'
-
-import PlayArrowIcon from '@mui/icons-material/PlayArrow'
-
-import DownloadIcon from '@mui/icons-material/Download'
-
-import LockIcon from '@mui/icons-material/Lock'
 
 import { useAuth } from '../../contexts/AuthContext'
 import { API_ENV, TOKEN_STORAGE_KEY } from '../../config/api'
-import { decryptThumbnailBuffer, encryptThumbnailBlob } from '../../lib/encryption'
+import { encryptThumbnailBlob } from '../../lib/encryption'
 import {
   listUploadedObjects,
   uploadFilesStreamed,
@@ -58,7 +36,7 @@ const MAX_DOWNLOAD_RETRIES = 3
 // Download progress tracking functions - must be used within component context
 export default function useUpload() {
   const { user } = useAuth()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
 
   // Download progress — backed by global DownloadContext
   const { addDownload, updateDownload, downloads, abortControllers, pausedChunks } = useDownload()
@@ -1800,18 +1778,35 @@ export default function useUpload() {
     filePrivacySettings,
     teamMembers,
     deletingFolders,
+    deletingFiles,
     creatingFolder,
+    showCreateFolderModal,
     newFolderName,
     setNewFolderName,
+    folderError,
+    folderNameError,
     fileFilter,
     setFileFilter,
     sortBy,
     setSortBy,
     sortOrder,
+    viewMode,
+    setViewMode,
+    scrollContainerRef,
     showTrash,
     setShowTrash,
     trashFiles,
     loadingTrash,
+    bulkLoading,
+    showPrivacyModal,
+    loadingTeamMembers,
+    showToast,
+    toastType,
+    toastMessage,
+    closeToast,
+    previewModalOpen,
+    encryptedViewerOpen,
+    encryptedViewerFile,
     foldersHere,
     filesHere,
     loadingExplorer,
