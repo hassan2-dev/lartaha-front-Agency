@@ -736,6 +736,7 @@ function FileItem({
   return (
     <ListItem
       key={obj.key}
+      data-file-key={obj.key}
       onClick={() => hasAccess && onPreview(obj.key, url)}
       className="flex-col md:flex-row"
       sx={{
@@ -994,6 +995,7 @@ function FileItemGrid({
 
   return (
     <Card
+      data-file-key={obj.key}
       onClick={() => hasAccess && onPreview(obj.key, url)}
       sx={{
         display: 'flex',
@@ -3002,7 +3004,7 @@ export default function UploadPage() {
     if (!workspaceId) return // Wait for workspaceId to be available
 
     const folder = searchParams.get('folder')
-    const cleanPath = folder ? decodeURIComponent(folder).replace(/^\/+/, '') : ''
+    const cleanPath = folder ? folder.replace(/^\/+/, '') : ''
     const ROOT_PREFIX = `uploads/${workspaceId}`
     const computedExplorerPrefix = cleanPath ? `${ROOT_PREFIX}/${cleanPath}` : ROOT_PREFIX
     queryParamHandledRef.current = true
@@ -3017,9 +3019,7 @@ export default function UploadPage() {
   // This effect fetches when currentPath changes (user navigation, not query param)
   useEffect(() => {
     const folderParam = searchParams.get('folder')
-    const normalizedFolderParam = folderParam
-      ? decodeURIComponent(folderParam).replace(/^\/+/, '')
-      : ''
+    const normalizedFolderParam = folderParam ? folderParam.replace(/^\/+/, '') : ''
 
     // Skip fetch if query param was just handled (to avoid double fetch)
     if (queryParamHandledRef.current) {
@@ -3060,6 +3060,28 @@ export default function UploadPage() {
       setHasTriggeredUpload(false)
     }
   }, [canUpload, selectedFiles.length, hasTriggeredUpload])
+
+  // When coming from Activity page with ?file=..., highlight and scroll to that file.
+  useEffect(() => {
+    const requestedFileKey = (searchParams.get('file') || '').trim()
+    if (!requestedFileKey || filesHere.length === 0) return
+
+    const existsInCurrentList = filesHere.some(file => file.key === requestedFileKey)
+    if (!existsInCurrentList) return
+
+    setSelectedForBulk(new Set([requestedFileKey]))
+
+    const selectorKey = requestedFileKey.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+    const run = () => {
+      const el = document.querySelector(`[data-file-key="${selectorKey}"]`)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    }
+
+    requestAnimationFrame(run)
+    setTimeout(run, 180)
+  }, [searchParams, filesHere])
 
   // Listen for retry-download events dispatched from DownloadProgressDialog
   useEffect(() => {

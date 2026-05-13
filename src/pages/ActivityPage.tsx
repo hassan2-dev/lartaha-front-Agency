@@ -50,7 +50,7 @@ function stripUploadsPrefix(path: string): string {
   // Result should be: folder/subfolder or empty (relative path within workspace)
 
   // Remove the uploads/ prefix and workspace ID folder
-  let result = path.replace(/^uploads\/[^/]+\/?/, '')
+  const result = path.replace(/^uploads\/[^/]+\/?/, '')
   return result
 }
 
@@ -87,7 +87,7 @@ function FileListDetails({
   onNavigate,
 }: {
   files: FileDetails[]
-  onNavigate: (path: string) => void
+  onNavigate: (path: string, fileKey?: string) => void
 }) {
   const [expanded, setExpanded] = useState(false)
 
@@ -101,7 +101,7 @@ function FileListDetails({
       <Tooltip title={directory || 'Root directory'}>
         <Box
           component="button"
-          onClick={() => onNavigate(cleanPath)}
+          onClick={() => onNavigate(cleanPath, files[0].key)}
           sx={{
             mt: 0.75,
             ml: 1,
@@ -176,7 +176,7 @@ function FileListDetails({
               <Tooltip key={idx} title={directory || 'Root directory'}>
                 <Box
                   component="button"
-                  onClick={() => onNavigate(cleanPath)}
+                  onClick={() => onNavigate(cleanPath, file.key)}
                   sx={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -230,10 +230,16 @@ export default function ActivityPage() {
   const [hasMore, setHasMore] = useState(false)
   const [offset, setOffset] = useState(0)
 
-  const handleNavigateToFolder = (folderPath: string) => {
-    const cleanPath = stripUploadsPrefix(folderPath)
-    const encodedPath = encodeURIComponent(cleanPath || '/')
-    navigate(`${ROUTES.APP.UPLOAD}?folder=${encodedPath}`)
+  const handleNavigateToFolder = (folderPath: string, fileKey?: string) => {
+    const params = new URLSearchParams()
+    const cleanPath = folderPath.trim()
+    if (cleanPath) {
+      params.set('folder', cleanPath)
+    }
+    if (fileKey) {
+      params.set('file', fileKey)
+    }
+    navigate(`${ROUTES.APP.UPLOAD}?${params.toString()}`)
   }
 
   const loadActivities = async (reset = false) => {
