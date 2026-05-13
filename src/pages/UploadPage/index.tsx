@@ -209,14 +209,43 @@ function filenameFromKey(key: string) {
 
 /** مطابقة مفتاح الملف من الـ API مع المفتاح في القائمة (قد يُرفق لاحقة بعد ":"). */
 function objectKeyMatchesDeepLink(fileKey: string, requested: string): boolean {
-  const a = String(fileKey || '').trim()
-  const b = String(requested || '').trim()
+  const stripMeta = (s: string) => (s.includes(':') ? s.slice(0, s.indexOf(':')) : s)
+  const safeDecode = (s: string) => {
+    try {
+      return decodeURIComponent(s)
+    } catch {
+      return s
+    }
+  }
+  const stripInvisible = (s: string) =>
+    s.replace(/[\u200B-\u200D\u2060\uFEFF\u200E\u200F]/g, '').replace(/\s+/g, ' ').trim()
+  const canonicalize = (value: string) =>
+    stripInvisible(
+      safeDecode(stripMeta(String(value || '').trim()))
+      .replace(/\+/g, ' ')
+      .replace(/^\/+/, '')
+      .normalize('NFKC')
+    )
+
+  const a = canonicalize(fileKey)
+  const b = canonicalize(requested)
   if (!a || !b) return false
   if (a === b) return true
-  const stripMeta = (s: string) => (s.includes(':') ? s.slice(0, s.indexOf(':')) : s)
-  const aBase = stripMeta(a)
-  const bBase = stripMeta(b)
-  return aBase === b || a === bBase || aBase === bBase
+  if (a.endsWith(`/${b}`) || b.endsWith(`/${a}`)) return true
+
+  // Fallback: same file name and same directory tail.
+  const aParts = a.split('/').filter(Boolean)
+  const bParts = b.split('/').filter(Boolean)
+  const aName = aParts[aParts.length - 1] || ''
+  const bName = bParts[bParts.length - 1] || ''
+  if (aName && bName && aName === bName) {
+    const aDir = aParts.slice(0, -1).join('/')
+    const bDir = bParts.slice(0, -1).join('/')
+    if (aDir === bDir || aDir.endsWith(`/${bDir}`) || bDir.endsWith(`/${aDir}`)) {
+      return true
+    }
+  }
+  return false
 }
 
 function deriveRelativeFolderFromFileKey(fileKey: string, workspaceId: string): string {
@@ -3043,17 +3072,30 @@ export default function UploadPage() {
 
     const folder = searchParams.get('folder')
     const fileFromQuery = (searchParams.get('file') || '').trim()
-    const fallbackPath = !folder ? deriveRelativeFolderFromFileKey(fileFromQuery, workspaceId) : ''
-    const cleanPath = (folder || fallbackPath || '').replace(/^\/+/, '')
+    const hasNavigationParams = Boolean(folder || fileFromQuery)
+    if (!hasNavigationParams && initialFetchDoneRef.current) {
+      // Prevent accidental reset to root when URL params are temporarily cleared.
+      return
+    }
+    const derivedPathFromFile = deriveRelativeFolderFromFileKey(fileFromQuery, workspaceId)
+    const folderFromQuery = (folder || '').replace(/^\/+/, '')
+    const cleanPath = (derivedPathFromFile || folderFromQuery || '').replace(/^\/+/, '')
     const ROOT_PREFIX = `uploads/${workspaceId}`
     const computedExplorerPrefix = cleanPath ? `${ROOT_PREFIX}/${cleanPath}` : ROOT_PREFIX
+    if (folderFromQuery && derivedPathFromFile && folderFromQuery !== derivedPathFromFile) {
+      console.warn('[Upload] folder mismatch: query folder differs from file-derived folder', {
+        folderFromQuery,
+        derivedPathFromFile,
+        fileParam: fileFromQuery || null,
+      })
+    }
     console.log('[Upload] query params parsed', {
       host: typeof window !== 'undefined' ? window.location.host : 'n/a',
       href: typeof window !== 'undefined' ? window.location.href : 'n/a',
       workspaceId,
       folderParam: folder,
       fileParam: fileFromQuery || null,
-      fallbackPath,
+      derivedPathFromFile,
       cleanPath,
       computedExplorerPrefix,
     })
@@ -3116,6 +3158,7 @@ export default function UploadPage() {
 
   const deepLinkFileKeyRef = useRef('')
   const deepLinkLoadAttemptsRef = useRef(0)
+  const deepLinkGlobalSearchRef = useRef<Record<string, boolean>>({})
   /** يمنع تأثير الرابط العميق من استدعاء loadMore أثناء أول جلب (قبل أن يصبح loadingExplorer في الـ render true). */
   const explorerResetInFlightRef = useRef(false)
 
@@ -3953,12 +3996,13 @@ export default function UploadPage() {
         case 'name':
           comparison = filenameA.localeCompare(filenameB)
           break
-        case 'size':
+        case 'size': {
           const sizeA = a.size || 0
           const sizeB = b.size || 0
           comparison = sizeA - sizeB
           break
-        case 'date':
+        }
+        case 'date': {
           // Use actual creation dates from database, fallback to lastModified, then key
           const dateA = getFileDate(a)
           const dateB = getFileDate(b)
@@ -3974,6 +4018,7 @@ export default function UploadPage() {
             comparison = b.key.localeCompare(a.key)
           }
           break
+        }
         default:
           comparison = 0
       }
@@ -4146,7 +4191,18 @@ export default function UploadPage() {
       deepLinkFileKeyRef.current = requestedFileKey
       deepLinkLoadAttemptsRef.current = 0
     }
-    if (!requestedFileKey || loadingExplorer || explorerResetInFlightRef.current) return
+    if (!requestedFileKey) {
+      console.log('[Upload] deep-link skipped: no file param')
+      return
+    }
+    if (loadingExplorer || explorerResetInFlightRef.current) {
+      console.log('[Upload] deep-link waiting explorer reset', {
+        requestedFileKey,
+        loadingExplorer,
+        explorerResetInFlight: explorerResetInFlightRef.current,
+      })
+      return
+    }
 
     const matched = filesHere.find(file => objectKeyMatchesDeepLink(file.key, requestedFileKey))
     if (matched) {
@@ -4173,8 +4229,155 @@ export default function UploadPage() {
       return
     }
 
-    if (!hasMoreFiles || isLoadingMoreFiles) return
-    if (deepLinkLoadAttemptsRef.current >= 40) return
+    // Last-resort fallback: sometimes production returns a variant key format.
+    const requestedName = requestedFileKey.split('/').filter(Boolean).pop() || ''
+    if (requestedName) {
+      const byNameOnly = filesHere.find(file => {
+        const name = file.key.split('/').filter(Boolean).pop() || ''
+        return name === requestedName
+      })
+      if (byNameOnly) {
+        console.warn('[Upload] deep-link matched by filename fallback', {
+          requestedFileKey,
+          matchedKey: byNameOnly.key,
+          filesLoaded: filesHere.length,
+          currentPath,
+        })
+        setSelectedForBulk(new Set([byNameOnly.key]))
+        const escaped =
+          typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+            ? CSS.escape(byNameOnly.key)
+            : byNameOnly.key.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+        const run = () => {
+          document.querySelector(`[data-file-key="${escaped}"]`)?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+          })
+        }
+        requestAnimationFrame(run)
+        setTimeout(run, 200)
+        return
+      }
+    }
+
+    if (!hasMoreFiles || isLoadingMoreFiles) {
+      const sampleLoadedKeys = filesHere.slice(0, 5).map(f => f.key)
+      console.log('[Upload] deep-link stopped', {
+        requestedFileKey,
+        reason: !hasMoreFiles ? 'no-more-files' : 'loading-more-in-progress',
+        filesLoaded: filesHere.length,
+        currentPath,
+        sampleLoadedKeys,
+      })
+      const workspaceId = user?.workspaceId?.trim() || ''
+      const requestedFolder = deriveRelativeFolderFromFileKey(requestedFileKey, workspaceId)
+      if (
+        !isLoadingMoreFiles &&
+        requestedFolder === currentPath &&
+        !filesHere.some(file => objectKeyMatchesDeepLink(file.key, requestedFileKey))
+      ) {
+        console.warn('[Upload] deep-link direct-inject fallback for current folder', {
+          requestedFileKey,
+          requestedFolder,
+          currentPath,
+        })
+        setFilesHere(prev => [{ key: requestedFileKey }, ...prev])
+        setSelectedForBulk(new Set([requestedFileKey]))
+        const escaped =
+          typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+            ? CSS.escape(requestedFileKey)
+            : requestedFileKey.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+        const run = () => {
+          document.querySelector(`[data-file-key="${escaped}"]`)?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+          })
+        }
+        requestAnimationFrame(run)
+        setTimeout(run, 200)
+      }
+      if (!hasMoreFiles && !isLoadingMoreFiles && !deepLinkGlobalSearchRef.current[requestedFileKey]) {
+        deepLinkGlobalSearchRef.current[requestedFileKey] = true
+        void (async () => {
+          try {
+            console.warn('[Upload] deep-link fallback: global workspace search started', {
+              requestedFileKey,
+            })
+            let continuationToken: string | undefined
+            let matchedKey: string | null = null
+            let pages = 0
+            while (pages < 20 && !matchedKey) {
+              const res = await listUploadedObjects(
+                ROOT_PREFIX,
+                200,
+                false,
+                continuationToken
+              )
+              const objects = res.objects ?? []
+              const found = objects.find(obj => objectKeyMatchesDeepLink(obj.key, requestedFileKey))
+              if (found) {
+                matchedKey = found.key
+                break
+              }
+              if (!res.pagination?.hasMore || !res.pagination?.nextContinuationToken) break
+              continuationToken = res.pagination.nextContinuationToken
+              pages += 1
+            }
+
+            if (!matchedKey) {
+              console.warn('[Upload] deep-link fallback: global search did not find file', {
+                requestedFileKey,
+              })
+              return
+            }
+
+            const workspaceId = user?.workspaceId?.trim() || ''
+            const matchedFolder = deriveRelativeFolderFromFileKey(matchedKey, workspaceId)
+            console.warn('[Upload] deep-link fallback: found file globally, redirecting to folder', {
+              requestedFileKey,
+              matchedKey,
+              matchedFolder,
+            })
+
+            if (matchedFolder === currentPath) {
+              setFilesHere(prev => {
+                if (prev.some(file => objectKeyMatchesDeepLink(file.key, matchedKey))) return prev
+                return [{ key: matchedKey }, ...prev]
+              })
+              setSelectedForBulk(new Set([matchedKey]))
+              const escaped =
+                typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+                  ? CSS.escape(matchedKey)
+                  : matchedKey.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+              const run = () => {
+                document.querySelector(`[data-file-key="${escaped}"]`)?.scrollIntoView({
+                  behavior: 'smooth',
+                  block: 'center',
+                })
+              }
+              requestAnimationFrame(run)
+              setTimeout(run, 200)
+            }
+
+            setSearchParams(
+              matchedFolder ? { folder: matchedFolder, file: matchedKey } : { file: matchedKey }
+            )
+          } catch (error) {
+            console.error('[Upload] deep-link fallback: global search failed', error)
+          }
+        })()
+      }
+      return
+    }
+    if (deepLinkLoadAttemptsRef.current >= 40) {
+      console.log('[Upload] deep-link stopped', {
+        requestedFileKey,
+        reason: 'max-attempts',
+        filesLoaded: filesHere.length,
+        currentPath,
+      })
+      return
+    }
     deepLinkLoadAttemptsRef.current += 1
     console.log('[Upload] deep-link not found yet, loading more', {
       requestedFileKey,
