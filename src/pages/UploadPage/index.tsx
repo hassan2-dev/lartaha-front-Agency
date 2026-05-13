@@ -3047,6 +3047,16 @@ export default function UploadPage() {
     const cleanPath = (folder || fallbackPath || '').replace(/^\/+/, '')
     const ROOT_PREFIX = `uploads/${workspaceId}`
     const computedExplorerPrefix = cleanPath ? `${ROOT_PREFIX}/${cleanPath}` : ROOT_PREFIX
+    console.log('[Upload] query params parsed', {
+      host: typeof window !== 'undefined' ? window.location.host : 'n/a',
+      href: typeof window !== 'undefined' ? window.location.href : 'n/a',
+      workspaceId,
+      folderParam: folder,
+      fileParam: fileFromQuery || null,
+      fallbackPath,
+      cleanPath,
+      computedExplorerPrefix,
+    })
     if (folder || fileFromQuery) {
       setShowTrash(false)
     }
@@ -4141,6 +4151,12 @@ export default function UploadPage() {
     const matched = filesHere.find(file => objectKeyMatchesDeepLink(file.key, requestedFileKey))
     if (matched) {
       deepLinkLoadAttemptsRef.current = 0
+      console.log('[Upload] deep-link matched file', {
+        requestedFileKey,
+        matchedKey: matched.key,
+        filesLoaded: filesHere.length,
+        currentPath,
+      })
       setSelectedForBulk(new Set([matched.key]))
       const escaped =
         typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
@@ -4160,6 +4176,14 @@ export default function UploadPage() {
     if (!hasMoreFiles || isLoadingMoreFiles) return
     if (deepLinkLoadAttemptsRef.current >= 40) return
     deepLinkLoadAttemptsRef.current += 1
+    console.log('[Upload] deep-link not found yet, loading more', {
+      requestedFileKey,
+      attempts: deepLinkLoadAttemptsRef.current,
+      filesLoaded: filesHere.length,
+      hasMoreFiles,
+      nextContinuationToken,
+      currentPath,
+    })
     void loadMoreFiles()
   }, [
     searchParams,

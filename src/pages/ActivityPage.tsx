@@ -312,7 +312,16 @@ export default function ActivityPage() {
     const fk = fileKey?.trim()
     if (fk) params.file = fk
     const q = createSearchParams(params).toString()
-    navigate(q ? `${ROUTES.APP.UPLOAD}?${q}` : ROUTES.APP.UPLOAD)
+    const targetUrl = q ? `${ROUTES.APP.UPLOAD}?${q}` : ROUTES.APP.UPLOAD
+    console.log('[Activity->Upload] navigate', {
+      folderPath,
+      cleanPath,
+      fileKey: fk || null,
+      params,
+      targetUrl,
+      locationHost: typeof window !== 'undefined' ? window.location.host : 'n/a',
+    })
+    navigate(targetUrl)
   }
 
   const loadActivities = async (reset = false) => {
