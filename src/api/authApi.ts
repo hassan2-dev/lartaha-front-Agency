@@ -1,6 +1,6 @@
 import { api } from './http'
 import { API_ENV } from '../config/api'
-import { fetchWorkspace } from './workspaceApi'
+import { resolveWorkspaceLogoUrl } from './workspaceApi'
 
 const PROFILE_MEDIA_CACHE_KEY = 'larthaa_profile_media_v1'
 
@@ -275,8 +275,7 @@ export async function fetchMe(): Promise<{
 
   if (user.workspaceId && (!user.workspaceLogo || String(user.workspaceLogo).trim() === '')) {
     try {
-      const ws = await fetchWorkspace(user.workspaceId)
-      const raw = typeof ws?.logo === 'string' ? ws.logo.trim() : ''
+      const raw = await resolveWorkspaceLogoUrl(user.workspaceId)
       if (raw) {
         const abs = resolveAbsoluteMediaUrl(raw)
         user.workspaceLogo = normalizeMediaUrlForDisplay(abs) ?? abs
