@@ -16,6 +16,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { CheckCircle } from '@solar-icons/react'
 import { normalizeAvatarUrlForDisplay } from '../api/authApi'
+import { api } from '../api/http'
 
 export default function ProfilePage() {
   const navigate = useNavigate()
@@ -109,30 +110,12 @@ export default function ProfilePage() {
       let avatarUrl = user?.avatar
       if (avatarFile) {
         console.log('📤 Starting avatar upload for file:', avatarFile.name)
-        console.log('🔑 Token for upload:', token.substring(0, 20) + '...')
 
         const formData = new FormData()
         formData.append('avatar', avatarFile)
 
-        console.log('🌐 Making upload request to /api/upload/avatar')
-        const uploadResponse = await fetch('/api/upload/avatar', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          body: formData,
-        })
-
-        console.log('📡 Upload response status:', uploadResponse.status)
-        console.log('📡 Upload response headers:', uploadResponse.headers)
-
-        if (!uploadResponse.ok) {
-          const errorText = await uploadResponse.text()
-          console.error('❌ Upload failed:', errorText)
-          throw new Error('فشل رفع الصورة')
-        }
-
-        const uploadResult = (await uploadResponse.json()) as Record<string, unknown>
+        const uploadRes = await api.post<Record<string, unknown>>('/api/upload/avatar', formData)
+        const uploadResult = uploadRes.data as Record<string, unknown>
         console.log('✅ Upload successful:', uploadResult)
         const nestedData = uploadResult.data as Record<string, unknown> | undefined
         const nestedUser = nestedData?.user as Record<string, unknown> | undefined
@@ -149,25 +132,13 @@ export default function ProfilePage() {
         avatarUrl = normalizeAvatarUrlForDisplay(pickedUrl.trim()) ?? pickedUrl.trim()
       }
 
-      // Update user profile
+      // Update user profile (same API host as axios — avoids 404 when SPA is on another domain)
       console.log('📝 Updating profile with avatar URL:', avatarUrl)
-      const response = await fetch('/api/user/profile', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('larthaa_auth_token')}`,
-        },
-        body: JSON.stringify({
-          name: name.trim(),
-          avatar: avatarUrl,
-        }),
+      const profileRes = await api.patch('/api/user/profile', {
+        name: name.trim(),
+        avatar: avatarUrl,
       })
-
-      if (!response.ok) {
-        throw new Error('فشل تحديث الملف الشخصي')
-      }
-
-      const updatedUser = await response.json()
+      const updatedUser = profileRes.data
       const payload = (updatedUser?.user ?? updatedUser?.data?.user ?? updatedUser) as
         | { name?: string; avatar?: string }
         | undefined
@@ -187,8 +158,17 @@ export default function ProfilePage() {
       setAvatarFile(null)
       if (nextAvatar) setAvatarPreview(nextAvatar)
     } catch (err: unknown) {
-      const error = err as { message?: string }
-      setError(error.message || 'حدث خطأ ما')
+      const ax = err as {
+        response?: { data?: { message?: string; error?: string } }
+        message?: string
+      }
+      const d = ax.response?.data
+      const msg =
+        (typeof d?.message === 'string' && d.message.trim()) ||
+        (typeof d?.error === 'string' && d.error.trim()) ||
+        (typeof ax.message === 'string' && ax.message.trim()) ||
+        'حدث خطأ ما'
+      setError(msg)
       console.error('❌ Profile save error:', err)
     } finally {
       setLoading(false)

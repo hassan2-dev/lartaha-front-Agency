@@ -1,5 +1,60 @@
 import { api } from './http'
 import { API_ENV } from '../config/api'
+import { fetchWorkspace } from './workspaceApi'
+
+const PROFILE_MEDIA_CACHE_KEY = 'larthaa_profile_media_v1'
+
+type StoredProfileMedia = {
+  userId: string
+  avatar?: string
+  workspaceLogo?: string
+}
+
+function readProfileMediaCache(userId: string): StoredProfileMedia | null {
+  if (typeof window === 'undefined' || !userId) return null
+  try {
+    const raw = localStorage.getItem(PROFILE_MEDIA_CACHE_KEY)
+    if (!raw) return null
+    const o = JSON.parse(raw) as StoredProfileMedia
+    if (!o || o.userId !== userId) return null
+    return o
+  } catch {
+    return null
+  }
+}
+
+type ProfileMediaSnapshot = { avatar?: string; workspaceLogo?: string }
+
+/** Merge into localStorage so avatar / workspace logo survive refresh when /me omits them. */
+export function saveProfileMediaCache(userId: string, snapshot: Partial<ProfileMediaSnapshot>) {
+  if (typeof window === 'undefined' || !userId) return
+  try {
+    const prev = readProfileMediaCache(userId)
+    const next: StoredProfileMedia = { userId }
+    next.avatar =
+      'avatar' in snapshot ? snapshot.avatar?.trim() || undefined : prev?.avatar?.trim() || undefined
+    next.workspaceLogo =
+      'workspaceLogo' in snapshot
+        ? snapshot.workspaceLogo?.trim() || undefined
+        : prev?.workspaceLogo?.trim() || undefined
+    if (!next.avatar && !next.workspaceLogo) {
+      localStorage.removeItem(PROFILE_MEDIA_CACHE_KEY)
+      return
+    }
+    localStorage.setItem(PROFILE_MEDIA_CACHE_KEY, JSON.stringify(next))
+  } catch {
+    // ignore
+  }
+}
+
+export function clearProfileMediaCache() {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.removeItem(PROFILE_MEDIA_CACHE_KEY)
+  } catch {
+    // ignore
+  }
+}
 
 function resolveAbsoluteMediaUrl(raw: string): string {
   const t = raw.trim()
@@ -45,6 +100,21 @@ export function normalizeMediaUrlForDisplay(raw: string | undefined | null): str
     })
     .join('/')
   return `${origin}${encodedPath}${query}`
+}
+
+function applyProfileMediaCacheFromStorage<T extends { id: string; avatar?: string; workspaceLogo?: string }>(
+  user: T
+): T {
+  const hit = readProfileMediaCache(user.id)
+  if (!hit) return user
+  const next = { ...user }
+  if (!next.avatar?.trim() && hit.avatar?.trim()) {
+    next.avatar = normalizeMediaUrlForDisplay(hit.avatar) ?? hit.avatar
+  }
+  if (!next.workspaceLogo?.trim() && hit.workspaceLogo?.trim()) {
+    next.workspaceLogo = normalizeMediaUrlForDisplay(hit.workspaceLogo) ?? hit.workspaceLogo
+  }
+  return next
 }
 
 /** @deprecated use normalizeMediaUrlForDisplay */
@@ -164,18 +234,28 @@ export async function fetchMe(): Promise<{
     'picture',
     'image',
   ])
-  const logoRaw = pickStringField(row, [
-    'workspaceLogo',
-    'workspace_logo',
-    'logoUrl',
-    'workspaceImage',
-    'companyLogo',
-  ])
+  const workspaceRow =
+    row.workspace && typeof row.workspace === 'object'
+      ? (row.workspace as Record<string, unknown>)
+      : null
+  const logoFromNestedWorkspace = workspaceRow
+    ? pickStringField(workspaceRow, ['logo', 'workspaceLogo', 'logoUrl', 'imageUrl'])
+    : undefined
+  const logoRaw =
+    logoFromNestedWorkspace ??
+    pickStringField(row, [
+      'workspaceLogo',
+      'workspace_logo',
+      'logoUrl',
+      'workspaceImage',
+      'companyLogo',
+      'logo',
+    ])
   const avatarAbs = avatarRaw ? resolveAbsoluteMediaUrl(avatarRaw) : undefined
   const logoAbs = logoRaw ? resolveAbsoluteMediaUrl(logoRaw) : undefined
   const avatarNorm = normalizeMediaUrlForDisplay(avatarAbs) ?? avatarAbs
   const logoNorm = normalizeMediaUrlForDisplay(logoAbs) ?? logoAbs
-  const user = {
+  let user = {
     ...row,
     avatar: avatarNorm,
     workspaceLogo: logoNorm,
@@ -192,6 +272,27 @@ export async function fetchMe(): Promise<{
     workspaceName?: string
     workspaceLogo?: string
   }
+
+  if (user.workspaceId && (!user.workspaceLogo || String(user.workspaceLogo).trim() === '')) {
+    try {
+      const ws = await fetchWorkspace(user.workspaceId)
+      const raw = typeof ws?.logo === 'string' ? ws.logo.trim() : ''
+      if (raw) {
+        const abs = resolveAbsoluteMediaUrl(raw)
+        user.workspaceLogo = normalizeMediaUrlForDisplay(abs) ?? abs
+      }
+    } catch (e) {
+      console.warn('[fetchMe] could not load workspace for logo:', e)
+    }
+  }
+
+  user = applyProfileMediaCacheFromStorage(user)
+
+  saveProfileMediaCache(user.id, {
+    ...(user.avatar?.trim() ? { avatar: user.avatar } : {}),
+    ...(user.workspaceLogo?.trim() ? { workspaceLogo: user.workspaceLogo } : {}),
+  })
+
   console.log('📋 Extracted user data:', user)
   return user
 }

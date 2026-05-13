@@ -30,6 +30,7 @@ import {
   Moon,
 } from '@solar-icons/react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { normalizeMediaUrlForDisplay } from '../api/authApi'
 import { useAuth } from '../contexts/AuthContext'
 import { useThemeMode } from '../contexts/ThemeContext'
 import { useUpload } from '../contexts/UploadContext'
@@ -74,6 +75,8 @@ export default function SideNav({ children, title = 'Larthaa Agency' }: SideNavP
   const { logout, user } = useAuth()
   const { mode, toggle } = useThemeMode()
 
+  const workspaceLogoDisplay = normalizeMediaUrlForDisplay(user?.workspaceLogo) ?? ''
+
   const drawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Header with Styled Logo */}
@@ -83,27 +86,29 @@ export default function SideNav({ children, title = 'Larthaa Agency' }: SideNavP
             width: 48,
             height: 48,
             borderRadius: 1.5,
-            background: user?.workspaceLogo
+            background: workspaceLogoDisplay
               ? 'transparent'
               : 'linear-gradient(135deg, #818cf8 0%, #4f46e5 100%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             mb: 2,
-            boxShadow: user?.workspaceLogo
+            boxShadow: workspaceLogoDisplay
               ? '0 2px 8px rgba(0,0,0,0.06)'
               : '0 4px 12px rgba(79, 70, 229, 0.15)',
             color: '#fff',
             fontWeight: 900,
             fontSize: '1.5rem',
             overflow: 'hidden',
-            border: user?.workspaceLogo ? '2px solid' : 'none',
+            border: workspaceLogoDisplay ? '2px solid' : 'none',
             borderColor: 'primary.main',
           }}
         >
           <Box
             component="img"
-            src={user?.workspaceLogo || '/logo-white.svg'}
+            key={workspaceLogoDisplay || 'default'}
+            src={workspaceLogoDisplay || '/logo-white.svg'}
+            alt=""
             referrerPolicy="no-referrer"
             sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />

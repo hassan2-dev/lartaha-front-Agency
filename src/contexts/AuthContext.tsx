@@ -5,6 +5,8 @@ import {
   fetchMe,
   loginUser,
   normalizeAvatarUrlForDisplay,
+  clearProfileMediaCache,
+  saveProfileMediaCache,
   type LoginPayload,
   type LoginResult,
 } from '../api/authApi'
@@ -58,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(null)
       setUser(null)
       setError(null)
+      clearProfileMediaCache()
       // Let ProtectedRoute handle navigation
     }
 
@@ -130,7 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setToken(nextToken)
           const raw = (data.user ?? data.data?.user ?? null) as User | null
           if (raw) {
-            setUser({
+            const mergedUser = {
               ...raw,
               avatar: raw.avatar
                 ? normalizeAvatarUrlForDisplay(raw.avatar) ?? raw.avatar
@@ -138,6 +141,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               workspaceLogo: raw.workspaceLogo
                 ? normalizeAvatarUrlForDisplay(raw.workspaceLogo) ?? raw.workspaceLogo
                 : raw.workspaceLogo,
+            }
+            setUser(mergedUser)
+            saveProfileMediaCache(mergedUser.id, {
+              ...(mergedUser.avatar?.trim() ? { avatar: mergedUser.avatar } : {}),
+              ...(mergedUser.workspaceLogo?.trim()
+                ? { workspaceLogo: mergedUser.workspaceLogo }
+                : {}),
             })
           } else {
             setUser(null)
@@ -160,6 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setToken(null)
         setUser(null)
         setError(null)
+        clearProfileMediaCache()
         try {
           localStorage.removeItem(TOKEN_STORAGE_KEY)
         } catch {
@@ -178,6 +189,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             next.workspaceLogo =
               normalizeAvatarUrlForDisplay(userData.workspaceLogo) ?? userData.workspaceLogo
           }
+          saveProfileMediaCache(next.id, {
+            ...(next.avatar?.trim() ? { avatar: next.avatar } : {}),
+            ...(next.workspaceLogo?.trim() ? { workspaceLogo: next.workspaceLogo } : {}),
+          })
           return next
         })
       },
