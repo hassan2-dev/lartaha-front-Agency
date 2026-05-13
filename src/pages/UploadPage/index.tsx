@@ -4178,6 +4178,25 @@ export default function UploadPage() {
     fetchExplorerRef.current = fetchExplorer
   }, [fetchExplorer])
 
+  const explorerRefreshAfterUploadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scheduleExplorerRefreshAfterUpload = useCallback(() => {
+    if (explorerRefreshAfterUploadTimerRef.current) {
+      clearTimeout(explorerRefreshAfterUploadTimerRef.current)
+    }
+    explorerRefreshAfterUploadTimerRef.current = setTimeout(() => {
+      explorerRefreshAfterUploadTimerRef.current = null
+      void fetchExplorer(true)
+    }, 400)
+  }, [fetchExplorer])
+
+  useEffect(() => {
+    return () => {
+      if (explorerRefreshAfterUploadTimerRef.current) {
+        clearTimeout(explorerRefreshAfterUploadTimerRef.current)
+      }
+    }
+  }, [])
+
   const loadMoreFiles = useCallback(async () => {
     if (!hasMoreFiles || isLoadingMoreFiles || loadingExplorer) return
 
@@ -4464,6 +4483,7 @@ export default function UploadPage() {
           encryptionPassword={encryptionPassword}
           onEncryptionPasswordRequest={() => { }}
           onUploadProgress={() => { }}
+          onUploadComplete={scheduleExplorerRefreshAfterUpload}
           externalUploadItems={uploadItemStates}
           currentPath={currentPath}
         />

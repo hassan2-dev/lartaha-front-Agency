@@ -15,10 +15,11 @@ import { CameraAlt as CameraIcon, ArrowBack as ArrowBackIcon } from '@mui/icons-
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { CheckCircle } from '@solar-icons/react'
+import { normalizeAvatarUrlForDisplay } from '../api/authApi'
 
 export default function ProfilePage() {
   const navigate = useNavigate()
-  const { user, updateUser } = useAuth()
+  const { user, updateUser, refreshMe } = useAuth()
   console.log('👤 ProfilePage rendered with user:', user)
   console.log('👤 ProfilePage user name:', user?.name)
   console.log('👤 ProfilePage user email:', user?.email)
@@ -36,7 +37,7 @@ export default function ProfilePage() {
     if (user) {
       console.log('📝 Setting form fields - name:', user.name, 'avatar:', user.avatar)
       setName(user.name || '')
-      setAvatarPreview(user.avatar || '')
+      setAvatarPreview(normalizeAvatarUrlForDisplay(user.avatar) ?? user.avatar ?? '')
       console.log(
         '✅ Form fields set - name:',
         user.name || '',
@@ -131,9 +132,21 @@ export default function ProfilePage() {
           throw new Error('فشل رفع الصورة')
         }
 
-        const uploadResult = await uploadResponse.json()
+        const uploadResult = (await uploadResponse.json()) as Record<string, unknown>
         console.log('✅ Upload successful:', uploadResult)
-        avatarUrl = uploadResult.url
+        const nestedData = uploadResult.data as Record<string, unknown> | undefined
+        const nestedUser = nestedData?.user as Record<string, unknown> | undefined
+        const topUser = uploadResult.user as Record<string, unknown> | undefined
+        const pickedUrl =
+          (typeof uploadResult.url === 'string' ? uploadResult.url : undefined) ??
+          (typeof nestedData?.url === 'string' ? nestedData.url : undefined) ??
+          (typeof topUser?.avatar === 'string' ? topUser.avatar : undefined) ??
+          (typeof nestedUser?.avatar === 'string' ? nestedUser.avatar : undefined) ??
+          (typeof uploadResult.avatar === 'string' ? uploadResult.avatar : undefined)
+        if (!pickedUrl?.trim()) {
+          throw new Error('فشل رفع الصورة: لم يُرجَع رابط من الخادم')
+        }
+        avatarUrl = normalizeAvatarUrlForDisplay(pickedUrl.trim()) ?? pickedUrl.trim()
       }
 
       // Update user profile
@@ -155,9 +168,24 @@ export default function ProfilePage() {
       }
 
       const updatedUser = await response.json()
-      updateUser(updatedUser)
+      const payload = (updatedUser?.user ?? updatedUser?.data?.user ?? updatedUser) as
+        | { name?: string; avatar?: string }
+        | undefined
+      const payloadAvatar =
+        typeof payload?.avatar === 'string'
+          ? normalizeAvatarUrlForDisplay(payload.avatar) ?? payload.avatar
+          : undefined
+      const nextAvatar = avatarUrl
+        ? `${avatarUrl}${avatarUrl.includes('?') ? '&' : '?'}v=${Date.now()}`
+        : payloadAvatar
+      updateUser({
+        name: payload?.name || name.trim(),
+        avatar: nextAvatar,
+      })
+      await refreshMe()
       setSuccess('تم تحديث الملف الشخصي بنجاح')
       setAvatarFile(null)
+      if (nextAvatar) setAvatarPreview(nextAvatar)
     } catch (err: unknown) {
       const error = err as { message?: string }
       setError(error.message || 'حدث خطأ ما')
@@ -196,6 +224,7 @@ export default function ProfilePage() {
           <Box sx={{ position: 'relative' }}>
             <Avatar
               src={avatarPreview}
+              slotProps={{ img: { referrerPolicy: 'no-referrer' } }}
               sx={{
                 width: 120,
                 height: 120,

@@ -104,6 +104,7 @@ export default function SideNav({ children, title = 'Larthaa Agency' }: SideNavP
           <Box
             component="img"
             src={user?.workspaceLogo || '/logo-white.svg'}
+            referrerPolicy="no-referrer"
             sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
         </Box>
@@ -224,6 +225,7 @@ export default function SideNav({ children, title = 'Larthaa Agency' }: SideNavP
             <Avatar
               src={user.avatar}
               alt={user.name}
+              slotProps={{ img: { referrerPolicy: 'no-referrer' } }}
               sx={{
                 width: 42,
                 height: 42,

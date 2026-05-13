@@ -1,7 +1,13 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { TOKEN_STORAGE_KEY } from '../config/api'
-import { fetchMe, loginUser, type LoginPayload, type LoginResult } from '../api/authApi'
+import {
+  fetchMe,
+  loginUser,
+  normalizeAvatarUrlForDisplay,
+  type LoginPayload,
+  type LoginResult,
+} from '../api/authApi'
 
 export type User = {
   id: string
@@ -25,7 +31,7 @@ type AuthContextValue = {
   login: (payload: LoginPayload) => Promise<void>
   logout: () => void
   refreshMe: () => Promise<void>
-  updateUser: (userData: Partial<{ name: string; avatar?: string }>) => void
+  updateUser: (userData: Partial<User>) => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -68,7 +74,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('🔄 Calling fetchMe with token:', token?.substring(0, 20) + '...')
       const me = await fetchMe()
       console.log('📥 fetchMe response:', me)
-      setUser(me)
+      setUser(prev => {
+        if (!me) return null
+        if (!prev || prev.id !== me.id) return me
+        const keepAvatar =
+          !me.avatar || String(me.avatar).trim() === '' ? prev.avatar : me.avatar
+        const keepLogo =
+          !me.workspaceLogo || String(me.workspaceLogo).trim() === ''
+            ? prev.workspaceLogo
+            : me.workspaceLogo
+        return { ...me, avatar: keepAvatar, workspaceLogo: keepLogo }
+      })
       if (me?.workspaceId) {
         try {
           sessionStorage.setItem('file_encryption_password', me.workspaceId)
@@ -112,8 +128,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           localStorage.setItem(TOKEN_STORAGE_KEY, nextToken)
           setToken(nextToken)
-          // If your backend returns user info, you can expose it here later.
-          setUser(data.user ?? data.data?.user ?? null)
+          const raw = (data.user ?? data.data?.user ?? null) as User | null
+          if (raw) {
+            setUser({
+              ...raw,
+              avatar: raw.avatar
+                ? normalizeAvatarUrlForDisplay(raw.avatar) ?? raw.avatar
+                : raw.avatar,
+              workspaceLogo: raw.workspaceLogo
+                ? normalizeAvatarUrlForDisplay(raw.workspaceLogo) ?? raw.workspaceLogo
+                : raw.workspaceLogo,
+            })
+          } else {
+            setUser(null)
+          }
         } catch (e: unknown) {
           const msg = (e as { message?: string })?.message
           setError(msg ?? 'Login failed.')
@@ -140,9 +168,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       refreshMe,
       updateUser: userData => {
-        if (user) {
-          setUser({ ...user, ...userData })
-        }
+        setUser(prev => {
+          if (!prev) return prev
+          const next = { ...prev, ...userData }
+          if (userData.avatar != null && userData.avatar !== '') {
+            next.avatar = normalizeAvatarUrlForDisplay(userData.avatar) ?? userData.avatar
+          }
+          if (userData.workspaceLogo != null && userData.workspaceLogo !== '') {
+            next.workspaceLogo =
+              normalizeAvatarUrlForDisplay(userData.workspaceLogo) ?? userData.workspaceLogo
+          }
+          return next
+        })
       },
     }),
     [error, loading, refreshMe, token, user]

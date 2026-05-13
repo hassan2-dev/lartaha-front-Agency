@@ -1,4 +1,4 @@
-import { Container, Typography } from '@mui/material'
+import { Container, Typography, Alert } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { usePushNotifications } from '../hooks/usePushNotifications'
@@ -15,7 +15,7 @@ import {
 
 export default function SettingsPage() {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, updateUser, refreshMe } = useAuth()
 
   const { isSubscribed, subscribe, unsubscribe, isSupported } = usePushNotifications()
 
@@ -42,6 +42,7 @@ export default function SettingsPage() {
     setLogoPreview,
     setLogoFile,
     loading: workspaceLoading,
+    error: workspaceError,
     saveWorkspace,
   } = useWorkspaceSettings(user?.isAdmin ?? false, user?.workspaceId)
 
@@ -85,15 +86,18 @@ export default function SettingsPage() {
     try {
       // Save workspace settings if admin
       if (user?.isAdmin && user.workspaceId) {
-        await saveWorkspace(user.workspaceId)
+        const saved = await saveWorkspace(user.workspaceId)
+        const withCacheBust = saved.logo
+          ? `${saved.logo}${saved.logo.includes('?') ? '&' : '?'}v=${Date.now()}`
+          : ''
+        updateUser({
+          workspaceName: saved.name,
+          workspaceLogo: withCacheBust,
+        })
+        await refreshMe()
       }
 
       showSuccess('تم حفظ الإعدادات بنجاح', 1500)
-
-      // Reload the page to reflect all changes across the app after a short delay
-      setTimeout(() => {
-        window.location.reload()
-      }, 1500)
     } catch (err) {
       console.error('Save failed:', err)
     }
@@ -146,6 +150,12 @@ export default function SettingsPage() {
       />
 
       <StorageInfoSection />
+
+      {user?.isAdmin && workspaceError && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {workspaceError}
+        </Alert>
+      )}
 
       {user?.isAdmin && (
         <WorkspaceSettingsSection

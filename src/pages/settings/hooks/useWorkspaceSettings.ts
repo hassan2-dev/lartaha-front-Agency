@@ -2,6 +2,21 @@ import { useState, useEffect, useCallback } from 'react'
 import { fetchWorkspace, updateWorkspace } from '../../../api/workspaceApi'
 import { uploadLogoFile } from '../utils/settingsUtils'
 
+function messageFromApiError(err: unknown, fallback: string): string {
+  const e = err as {
+    response?: { data?: { message?: string; error?: string } }
+    message?: string
+  }
+  const d = e.response?.data
+  const fromBody =
+    (typeof d?.message === 'string' && d.message.trim()) ||
+    (typeof d?.error === 'string' && d.error.trim()) ||
+    ''
+  if (fromBody) return fromBody
+  if (typeof e.message === 'string' && e.message.trim()) return e.message.trim()
+  return fallback
+}
+
 export interface WorkspaceSettings {
   name: string
   industry: string
@@ -20,7 +35,7 @@ export interface UseWorkspaceSettingsReturn {
   loading: boolean
   error: string | null
   loadWorkspace: (workspaceId: string) => Promise<void>
-  saveWorkspace: (workspaceId: string) => Promise<void>
+  saveWorkspace: (workspaceId: string) => Promise<WorkspaceSettings>
   hasChanges: boolean
 }
 
@@ -56,7 +71,9 @@ export const useWorkspaceSettings = (
         setLogoPreview(settings.logo)
         setOriginalData(settings)
       } catch (err) {
-        setError('فشل تحميل بيانات مساحة العمل')
+        setError(
+          messageFromApiError(err, 'فشل تحميل بيانات مساحة العمل')
+        )
         console.error('Failed to load workspace:', err)
       } finally {
         setLoading(false)
@@ -67,7 +84,9 @@ export const useWorkspaceSettings = (
 
   const saveWorkspace = useCallback(
     async (id: string) => {
-      if (!isAdmin) return
+      if (!isAdmin) {
+        throw new Error('Not authorized to update workspace')
+      }
 
       try {
         setLoading(true)
@@ -87,14 +106,16 @@ export const useWorkspaceSettings = (
         })
 
         // Update original data after successful save
-        setOriginalData({
+        const savedSettings: WorkspaceSettings = {
           name: workspaceName.trim(),
           industry: industry.trim(),
           logo: finalLogoUrl,
-        })
+        }
+        setOriginalData(savedSettings)
         setLogoFile(null)
+        return savedSettings
       } catch (err) {
-        setError('فشل حفظ إعدادات مساحة العمل')
+        setError(messageFromApiError(err, 'فشل حفظ إعدادات مساحة العمل'))
         throw err
       } finally {
         setLoading(false)

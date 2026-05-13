@@ -97,6 +97,8 @@ interface EncryptedUploadDropzoneProps {
     totalFiles: number
     currentFilePath: string
   }) => void
+  /** Called after each file finishes successfully (confirm + optional thumbnail). Parent can refresh file list. */
+  onUploadComplete?: () => void
   externalUploadItems?: Record<string, UploadItemState>
   currentPath?: string // Current folder path in UploadPage (e.g., "folder1/subfolder")
   foldersHere?: string[] // Existing folder names for duplicate validation
@@ -131,6 +133,7 @@ export default function EncryptedUploadDropzone({
   error = null,
   encryptionPassword,
   onUploadProgress,
+  onUploadComplete,
   externalUploadItems,
   currentPath = '',
   foldersHere = [],
@@ -748,6 +751,8 @@ export default function EncryptedUploadDropzone({
             }
             return prev
           })
+
+          onUploadComplete?.()
         }
 
         // Only mark as error if all files failed
@@ -804,7 +809,7 @@ export default function EncryptedUploadDropzone({
 
       return uppy
     },
-    [encryptEnabled, onUploadProgress]
+    [encryptEnabled, onUploadProgress, onUploadComplete]
   )
 
   const togglePauseResume = (fileKey: string) => {

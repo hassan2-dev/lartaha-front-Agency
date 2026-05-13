@@ -36,7 +36,11 @@ export const AccountSettingsSection = ({
       {/* Profile Section */}
       <Box sx={{ mb: 3, p: 2, bgcolor: 'rgba(0,0,0,0.02)', borderRadius: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-          <Avatar src={user?.avatar} sx={{ width: 60, height: 60, bgcolor: 'primary.main' }}>
+          <Avatar
+            src={user?.avatar}
+            slotProps={{ img: { referrerPolicy: 'no-referrer' } }}
+            sx={{ width: 60, height: 60, bgcolor: 'primary.main' }}
+          >
             {user?.name?.charAt(0).toUpperCase() || <UserIcon size={24} />}
           </Avatar>
           <Box sx={{ flex: 1 }}>
