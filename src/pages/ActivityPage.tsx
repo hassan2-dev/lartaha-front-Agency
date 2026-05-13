@@ -57,12 +57,22 @@ function stripUploadsPrefix(path: string): string {
   return normalized
 }
 
+function isNavigableFileKey(value: unknown): value is string {
+  if (typeof value !== 'string') return false
+  const key = value.trim()
+  if (!key) return false
+  // Ignore generated thumbnail objects; navigation should target the original file/folder.
+  if (key.includes('/.thumbnails/')) return false
+  if (key.endsWith('__thumb.jpg')) return false
+  return true
+}
+
 /** يجمع مفاتيح التخزين من شكل details المتغير في الـ API */
 function collectFileKeysFromActivity(activity: Activity): string[] {
   const d = activity.details || {}
   const keys: string[] = []
   const push = (v: unknown) => {
-    if (typeof v === 'string' && v.trim()) keys.push(v.trim())
+    if (isNavigableFileKey(v)) keys.push(v.trim())
   }
   push(d.fileKey)
   push(d.key)
@@ -391,11 +401,15 @@ export default function ActivityPage() {
             <List>
               {activities.map((activity, index) => {
                 const fileKeys = collectFileKeysFromActivity(activity)
-                const navTarget =
-                  fileKeys.length > 0 ? navigationTargetFromStorageKey(fileKeys[0]) : null
                 const fileRows = getFileDetailsListForActivity(activity)
-                const isFileRow =
-                  activity.action === 'uploaded_files' || activity.action === 'deleted_file'
+                const firstRowKey = fileRows[0]?.key
+                const navTarget =
+                  firstRowKey && isNavigableFileKey(firstRowKey)
+                    ? navigationTargetFromStorageKey(firstRowKey)
+                    : fileKeys.length > 0
+                      ? navigationTargetFromStorageKey(fileKeys[0])
+                      : null
+                const isFileRow = fileRows.length > 0
 
                 const rowContent = (
                   <>
