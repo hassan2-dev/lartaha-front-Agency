@@ -207,6 +207,44 @@ function filenameFromKey(key: string) {
   return parts[parts.length - 1] || 'file'
 }
 
+/** مطابقة مفتاح الملف من الـ API مع المفتاح في القائمة (قد يُرفق لاحقة بعد ":"). */
+function objectKeyMatchesDeepLink(fileKey: string, requested: string): boolean {
+  const a = String(fileKey || '').trim()
+  const b = String(requested || '').trim()
+  if (!a || !b) return false
+  if (a === b) return true
+  const stripMeta = (s: string) => (s.includes(':') ? s.slice(0, s.indexOf(':')) : s)
+  const aBase = stripMeta(a)
+  const bBase = stripMeta(b)
+  return aBase === b || a === bBase || aBase === bBase
+}
+
+function deriveRelativeFolderFromFileKey(fileKey: string, workspaceId: string): string {
+  const trimmed = String(fileKey || '').trim()
+  if (!trimmed) return ''
+  const baseKey = trimmed.includes(':') ? trimmed.slice(0, trimmed.indexOf(':')) : trimmed
+  const normalized = baseKey.replace(/^\/+/, '')
+  const parts = normalized.split('/').filter(Boolean)
+  if (parts.length <= 1) return ''
+  const directory = parts.slice(0, -1).join('/')
+  if (!directory) return ''
+
+  const uploadsWorkspacePrefix = `uploads/${workspaceId}/`
+  if (directory.startsWith(uploadsWorkspacePrefix)) {
+    return directory.slice(uploadsWorkspacePrefix.length)
+  }
+  if (directory === `uploads/${workspaceId}`) {
+    return ''
+  }
+  if (directory.startsWith('uploads/')) {
+    return directory.slice('uploads/'.length)
+  }
+  if (directory.startsWith(`${workspaceId}/`)) {
+    return directory.slice(workspaceId.length + 1)
+  }
+  return directory
+}
+
 const CLIENT_KEY_STORAGE = 'file_encryption_password'
 
 function getClientEncryptionKey(): string | null {
@@ -2282,12 +2320,12 @@ function DownloadProgressDialog() {
                         borderRadius: 3,
                         background: isPaused
                           ? t =>
-                              `linear-gradient(90deg, ${t.palette.warning.main} 0%, ${t.palette.warning.light} 100%)`
+                            `linear-gradient(90deg, ${t.palette.warning.main} 0%, ${t.palette.warning.light} 100%)`
                           : isDecrypting
                             ? t =>
-                                `linear-gradient(90deg, ${t.palette.secondary.main} 0%, ${t.palette.secondary.light} 100%)`
+                              `linear-gradient(90deg, ${t.palette.secondary.main} 0%, ${t.palette.secondary.light} 100%)`
                             : t =>
-                                `linear-gradient(90deg, ${t.palette.info.main} 0%, ${t.palette.info.light} 100%)`,
+                              `linear-gradient(90deg, ${t.palette.info.main} 0%, ${t.palette.info.light} 100%)`,
                       },
                     }}
                   />
@@ -3004,9 +3042,14 @@ export default function UploadPage() {
     if (!workspaceId) return // Wait for workspaceId to be available
 
     const folder = searchParams.get('folder')
-    const cleanPath = folder ? folder.replace(/^\/+/, '') : ''
+    const fileFromQuery = (searchParams.get('file') || '').trim()
+    const fallbackPath = !folder ? deriveRelativeFolderFromFileKey(fileFromQuery, workspaceId) : ''
+    const cleanPath = (folder || fallbackPath || '').replace(/^\/+/, '')
     const ROOT_PREFIX = `uploads/${workspaceId}`
     const computedExplorerPrefix = cleanPath ? `${ROOT_PREFIX}/${cleanPath}` : ROOT_PREFIX
+    if (folder || fileFromQuery) {
+      setShowTrash(false)
+    }
     queryParamHandledRef.current = true
     initialFetchDoneRef.current = true
     setFolderError(null)
@@ -3061,27 +3104,10 @@ export default function UploadPage() {
     }
   }, [canUpload, selectedFiles.length, hasTriggeredUpload])
 
-  // When coming from Activity page with ?file=..., highlight and scroll to that file.
-  useEffect(() => {
-    const requestedFileKey = (searchParams.get('file') || '').trim()
-    if (!requestedFileKey || filesHere.length === 0) return
-
-    const existsInCurrentList = filesHere.some(file => file.key === requestedFileKey)
-    if (!existsInCurrentList) return
-
-    setSelectedForBulk(new Set([requestedFileKey]))
-
-    const selectorKey = requestedFileKey.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-    const run = () => {
-      const el = document.querySelector(`[data-file-key="${selectorKey}"]`)
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      }
-    }
-
-    requestAnimationFrame(run)
-    setTimeout(run, 180)
-  }, [searchParams, filesHere])
+  const deepLinkFileKeyRef = useRef('')
+  const deepLinkLoadAttemptsRef = useRef(0)
+  /** يمنع تأثير الرابط العميق من استدعاء loadMore أثناء أول جلب (قبل أن يصبح loadingExplorer في الـ render true). */
+  const explorerResetInFlightRef = useRef(false)
 
   // Listen for retry-download events dispatched from DownloadProgressDialog
   useEffect(() => {
@@ -4013,6 +4039,7 @@ export default function UploadPage() {
     ) => {
       const effectivePrefix = explorerPrefixOverride ?? explorerPrefix
       if (reset) {
+        explorerResetInFlightRef.current = true
         setLoadingExplorer(true)
         setFilesHere([])
         setHasMoreFiles(true)
@@ -4081,6 +4108,7 @@ export default function UploadPage() {
         }
       } finally {
         if (reset) {
+          explorerResetInFlightRef.current = false
           setLoadingExplorer(false)
         } else {
           setIsLoadingMoreFiles(false)
@@ -4098,8 +4126,49 @@ export default function UploadPage() {
   const loadMoreFiles = useCallback(async () => {
     if (!hasMoreFiles || isLoadingMoreFiles || loadingExplorer) return
 
-    await fetchExplorer(false, nextContinuationToken)
+    await fetchExplorer(false, null, nextContinuationToken)
   }, [hasMoreFiles, isLoadingMoreFiles, loadingExplorer, fetchExplorer, nextContinuationToken])
+
+  // من سجل الأنشطة: ?file=… — جلب صفحات حتى يظهر الملف ثم تمييزه وتمرير العرض إليه
+  useEffect(() => {
+    const requestedFileKey = (searchParams.get('file') || '').trim()
+    if (requestedFileKey !== deepLinkFileKeyRef.current) {
+      deepLinkFileKeyRef.current = requestedFileKey
+      deepLinkLoadAttemptsRef.current = 0
+    }
+    if (!requestedFileKey || loadingExplorer || explorerResetInFlightRef.current) return
+
+    const matched = filesHere.find(file => objectKeyMatchesDeepLink(file.key, requestedFileKey))
+    if (matched) {
+      deepLinkLoadAttemptsRef.current = 0
+      setSelectedForBulk(new Set([matched.key]))
+      const escaped =
+        typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+          ? CSS.escape(matched.key)
+          : matched.key.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+      const run = () => {
+        document.querySelector(`[data-file-key="${escaped}"]`)?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        })
+      }
+      requestAnimationFrame(run)
+      setTimeout(run, 200)
+      return
+    }
+
+    if (!hasMoreFiles || isLoadingMoreFiles) return
+    if (deepLinkLoadAttemptsRef.current >= 40) return
+    deepLinkLoadAttemptsRef.current += 1
+    void loadMoreFiles()
+  }, [
+    searchParams,
+    filesHere,
+    hasMoreFiles,
+    isLoadingMoreFiles,
+    loadingExplorer,
+    loadMoreFiles,
+  ])
 
   // Infinite scroll handler
   const handleScroll = useCallback(
@@ -4166,8 +4235,8 @@ export default function UploadPage() {
           onFilesChange={setSelectedFiles}
           uploading={uploading}
           encryptionPassword={encryptionPassword}
-          onEncryptionPasswordRequest={() => {}}
-          onUploadProgress={() => {}}
+          onEncryptionPasswordRequest={() => { }}
+          onUploadProgress={() => { }}
           externalUploadItems={uploadItemStates}
           currentPath={currentPath}
         />

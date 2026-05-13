@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { createSearchParams, useNavigate } from 'react-router-dom'
 import {
   Box,
   Card,
@@ -10,6 +10,7 @@ import {
   List,
   ListItem,
   ListItemAvatar,
+  ListItemButton,
   ListItemText,
   CircularProgress,
   Button,
@@ -45,13 +46,65 @@ function extractFileInfo(key: string) {
 }
 
 function stripUploadsPrefix(path: string): string {
-  // Remove 'uploads/{workspaceId}/' prefix.
-  // Path format: uploads/{workspaceId}/folder/subfolder or uploads/{workspaceId}
-  // Result should be: folder/subfolder or empty (relative path within workspace)
+  const normalized = String(path || '').trim().replace(/^\/+/, '')
+  if (!normalized) return ''
+  if (normalized.startsWith('uploads/')) {
+    const rest = normalized.slice('uploads/'.length)
+    const parts = rest.split('/').filter(Boolean)
+    if (parts.length <= 1) return ''
+    return parts.slice(1).join('/')
+  }
+  return normalized
+}
 
-  // Remove the uploads/ prefix and workspace ID folder
-  const result = path.replace(/^uploads\/[^/]+\/?/, '')
-  return result
+/** يجمع مفاتيح التخزين من شكل details المتغير في الـ API */
+function collectFileKeysFromActivity(activity: Activity): string[] {
+  const d = activity.details || {}
+  const keys: string[] = []
+  const push = (v: unknown) => {
+    if (typeof v === 'string' && v.trim()) keys.push(v.trim())
+  }
+  push(d.fileKey)
+  push(d.key)
+  push(d.originalKey)
+  push(d.s3Key)
+
+  const files = d.files
+  if (Array.isArray(files)) {
+    for (const item of files) {
+      if (typeof item === 'string') push(item)
+      else if (item && typeof item === 'object') {
+        const o = item as Record<string, unknown>
+        push(o.key ?? o.fileKey ?? o.path ?? o.originalKey ?? o.s3Key)
+      }
+    }
+  }
+  const fileKeys = (d as { fileKeys?: unknown }).fileKeys
+  if (Array.isArray(fileKeys)) {
+    for (const item of fileKeys) push(item)
+  }
+  return [...new Set(keys)]
+}
+
+function navigationTargetFromStorageKey(storageKey: string): {
+  folderPath: string
+  fileKey: string
+} {
+  const { directory } = extractFileInfo(storageKey)
+  return { folderPath: stripUploadsPrefix(directory), fileKey: storageKey }
+}
+
+function getFileDetailsListForActivity(activity: Activity): FileDetails[] {
+  const fromCollected = collectFileKeysFromActivity(activity).map(key => ({ key }))
+  if (fromCollected.length) return fromCollected
+  if (activity.action === 'uploaded_files') {
+    return ((activity.details.files as FileDetails[]) || []).filter(f => Boolean(f?.key))
+  }
+  if (activity.action === 'deleted_file') {
+    const k = activity.details?.fileKey as string | undefined
+    return k ? [{ key: k }] : []
+  }
+  return []
 }
 
 function getFileIcon(extension: string) {
@@ -101,7 +154,11 @@ function FileListDetails({
       <Tooltip title={directory || 'Root directory'}>
         <Box
           component="button"
-          onClick={() => onNavigate(cleanPath, files[0].key)}
+          type="button"
+          onClick={e => {
+            e.stopPropagation()
+            onNavigate(cleanPath, files[0].key)
+          }}
           sx={{
             mt: 0.75,
             ml: 1,
@@ -146,7 +203,11 @@ function FileListDetails({
     <Box sx={{ mt: 0.75 }}>
       <Button
         size="small"
-        onClick={() => setExpanded(!expanded)}
+        type="button"
+        onClick={e => {
+          e.stopPropagation()
+          setExpanded(!expanded)
+        }}
         sx={{
           textTransform: 'none',
           p: 0.25,
@@ -176,7 +237,11 @@ function FileListDetails({
               <Tooltip key={idx} title={directory || 'Root directory'}>
                 <Box
                   component="button"
-                  onClick={() => onNavigate(cleanPath, file.key)}
+                  type="button"
+                  onClick={e => {
+                    e.stopPropagation()
+                    onNavigate(cleanPath, file.key)
+                  }}
                   sx={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -231,15 +296,13 @@ export default function ActivityPage() {
   const [offset, setOffset] = useState(0)
 
   const handleNavigateToFolder = (folderPath: string, fileKey?: string) => {
-    const params = new URLSearchParams()
-    const cleanPath = folderPath.trim()
-    if (cleanPath) {
-      params.set('folder', cleanPath)
-    }
-    if (fileKey) {
-      params.set('file', fileKey)
-    }
-    navigate(`${ROUTES.APP.UPLOAD}?${params.toString()}`)
+    const cleanPath = (folderPath || '').trim().replace(/^\/+/, '')
+    const params: Record<string, string> = {}
+    if (cleanPath && !cleanPath.startsWith('uploads/')) params.folder = cleanPath
+    const fk = fileKey?.trim()
+    if (fk) params.file = fk
+    const q = createSearchParams(params).toString()
+    navigate(q ? `${ROUTES.APP.UPLOAD}?${q}` : ROUTES.APP.UPLOAD)
   }
 
   const loadActivities = async (reset = false) => {
@@ -326,9 +389,16 @@ export default function ActivityPage() {
         <Card sx={{ boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
           <CardContent sx={{ p: 0 }}>
             <List>
-              {activities.map((activity, index) => (
-                <Box key={activity.id}>
-                  <ListItem sx={{ py: 2 }}>
+              {activities.map((activity, index) => {
+                const fileKeys = collectFileKeysFromActivity(activity)
+                const navTarget =
+                  fileKeys.length > 0 ? navigationTargetFromStorageKey(fileKeys[0]) : null
+                const fileRows = getFileDetailsListForActivity(activity)
+                const isFileRow =
+                  activity.action === 'uploaded_files' || activity.action === 'deleted_file'
+
+                const rowContent = (
+                  <>
                     <ListItemAvatar>
                       <Avatar
                         src={activity.actor.avatar}
@@ -367,14 +437,9 @@ export default function ActivityPage() {
                           >
                             {formatActivityDescription(activity)}
                           </Typography>
-                          {(activity.action === 'uploaded_files' ||
-                            activity.action === 'deleted_file') && (
+                          {isFileRow && (
                             <FileListDetails
-                              files={
-                                activity.action === 'uploaded_files'
-                                  ? (activity.details.files as FileDetails[]) || []
-                                  : [{ key: activity.details.fileKey as string }]
-                              }
+                              files={fileRows}
                               onNavigate={handleNavigateToFolder}
                             />
                           )}
@@ -397,10 +462,30 @@ export default function ActivityPage() {
                         </span>
                       }
                     />
-                  </ListItem>
-                  {index < activities.length - 1 && <Divider variant="inset" component="li" />}
-                </Box>
-              ))}
+                  </>
+                )
+
+                return (
+                  <Box key={activity.id}>
+                    {isFileRow && navTarget ? (
+                      <ListItem disablePadding>
+                        <ListItemButton
+                          alignItems="flex-start"
+                          onClick={() =>
+                            handleNavigateToFolder(navTarget.folderPath, navTarget.fileKey)
+                          }
+                          sx={{ py: 2 }}
+                        >
+                          {rowContent}
+                        </ListItemButton>
+                      </ListItem>
+                    ) : (
+                      <ListItem sx={{ py: 2, alignItems: 'flex-start' }}>{rowContent}</ListItem>
+                    )}
+                    {index < activities.length - 1 && <Divider variant="inset" component="li" />}
+                  </Box>
+                )
+              })}
             </List>
 
             {hasMore && (

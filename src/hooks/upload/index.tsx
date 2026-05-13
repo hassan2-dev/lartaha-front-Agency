@@ -1686,7 +1686,7 @@ export default function useUpload() {
   const loadMoreFiles = useCallback(async () => {
     if (!hasMoreFiles || isLoadingMoreFiles || loadingExplorer) return
 
-    await fetchExplorer(false, nextContinuationToken)
+    await fetchExplorer(false, null, nextContinuationToken)
   }, [hasMoreFiles, isLoadingMoreFiles, loadingExplorer, fetchExplorer, nextContinuationToken])
 
   // Infinite scroll handler
