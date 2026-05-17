@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Mail, Group, Person } from '@mui/icons-material'
+import { useState, useEffect, useCallback } from 'react'
+import { Mail, Group, Person, DeleteOutline } from '@mui/icons-material'
 import {
   Box,
   Typography,
@@ -14,69 +14,115 @@ import {
   Chip,
   Avatar,
   Alert,
+  IconButton,
+  Tooltip,
 } from '@mui/material'
-import { api } from '../api/http'
+import { useAuth } from '../contexts/AuthContext'
+import { PasswordInput } from '../components/login/PasswordInput'
+import {
+  fetchWorkspaceMembers,
+  inviteWorkspaceMember,
+  removeWorkspaceMember,
+  type WorkspaceMember,
+} from '../api/workspaceApi'
 import { TeamMemberSkeleton } from '../components/SkeletonLoaders'
 
-interface WorkspaceMember {
-  id: string
-  workspaceId: string
-  userId?: string
-  email?: string
-  role: string
-  joinedAt: string
-  invitedBy?: string
-  user?: {
-    id: string
-    email: string
-    username: string
-    name: string
-    position?: string
-    avatar?: string
-    createdAt: string
-  }
-}
-
 export default function TeamsPage() {
+  const { user: currentUser } = useAuth()
   const [teams, setTeams] = useState<WorkspaceMember[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
 
-  useEffect(() => {
-    fetchTeams()
-  }, [])
+  const [memberToRemove, setMemberToRemove] = useState<WorkspaceMember | null>(null)
+  const [removePassword, setRemovePassword] = useState('')
+  const [showRemovePassword, setShowRemovePassword] = useState(false)
+  const [removing, setRemoving] = useState(false)
+  const [removeError, setRemoveError] = useState<string | null>(null)
 
-  const fetchTeams = async () => {
+  const fetchTeams = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await api.get('/api/workspace/members')
-      setTeams(response.data.members || [])
-    } catch (_err) {
+      setError(null)
+      const members = await fetchWorkspaceMembers()
+      setTeams(members)
+    } catch {
       setError('فشل في جلب أعضاء مساحة العمل')
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    void fetchTeams()
+  }, [fetchTeams])
 
   const inviteMember = async () => {
     if (!inviteEmail.trim()) return
 
     setLoading(true)
+    setError(null)
     try {
-      await api.post('/api/workspace/invite', {
-        email: inviteEmail.trim(),
-      })
+      await inviteWorkspaceMember(inviteEmail)
       setShowInviteModal(false)
       setInviteEmail('')
-      fetchTeams()
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'فشل في إرسال الدعوة')
+      await fetchTeams()
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } }
+      setError(e.response?.data?.message || 'فشل في إرسال الدعوة')
     } finally {
       setLoading(false)
     }
   }
+
+  const openRemoveDialog = (member: WorkspaceMember) => {
+    setMemberToRemove(member)
+    setRemovePassword('')
+    setRemoveError(null)
+    setShowRemovePassword(false)
+  }
+
+  const closeRemoveDialog = () => {
+    if (removing) return
+    setMemberToRemove(null)
+    setRemovePassword('')
+    setRemoveError(null)
+  }
+
+  const confirmRemoveMember = async () => {
+    if (!memberToRemove || !removePassword.trim()) return
+
+    setRemoving(true)
+    setRemoveError(null)
+    try {
+      await removeWorkspaceMember(memberToRemove.id, removePassword)
+      closeRemoveDialog()
+      await fetchTeams()
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string }; status?: number } }
+      const status = e.response?.status
+      if (status === 401 || status === 403) {
+        setRemoveError(e.response?.data?.message || 'كلمة المرور غير صحيحة')
+      } else if (status === 404) {
+        setRemoveError('العضو غير موجود أو تمت إزالته مسبقاً')
+      } else {
+        setRemoveError(e.response?.data?.message || 'فشل في إزالة العضو')
+      }
+    } finally {
+      setRemoving(false)
+    }
+  }
+
+  const canRemoveMember = (member: WorkspaceMember) => {
+    const memberUserId = member.userId ?? member.user?.id
+    if (memberUserId && currentUser?.id && memberUserId === currentUser.id) return false
+    if (member.role === 'admin') return false
+    return true
+  }
+
+  const memberDisplayName = (member: WorkspaceMember) =>
+    member.user?.name || member.user?.email || member.email || 'عضو'
 
   return (
     <Box p={3}>
@@ -88,7 +134,7 @@ export default function TeamsPage() {
       </Box>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
+        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
           {error}
         </Alert>
       )}
@@ -131,13 +177,13 @@ export default function TeamsPage() {
               <CardContent>
                 <Box display="flex" justifyContent="space-between" alignItems="center">
                   <Box display="flex" alignItems="center" gap={2}>
-                    <Avatar src={member.user?.avatar} alt={member.user?.name || member.email}>
+                    <Avatar src={member.user?.avatar} alt={memberDisplayName(member)}>
                       {member.user?.avatar ? null : <Person />}
                     </Avatar>
                     <Box>
-                      <Typography variant="h6">{member.user?.name || member.email}</Typography>
+                      <Typography variant="h6">{memberDisplayName(member)}</Typography>
                       <Typography color="text.secondary" variant="body2">
-                        {member.user?.email || 'مدعو'}
+                        {member.user?.email || member.email || 'مدعو'}
                       </Typography>
                       {member.user?.position && (
                         <Typography color="text.secondary" variant="body2">
@@ -155,6 +201,18 @@ export default function TeamsPage() {
                     <Typography color="text.secondary" variant="body2">
                       انضم {new Date(member.joinedAt).toLocaleDateString()}
                     </Typography>
+                    {canRemoveMember(member) && (
+                      <Tooltip title="إزالة العضو">
+                        <IconButton
+                          color="error"
+                          size="small"
+                          onClick={() => openRemoveDialog(member)}
+                          aria-label={`إزالة ${memberDisplayName(member)}`}
+                        >
+                          <DeleteOutline />
+                        </IconButton>
+                      </Tooltip>
+                    )}
                   </Box>
                 </Box>
               </CardContent>
@@ -163,7 +221,6 @@ export default function TeamsPage() {
         )}
       </Box>
 
-      {/* Invite Dialog */}
       <Dialog
         open={showInviteModal}
         onClose={() => setShowInviteModal(false)}
@@ -186,12 +243,49 @@ export default function TeamsPage() {
         <DialogActions>
           <Button onClick={() => setShowInviteModal(false)}>إلغاء</Button>
           <Button
-            onClick={inviteMember}
+            onClick={() => void inviteMember()}
             variant="contained"
             color="success"
             disabled={loading || !inviteEmail.trim()}
           >
             {loading ? 'جاري الإرسال...' : 'إرسال الدعوة'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={!!memberToRemove} onClose={closeRemoveDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>إزالة عضو من مساحة العمل</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            أنت على وشك إزالة{' '}
+            <strong>{memberToRemove ? memberDisplayName(memberToRemove) : ''}</strong> من الفريق.
+            أدخل كلمة مرور حسابك (المدير) للتأكيد.
+          </Typography>
+          {removeError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {removeError}
+            </Alert>
+          )}
+          <PasswordInput
+            value={removePassword}
+            onChange={setRemovePassword}
+            showPassword={showRemovePassword}
+            onToggleVisibility={() => setShowRemovePassword(v => !v)}
+            label="كلمة مرور المدير"
+            autoComplete="current-password"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeRemoveDialog} disabled={removing}>
+            إلغاء
+          </Button>
+          <Button
+            onClick={() => void confirmRemoveMember()}
+            variant="contained"
+            color="error"
+            disabled={removing || !removePassword.trim()}
+          >
+            {removing ? 'جاري الإزالة...' : 'تأكيد الإزالة'}
           </Button>
         </DialogActions>
       </Dialog>

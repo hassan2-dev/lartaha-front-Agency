@@ -46,3 +46,41 @@ export async function getWorkspaceEncryptionKey(): Promise<{ ok?: boolean; key?:
   const res = await api.get('/api/workspace/encryption-key')
   return res.data as { ok?: boolean; key?: string }
 }
+
+export interface WorkspaceMember {
+  id: string
+  workspaceId: string
+  userId?: string
+  email?: string
+  role: string
+  joinedAt: string
+  invitedBy?: string
+  user?: {
+    id: string
+    email: string
+    username: string
+    name: string
+    position?: string
+    avatar?: string
+    createdAt: string
+  }
+}
+
+export async function fetchWorkspaceMembers(): Promise<WorkspaceMember[]> {
+  const res = await api.get('/api/workspace/members')
+  return (res.data?.members ?? []) as WorkspaceMember[]
+}
+
+export async function inviteWorkspaceMember(email: string): Promise<void> {
+  await api.post('/api/workspace/invite', { email: email.trim() })
+}
+
+/** Admin only — requires current admin password. */
+export async function removeWorkspaceMember(
+  memberId: string,
+  password: string
+): Promise<void> {
+  await api.delete(`/api/workspace/members/${memberId}`, {
+    data: { password },
+  })
+}
