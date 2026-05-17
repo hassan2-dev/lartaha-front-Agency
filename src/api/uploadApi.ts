@@ -1,5 +1,7 @@
+import { zip } from 'fflate'
 import { api } from './http'
-import { API_ENV } from '../config/api'
+import { API_ENV, TOKEN_STORAGE_KEY } from '../config/api'
+import { decryptEncryptedBlobForDownload } from '../lib/encryption'
 import { subscribeRealtime } from './realtimeApi'
 
 export type UploadResult = {
@@ -796,3 +798,471 @@ export async function getDownloadUrl(fileId: string): Promise<DownloadUrlResult>
   const res = await api.get(`/api/upload/download/${fileId}`)
   return res.data as DownloadUrlResult
 }
+
+const FOLDER_ZIP_POLL_INTERVAL_MS = 2000
+const FOLDER_ZIP_POLL_INTERVAL_SLOW_MS = 5000
+const FOLDER_ZIP_SLOW_POLL_AFTER_MS = 60_000
+/** Large folders can take several minutes to zip on the server. */
+const FOLDER_ZIP_MAX_WAIT_MS = 5 * 60 * 1000
+
+export function normalizeFolderDownloadPath(folderPath: string): string {
+  return String(folderPath || '').replace(/^\/+|\/+$/g, '')
+}
+
+function buildFolderDownloadUrl(baseUrl: string, folderPath: string, token: string): string {
+  const params = new URLSearchParams({
+    path: folderPath,
+    token,
+    recursive: '1',
+  })
+  return `${baseUrl}/api/download/folder?${params.toString()}`
+}
+
+type ListedObject = NonNullable<ListObjectsResult['objects']>[number]
+
+/** Keys we never put in a folder ZIP (matches explorer hidden paths). */
+export function isExcludedFromFolderZip(storageKey: string): boolean {
+  const key = storageKey.replace(/^\/+/, '')
+  if (!key || key.endsWith('/')) return true
+  if (key.includes('/.thumbnails/')) return true
+  if (key.includes('/workspace-assets/') || key.includes('/workspace-logo/')) return true
+  if (key.includes('/.chat-files/')) return true
+  const parts = key.split('/').filter(Boolean)
+  if (parts[0] === 'upload' || parts[0] === 'chat') return true
+  if (parts.length >= 2 && parts[1] === 'chat') return true
+  return false
+}
+
+/** Lists every file under a storage prefix (includes nested subfolders). */
+export async function listAllObjectsUnderPrefix(
+  storagePrefix: string,
+  signal?: AbortSignal
+): Promise<ListedObject[]> {
+  const prefix = storagePrefix.endsWith('/') ? storagePrefix : `${storagePrefix}/`
+  const all: ListedObject[] = []
+  let continuation: string | undefined
+
+  do {
+    if (signal?.aborted) throw new Error('تم إلغاء التنزيل')
+    const page = await listUploadedObjects(prefix, 200, false, continuation)
+    for (const obj of page.objects ?? []) {
+      if (!isExcludedFromFolderZip(obj.key)) all.push(obj)
+    }
+    continuation =
+      page.pagination?.hasMore && page.pagination.nextContinuationToken
+        ? page.pagination.nextContinuationToken
+        : undefined
+  } while (continuation)
+
+  return all
+}
+
+function normalizeStoragePath(path: string): string {
+  const trimmed = String(path || '').replace(/^\/+|\/+$/g, '')
+  try {
+    return decodeURIComponent(trimmed)
+  } catch {
+    return trimmed
+  }
+}
+
+function storageKeyToZipEntryName(storageKey: string, storagePrefix: string): string {
+  const key = normalizeStoragePath(storageKey)
+  const prefix = `${normalizeStoragePath(storagePrefix)}/`
+
+  if (key.startsWith(prefix)) {
+    const relative = key.slice(prefix.length).replace(/^\/+/, '')
+    if (relative) return relative
+  }
+
+  const prefixParts = prefix.split('/').filter(Boolean)
+  const keyParts = key.split('/').filter(Boolean)
+  for (let i = 0; i <= keyParts.length - prefixParts.length; i++) {
+    if (prefixParts.every((part, j) => keyParts[i + j] === part)) {
+      const relative = keyParts.slice(i + prefixParts.length).join('/')
+      if (relative) return relative
+    }
+  }
+
+  return keyParts[keyParts.length - 1] || key
+}
+
+function uniqueZipEntryName(entryName: string, used: Set<string>): string {
+  const safe = entryName.replace(/\\/g, '/').replace(/^\/+/, '') || 'file'
+  if (!used.has(safe)) {
+    used.add(safe)
+    return safe
+  }
+  const dot = safe.lastIndexOf('.')
+  const base = dot > 0 ? safe.slice(0, dot) : safe
+  const ext = dot > 0 ? safe.slice(dot) : ''
+  let n = 2
+  while (used.has(`${base} (${n})${ext}`)) n += 1
+  const unique = `${base} (${n})${ext}`
+  used.add(unique)
+  return unique
+}
+
+function resolveEncryptionPassword(
+  explicit: string | null | undefined,
+  workspaceId: string
+): string | null {
+  const fromOption = explicit?.trim()
+  if (fromOption) return fromOption
+  try {
+    const fromSession = sessionStorage.getItem('file_encryption_password')?.trim()
+    if (fromSession) return fromSession
+  } catch {
+    // ignore
+  }
+  return workspaceId.trim() || null
+}
+
+async function fetchObjectBytesForZip(
+  obj: ListedObject,
+  entryName: string,
+  token: string,
+  baseUrl: string,
+  encryptionPassword: string | null,
+  signal?: AbortSignal
+): Promise<Uint8Array> {
+  const label = entryName || obj.key
+
+  try {
+    if (obj.encryptionEnabled) {
+      console.info('[folder-zip] decrypt v3 — chunked-first')
+      if (!obj.fileId || !obj.encryptionIv || !obj.encryptionSalt) {
+        throw new Error('بيانات التشفير غير مكتملة لهذا الملف')
+      }
+      if (!encryptionPassword) {
+        throw new Error('كلمة مرور التشفير غير متوفرة')
+      }
+      if (obj.fileId) {
+        const { getFileFromCache, generateCacheKey } = await import('../lib/fileCache')
+        const cacheKey = generateCacheKey(obj.fileId, encryptionPassword)
+        const cached = await getFileFromCache(cacheKey)
+        if (cached?.decryptedBlob) {
+          return new Uint8Array(await cached.decryptedBlob.arrayBuffer())
+        }
+      }
+
+      const result = await getDownloadUrl(obj.fileId)
+      if (!result.ok || !result.url) {
+        throw new Error('تعذر الحصول على رابط التنزيل')
+      }
+      if (signal?.aborted) throw new Error('تم إلغاء التنزيل')
+
+      const downloadRes = await fetch(result.url, { signal })
+      if (!downloadRes.ok) throw new Error(`فشل التحميل (${downloadRes.status})`)
+      const encrypted = await downloadRes.arrayBuffer()
+
+      const plainSizeHint = obj.size && obj.size > 0 ? obj.size : encrypted.byteLength
+      const decryptedBlob = await decryptEncryptedBlobForDownload(
+        encrypted,
+        obj.encryptionIv,
+        obj.encryptionSalt,
+        encryptionPassword,
+        plainSizeHint
+      )
+
+      if (obj.fileId && obj.mimeType) {
+        const { putFileInCache, generateCacheKey } = await import('../lib/fileCache')
+        const cacheKey = generateCacheKey(obj.fileId, encryptionPassword)
+        await putFileInCache(cacheKey, decryptedBlob, {
+          mimeType: obj.mimeType,
+          filename: label,
+          size: plainSizeHint,
+        })
+      }
+
+      if (signal?.aborted) throw new Error('تم إلغاء التنزيل')
+      return new Uint8Array(await decryptedBlob.arrayBuffer())
+    }
+
+    const normalized = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
+    const url = `${normalized}/api/download/direct?key=${encodeURIComponent(obj.key)}&token=${encodeURIComponent(token)}`
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal,
+    })
+    if (!res.ok) throw new Error(`فشل التحميل (${res.status})`)
+    return new Uint8Array(await res.arrayBuffer())
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : 'خطأ غير معروف'
+    const errName = err instanceof Error ? err.name : ''
+    if (
+      errName === 'OperationError' ||
+      /decrypt|operation/i.test(detail) ||
+      /decrypt|operation/i.test(errName)
+    ) {
+      throw new Error(
+        `تعذر فك تشفير «${label}» — تحقق من كلمة مرور التشفير أو جرّب تنزيل الملف منفرداً`
+      )
+    }
+    throw new Error(detail ? `«${label}»: ${detail}` : `«${label}»: فشل التنزيل`)
+  }
+}
+
+function triggerZipDownload(data: Uint8Array, filename: string) {
+  const blob = new Blob([data as BlobPart], { type: 'application/zip' })
+  const objectUrl = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = objectUrl
+  anchor.download = filename
+  anchor.rel = 'noreferrer'
+  document.body.appendChild(anchor)
+  anchor.click()
+  document.body.removeChild(anchor)
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+}
+
+/**
+ * Builds ZIP in the browser: all files under the folder including subfolders.
+ */
+export async function downloadFolderAsZipClient(options: {
+  folderPath: string
+  workspaceId: string
+  signal?: AbortSignal
+  encryptionPassword?: string | null
+  onProgress?: (progress: FolderZipProgress) => void
+}): Promise<{ filename: string; fileCount: number; failedFiles?: string[] }> {
+  const token = localStorage.getItem(TOKEN_STORAGE_KEY)
+  const baseUrl = API_ENV.apiBaseUrl?.trim() || ''
+  if (!token) throw new Error('يرجى تسجيل الدخول مرة أخرى')
+  if (!baseUrl) throw new Error('عنوان الخادم غير مضبوط')
+
+  const relativePath = normalizeFolderDownloadPath(options.folderPath)
+  if (!relativePath) throw new Error('مسار المجلد غير صالح')
+
+  const workspaceId = options.workspaceId.trim()
+  const storagePrefix = `uploads/${workspaceId}/${relativePath}`
+  const startedAt = Date.now()
+  const encryptionPassword = resolveEncryptionPassword(options.encryptionPassword, workspaceId)
+
+  const report = (partial: Partial<FolderZipProgress> & { phase: FolderZipProgress['phase'] }) => {
+    options.onProgress?.({
+      elapsedSeconds: Math.floor((Date.now() - startedAt) / 1000),
+      ...partial,
+    })
+  }
+
+  report({ phase: 'preparing' })
+  const objects = await listAllObjectsUnderPrefix(storagePrefix, options.signal)
+
+  if (objects.length === 0) {
+    throw new Error('لا توجد ملفات في هذا المجلد (بما في ذلك المجلدات الفرعية)')
+  }
+
+  const zipEntries: Record<string, Uint8Array> = {}
+  const usedEntryNames = new Set<string>()
+  const failedFiles: string[] = []
+  let done = 0
+
+  for (const obj of objects) {
+    if (options.signal?.aborted) throw new Error('تم إلغاء التنزيل')
+
+    const entryName = uniqueZipEntryName(
+      storageKeyToZipEntryName(obj.key, storagePrefix),
+      usedEntryNames
+    )
+    report({
+      phase: 'downloading',
+      filesDone: done,
+      filesTotal: objects.length,
+      currentFile: entryName,
+    })
+
+    try {
+      const bytes = await fetchObjectBytesForZip(
+        obj,
+        entryName,
+        token,
+        baseUrl,
+        encryptionPassword,
+        options.signal
+      )
+      if (bytes.byteLength === 0) {
+        throw new Error('الملف فارغ')
+      }
+      zipEntries[entryName] = bytes
+      done += 1
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'فشل التنزيل'
+      failedFiles.push(msg)
+      console.warn('[folder-zip] skipped file:', obj.key, err)
+    }
+  }
+
+  if (done === 0) {
+    throw new Error(
+      failedFiles[0] ||
+        'لم يُحمَّل أي ملف — تحقق من الاتصال وكلمة مرور التشفير'
+    )
+  }
+
+  report({ phase: 'zipping', filesDone: done, filesTotal: objects.length })
+
+  const zipped = await new Promise<Uint8Array>((resolve, reject) => {
+    zip(zipEntries, (err, data) => {
+      if (err) reject(new Error('فشل ضغط ZIP — قد يكون أحد الملفات كبيراً جداً'))
+      else resolve(data)
+    })
+  })
+
+  const filename = `${relativePath.split('/').pop() || 'folder'}.zip`
+  triggerZipDownload(zipped, filename)
+
+  return {
+    filename,
+    fileCount: done,
+    ...(failedFiles.length > 0 ? { failedFiles } : {}),
+  }
+}
+
+async function readBlobPrefix(blob: Blob, length = 4): Promise<Uint8Array> {
+  const buf = await blob.slice(0, length).arrayBuffer()
+  return new Uint8Array(buf)
+}
+
+async function assertZipBlob(blob: Blob): Promise<void> {
+  if (blob.size === 0) {
+    throw new Error('ملف ZIP فارغ — تحقق من أن المجلد يحتوي ملفات')
+  }
+  const prefix = await readBlobPrefix(blob, 4)
+  const isPkZip = prefix[0] === 0x50 && prefix[1] === 0x4b
+  if (isPkZip) return
+
+  const asText = await blob.slice(0, 400).text().catch(() => '')
+  if (asText.trim().startsWith('{')) {
+    try {
+      const json = JSON.parse(asText) as { message?: string }
+      if (json?.message) throw new Error(json.message)
+    } catch (e) {
+      if (e instanceof Error) throw e
+    }
+  }
+  throw new Error('الخادم لم يرجع ملف ZIP صالحاً — قد يكون التحضير لم يكتمل')
+}
+
+export type FolderZipProgress = {
+  elapsedSeconds: number
+  phase: 'preparing' | 'downloading' | 'zipping'
+  serverMessage?: string
+  filesDone?: number
+  filesTotal?: number
+  currentFile?: string
+}
+
+/**
+ * Folder ZIP download. Default (`complete`): browser builds ZIP with all nested files.
+ * `server`: legacy server-side ZIP (may omit subfolders until backend supports `recursive=1`).
+ */
+/** Download folder as ZIP (client-side, includes subfolders). */
+export async function downloadWorkspaceFolderZip(options: {
+  folderPath: string
+  workspaceId?: string
+  signal?: AbortSignal
+  encryptionPassword?: string | null
+  mode?: 'complete' | 'server'
+  onProgress?: (progress: FolderZipProgress) => void
+}): Promise<{ filename: string; fileCount?: number; failedFiles?: string[] }> {
+  const workspaceId = options.workspaceId?.trim()
+  if (options.mode !== 'server' && workspaceId) {
+    return downloadFolderAsZipClient({
+      folderPath: options.folderPath,
+      workspaceId,
+      signal: options.signal,
+      encryptionPassword: options.encryptionPassword,
+      onProgress: options.onProgress,
+    })
+  }
+
+  const token = localStorage.getItem(TOKEN_STORAGE_KEY)
+  const baseUrl = API_ENV.apiBaseUrl?.trim() || ''
+  if (!token) throw new Error('يرجى تسجيل الدخول مرة أخرى')
+  if (!baseUrl) throw new Error('عنوان الخادم غير مضبوط')
+
+  const relativePath = normalizeFolderDownloadPath(options.folderPath)
+  if (!relativePath) throw new Error('مسار المجلد غير صالح')
+
+  // Same relative path as folder create/delete APIs; backend maps to storage prefix.
+  const downloadUrl = buildFolderDownloadUrl(baseUrl, relativePath, token)
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/zip, application/octet-stream, */*',
+  }
+
+  const startedAt = Date.now()
+  let lastServerMessage: string | undefined
+
+  const report = (phase: FolderZipProgress['phase']) => {
+    options.onProgress?.({
+      elapsedSeconds: Math.floor((Date.now() - startedAt) / 1000),
+      phase,
+      serverMessage: lastServerMessage,
+    })
+  }
+
+  while (Date.now() - startedAt < FOLDER_ZIP_MAX_WAIT_MS) {
+    if (options.signal?.aborted) {
+      throw new Error('تم إلغاء التنزيل')
+    }
+
+    report('preparing')
+
+    const elapsed = Date.now() - startedAt
+    const pollInterval =
+      elapsed >= FOLDER_ZIP_SLOW_POLL_AFTER_MS
+        ? FOLDER_ZIP_POLL_INTERVAL_SLOW_MS
+        : FOLDER_ZIP_POLL_INTERVAL_MS
+
+    const response = await fetch(downloadUrl, { headers, signal: options.signal })
+
+    if (response.status === 200) {
+      report('downloading')
+      const blob = await response.blob()
+      await assertZipBlob(blob)
+
+      const filename = `${relativePath.split('/').pop() || 'folder'}.zip`
+      const objectUrl = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = objectUrl
+      anchor.download = filename
+      anchor.rel = 'noreferrer'
+      document.body.appendChild(anchor)
+      anchor.click()
+      document.body.removeChild(anchor)
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+      return { filename }
+    }
+
+    if (response.status === 202) {
+      const body = (await response.json().catch(() => null)) as {
+        message?: string
+        status?: string
+      } | null
+      if (body?.message) lastServerMessage = body.message
+
+      const retryAfter = response.headers.get('Retry-After')
+      const parsed = retryAfter ? Number.parseInt(retryAfter, 10) : NaN
+      const waitMs = Number.isFinite(parsed)
+        ? Math.min(Math.max(parsed * 1000, 1000), 10_000)
+        : pollInterval
+      await new Promise(resolve => window.setTimeout(resolve, waitMs))
+      continue
+    }
+
+    const errorData = await response.json().catch(() => ({ message: '' }))
+    const message =
+      (errorData as { message?: string }).message ||
+      `فشل تحضير المجلد (${response.status})`
+    throw new Error(message)
+  }
+
+  throw new Error(
+    'انتهت مهلة تحضير المجلد (5 دقائق). المجلد كبير أو الخادم بطيء — جرّب مجلداً أصغر أو راجع إعدادات ZIP في الباك.'
+  )
+}
+
+/** @deprecated Use downloadWorkspaceFolderZip */
+export const downloadFolderAsZip = downloadWorkspaceFolderZip

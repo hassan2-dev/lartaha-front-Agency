@@ -4,6 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "install:path": "node -e \"console.log('Install folder:', process.cwd())\"",
+    "preinstall": "node -e \"console.log('[larthaa] npm install →', process.cwd())\"",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
@@ -36,6 +38,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dexie": "^4.4.2",
+    "fflate": "^0.8.3",
     "livekit-client": "^2.18.3",
     "lucide-react": "^1.7.0",
     "react": "^19.2.4",

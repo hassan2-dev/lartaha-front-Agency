@@ -67,6 +67,7 @@ import {
   bulkRestoreFromTrash,
   createImageThumbnailBlob,
   createVideoThumbnailBlob,
+  downloadWorkspaceFolderZip,
 } from '../../api/uploadApi'
 import { subscribeRealtime } from '../../api/realtimeApi'
 import { api } from '../../api/http'
@@ -1594,12 +1595,14 @@ function FolderItem({
   onDelete,
   onDownload,
   isDeleting,
+  isDownloading,
 }: {
   folderPath: string
   onClick: () => void
   onDelete: (folderPath: string) => void
   onDownload: (folderPath: string) => void
   isDeleting?: boolean
+  isDownloading?: boolean
 }) {
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
@@ -1673,9 +1676,10 @@ function FolderItem({
               e.stopPropagation()
               onDownload(folderPath)
             }}
+            disabled={isDownloading || isDeleting}
             sx={{ borderRadius: 999, minWidth: 'auto', p: 1 }}
           >
-            <DownloadIcon />
+            {isDownloading ? <CircularProgress size={20} /> : <DownloadIcon />}
           </Button>
         </Tooltip>
         <Tooltip title="حذف المجلد">
@@ -1686,7 +1690,7 @@ function FolderItem({
               e.stopPropagation()
               onDelete(folderPath)
             }}
-            disabled={isDeleting}
+            disabled={isDeleting || isDownloading}
             sx={{ borderRadius: 999, minWidth: 'auto', p: 1, color: '#666' }}
           >
             {isDeleting ? <CircularProgress size={20} /> : <DeleteIcon />}
@@ -1704,12 +1708,14 @@ function FolderItemGrid({
   onDelete,
   onDownload,
   isDeleting,
+  isDownloading,
 }: {
   folderPath: string
   onClick: () => void
   onDelete: (folderPath: string) => void
   onDownload: (folderPath: string) => void
   isDeleting?: boolean
+  isDownloading?: boolean
 }) {
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
@@ -1798,9 +1804,10 @@ function FolderItemGrid({
               e.stopPropagation()
               onDownload(folderPath)
             }}
+            disabled={isDownloading || isDeleting}
             sx={{ borderRadius: 999, minWidth: 'auto', p: 1 }}
           >
-            <DownloadIcon />
+            {isDownloading ? <CircularProgress size={20} /> : <DownloadIcon />}
           </Button>
         </Tooltip>
         <Tooltip title="حذف المجلد">
@@ -1811,7 +1818,7 @@ function FolderItemGrid({
               e.stopPropagation()
               onDelete(folderPath)
             }}
-            disabled={isDeleting}
+            disabled={isDeleting || isDownloading}
             sx={{ borderRadius: 999, minWidth: 'auto', p: 1, color: '#666' }}
           >
             {isDeleting ? <CircularProgress size={20} /> : <DeleteIcon />}
@@ -2789,6 +2796,18 @@ export default function UploadPage() {
   // Deletion loading states
   const [deletingFiles, setDeletingFiles] = useState<Set<string>>(new Set())
   const [deletingFolders, setDeletingFolders] = useState<Set<string>>(new Set())
+  const [downloadingFolders, setDownloadingFolders] = useState<Set<string>>(new Set())
+  const [folderZipProgress, setFolderZipProgress] = useState<{
+    folderPath: string
+    folderName: string
+    elapsedSeconds: number
+    phase: 'preparing' | 'downloading' | 'zipping'
+    serverMessage?: string
+    filesDone?: number
+    filesTotal?: number
+    currentFile?: string
+  } | null>(null)
+  const folderZipAbortRef = useRef<AbortController | null>(null)
 
   // Filter and sort state
   const [fileFilter, setFileFilter] = useState<'all' | 'images' | 'videos' | 'documents'>('all')
@@ -2975,22 +2994,27 @@ export default function UploadPage() {
             decryptionProgress: 0,
           })
 
-          const { downloadAndDecryptStream } = await import('../../lib/encryption')
+          const { decryptEncryptedBlobForDownload } = await import('../../lib/encryption')
           const encBlob = new Blob(chunks, { type: 'application/octet-stream' })
-          const encBlobUrl = URL.createObjectURL(encBlob)
+          const encrypted = await encBlob.arrayBuffer()
 
-          const decryptedBlob = await downloadAndDecryptStream(
-            encBlobUrl,
+          const decryptedBlob = await decryptEncryptedBlobForDownload(
+            encrypted,
             fileMeta.encryptionIv,
             fileMeta.encryptionSalt,
             encryptionKey,
-            fileMeta.size || encBlob.size,
-            pct => updateDownload(downloadKey, { decryptionProgress: pct, progress: pct }),
-            fileMeta.fileId,
-            fileMeta.mimeType,
-            filename
+            fileMeta.size || encrypted.byteLength,
+            pct => updateDownload(downloadKey, { decryptionProgress: pct, progress: pct })
           )
-          URL.revokeObjectURL(encBlobUrl)
+
+          if (fileMeta.fileId && fileMeta.mimeType) {
+            const { putFileInCache, generateCacheKey } = await import('../../lib/fileCache')
+            await putFileInCache(generateCacheKey(fileMeta.fileId, encryptionKey), decryptedBlob, {
+              mimeType: fileMeta.mimeType,
+              filename,
+              size: fileMeta.size || encrypted.byteLength,
+            })
+          }
 
           const url = URL.createObjectURL(decryptedBlob)
           const a = document.createElement('a')
@@ -3777,64 +3801,77 @@ export default function UploadPage() {
     }
   }
 
-  // Folder download function with polling for prebuilt ZIP
+  const cancelFolderZipDownload = useCallback(() => {
+    folderZipAbortRef.current?.abort()
+    folderZipAbortRef.current = null
+    setFolderZipProgress(null)
+    setDownloadingFolders(new Set())
+  }, [])
+
   async function handleDownloadFolder(folderPath: string) {
+    if (downloadingFolders.has(folderPath)) return
+
+    const folderName = folderPath.split('/').filter(Boolean).pop() || folderPath
+    const abortController = new AbortController()
+    folderZipAbortRef.current = abortController
+
+    setDownloadingFolders(prev => new Set(prev).add(folderPath))
+    setFolderZipProgress({
+      folderPath,
+      folderName,
+      elapsedSeconds: 0,
+      phase: 'preparing',
+    })
+
     try {
-      const token = localStorage.getItem(TOKEN_STORAGE_KEY)
-      const baseUrl = API_ENV.apiBaseUrl?.trim() || ''
-
-      if (!token) {
-        throw new Error('Missing auth token')
+      const encryptionPassword = sessionStorage.getItem('file_encryption_password')
+      const result = await downloadWorkspaceFolderZip({
+        folderPath,
+        workspaceId: user?.workspaceId,
+        signal: abortController.signal,
+        encryptionPassword,
+        onProgress: progress => {
+          setFolderZipProgress({
+            folderPath,
+            folderName,
+            elapsedSeconds: progress.elapsedSeconds,
+            phase: progress.phase,
+            serverMessage: progress.serverMessage,
+            filesDone: progress.filesDone,
+            filesTotal: progress.filesTotal,
+            currentFile: progress.currentFile,
+          })
+        },
+      })
+      const countNote =
+        result.fileCount != null ? ` (${result.fileCount} ملف)` : ''
+      if (result.failedFiles?.length) {
+        showToastNotification(
+          `تم تنزيل ${result.fileCount} ملف. تعذر تنزيل ${result.failedFiles.length}: ${result.failedFiles[0]}`,
+          'info'
+        )
+      } else {
+        showToastNotification(`تم تنزيل المجلد بنجاح${countNote}`, 'success')
       }
-
-      if (!baseUrl) {
-        throw new Error('Missing API base URL')
-      }
-
-      const normalizedFolderPath = String(folderPath || '').replace(/^\/+|\/+$/g, '')
-      const downloadUrl = `${baseUrl}/api/download/folder?path=${encodeURIComponent(normalizedFolderPath)}&token=${encodeURIComponent(token)}`
-
-      showToastNotification('جاري تحضير ملف ZIP للمجلد...', 'info')
-
-      // Poll for ZIP readiness
-      let attempts = 0
-      const maxAttempts = 30 // 30 seconds max
-
-      while (attempts < maxAttempts) {
-        const response = await fetch(downloadUrl)
-
-        if (response.status === 200) {
-          // ZIP is ready, trigger download
-          const a = document.createElement('a')
-          a.href = downloadUrl
-          a.download = `${folderPath.split('/').pop() || 'folder'}.zip`
-          a.rel = 'noreferrer'
-          document.body.appendChild(a)
-          a.click()
-          document.body.removeChild(a)
-          showToastNotification('بدأ تنزيل المجلد', 'success')
-          return
-        }
-
-        if (response.status === 202) {
-          // ZIP is being prepared, wait and retry
-          await new Promise(resolve => setTimeout(resolve, 1000))
-          attempts++
-          continue
-        }
-
-        // Other error
-        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }))
-        throw new Error(errorData.message || 'فشل في تحضير المجلد')
-      }
-
-      throw new Error('انتهت مهلة تحضير المجلد. يرجى المحاولة مرة أخرى.')
     } catch (error) {
-      console.error('Folder download error:', error)
-      showToastNotification(
-        `فشل تنزيل المجلد: ${error instanceof Error ? error.message : 'خطأ غير معروف'}`,
-        'error'
-      )
+      if (abortController.signal.aborted) {
+        showToastNotification('تم إلغاء تنزيل المجلد', 'info')
+      } else {
+        console.error('Folder download error:', error)
+        const msg = error instanceof Error ? error.message : 'خطأ غير معروف'
+        showToastNotification(
+          msg.length > 120 ? `${msg.slice(0, 120)}...` : `فشل تنزيل المجلد: ${msg}`,
+          'error'
+        )
+      }
+    } finally {
+      folderZipAbortRef.current = null
+      setFolderZipProgress(null)
+      setDownloadingFolders(prev => {
+        const next = new Set(prev)
+        next.delete(folderPath)
+        return next
+      })
     }
   }
 
@@ -4857,6 +4894,7 @@ export default function UploadPage() {
                                     onDelete={handleDeleteFolder}
                                     onDownload={handleDownloadFolder}
                                     isDeleting={deletingFolders.has(fullPath)}
+                                    isDownloading={downloadingFolders.has(fullPath)}
                                   />
                                 )
                               })}
@@ -4890,6 +4928,7 @@ export default function UploadPage() {
                                     onDelete={handleDeleteFolder}
                                     onDownload={handleDownloadFolder}
                                     isDeleting={deletingFolders.has(fullPath)}
+                                    isDownloading={downloadingFolders.has(fullPath)}
                                   />
                                 )
                               })}
@@ -5177,6 +5216,67 @@ export default function UploadPage() {
           <Button onClick={() => setShowPrivacyModal(false)}>إلغاء</Button>
           <Button onClick={savePrivacySettings} variant="contained">
             حفظ الإعدادات
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={folderZipProgress !== null}
+        onClose={cancelFolderZipDownload}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>تحضير تنزيل المجلد</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            {folderZipProgress?.folderName}
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+            <CircularProgress size={28} />
+            <Typography variant="body2">
+              {folderZipProgress?.phase === 'zipping'
+                ? 'جاري ضغط الملفات...'
+                : folderZipProgress?.phase === 'downloading'
+                  ? folderZipProgress.filesTotal != null
+                    ? `تنزيل الملفات ${folderZipProgress.filesDone ?? 0} / ${folderZipProgress.filesTotal}`
+                    : 'جاري تنزيل الملفات...'
+                  : 'جاري تجميع قائمة الملفات...'}
+            </Typography>
+          </Box>
+          <LinearProgress
+            variant={
+              folderZipProgress?.filesTotal
+                ? 'determinate'
+                : folderZipProgress && folderZipProgress.elapsedSeconds > 0
+                  ? 'indeterminate'
+                  : 'query'
+            }
+            value={
+              folderZipProgress?.filesTotal
+                ? Math.round(
+                    ((folderZipProgress.filesDone ?? 0) / folderZipProgress.filesTotal) * 100
+                  )
+                : undefined
+            }
+            sx={{ mb: 1 }}
+          />
+          {folderZipProgress?.currentFile && (
+            <Typography variant="caption" color="text.secondary" noWrap title={folderZipProgress.currentFile}>
+              {folderZipProgress.currentFile}
+            </Typography>
+          )}
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+            يشمل كل الملفات داخل المجلد والمجلدات الفرعية. لا تغلق الصفحة.
+          </Typography>
+          {folderZipProgress?.serverMessage && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+              {folderZipProgress.serverMessage}
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cancelFolderZipDownload} color="inherit">
+            إلغاء
           </Button>
         </DialogActions>
       </Dialog>

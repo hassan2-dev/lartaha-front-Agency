@@ -569,6 +569,47 @@ export async function decryptFile(
   return new Blob([decrypted])
 }
 
+function bufferHasChunkedEncryptionMagic(buffer: ArrayBuffer): boolean {
+  const data = new Uint8Array(buffer)
+  const magic = textToBytes(CHUNKED_FILE_MAGIC)
+  if (data.length < magic.length) return false
+  return magic.every((byte, index) => data[index] === byte)
+}
+
+/**
+ * Decrypt an uploaded object blob (simple AES-GCM or E2ECHUNK combined format).
+ * Large videos must use the chunked parser — not decryptFile alone.
+ */
+export async function decryptEncryptedBlobForDownload(
+  encrypted: ArrayBuffer,
+  iv: string,
+  salt: string,
+  password: string,
+  plainSizeHint = 0,
+  onProgress?: (progress: number) => void
+): Promise<Blob> {
+  const tryChunkedFirst =
+    bufferHasChunkedEncryptionMagic(encrypted) ||
+    shouldUseChunkedEncryption(plainSizeHint) ||
+    encrypted.byteLength > 12 * 1024 * 1024
+
+  if (tryChunkedFirst) {
+    return await decryptFileChunked(
+      { encryptedChunks: [encrypted], iv, salt, password },
+      onProgress
+    )
+  }
+
+  try {
+    return await decryptFile(encrypted, iv, salt, password)
+  } catch {
+    return await decryptFileChunked(
+      { encryptedChunks: [encrypted], iv, salt, password },
+      onProgress
+    )
+  }
+}
+
 /**
  * Encrypt a thumbnail blob with a self-contained header.
  * Header layout:
@@ -699,47 +740,23 @@ export async function downloadAndDecryptStream(
       'bytes'
     )
 
-    // Try single file decryption first
-    try {
-      console.log('[downloadAndDecryptStream] Trying to decrypt as single file...')
-      const decrypted = await decryptFile(encryptedData, iv, salt, password)
-      console.log('[downloadAndDecryptStream] Successfully decrypted as single file')
+    const decrypted = await decryptEncryptedBlobForDownload(
+      encryptedData,
+      iv,
+      salt,
+      password,
+      fileSize || encryptedData.byteLength,
+      p => onProgress?.(50 + Math.round(p * 0.5))
+    )
 
-      if (fileId && mimeType && filename) {
-        const { putFileInCache, generateCacheKey } = await import('./fileCache')
-        const cacheKey = generateCacheKey(fileId, password)
-        await putFileInCache(cacheKey, decrypted, { mimeType, filename, size: fileSize })
-        console.log('[downloadAndDecryptStream] Cached decrypted file:', fileId)
-      }
-
-      onProgress?.(100)
-      return decrypted
-    } catch {
-      console.log(
-        '[downloadAndDecryptStream] Failed to decrypt as single file, trying chunked approach...'
-      )
+    if (fileId && mimeType && filename) {
+      const { putFileInCache, generateCacheKey } = await import('./fileCache')
+      const cacheKey = generateCacheKey(fileId, password)
+      await putFileInCache(cacheKey, decrypted, { mimeType, filename, size: fileSize })
     }
 
-    // Try chunked decryption
-    try {
-      const decrypted = await decryptFileChunked(
-        { encryptedChunks: [encryptedData], iv, salt, password },
-        onProgress
-      )
-      console.log('[downloadAndDecryptStream] Successfully decrypted chunked file')
-
-      if (fileId && mimeType && filename) {
-        const { putFileInCache, generateCacheKey } = await import('./fileCache')
-        const cacheKey = generateCacheKey(fileId, password)
-        await putFileInCache(cacheKey, decrypted, { mimeType, filename, size: fileSize })
-        console.log('[downloadAndDecryptStream] Cached decrypted file:', fileId)
-      }
-
-      return decrypted
-    } catch (err) {
-      console.error('[downloadAndDecryptStream] Failed to decrypt chunked file:', err)
-      throw err
-    }
+    onProgress?.(100)
+    return decrypted
   }
 
   // Progressive download with progress tracking
@@ -768,49 +785,23 @@ export async function downloadAndDecryptStream(
     offset += chunk.length
   }
 
-  // Try single file decryption first
-  try {
-    console.log('[downloadAndDecryptStream] Trying to decrypt as single file...')
-    const decrypted = await decryptFile(encryptedData.buffer, iv, salt, password)
-    console.log('[downloadAndDecryptStream] Successfully decrypted as single file')
-    onProgress?.(100)
+  const decrypted = await decryptEncryptedBlobForDownload(
+    encryptedData.buffer,
+    iv,
+    salt,
+    password,
+    fileSize || downloadedBytes,
+    p => onProgress?.(50 + Math.round(p * 0.5))
+  )
 
-    if (fileId && mimeType && filename) {
-      const { putFileInCache, generateCacheKey } = await import('./fileCache')
-      const cacheKey = generateCacheKey(fileId, password)
-      await putFileInCache(cacheKey, decrypted, { mimeType, filename, size: fileSize })
-      console.log('[downloadAndDecryptStream] Cached decrypted file:', fileId)
-    }
-
-    return decrypted
-  } catch {
-    console.log(
-      '[downloadAndDecryptStream] Failed to decrypt as single file, trying chunked approach...'
-    )
+  if (fileId && mimeType && filename) {
+    const { putFileInCache, generateCacheKey } = await import('./fileCache')
+    const cacheKey = generateCacheKey(fileId, password)
+    await putFileInCache(cacheKey, decrypted, { mimeType, filename, size: fileSize })
   }
 
-  // If that fails, try to decrypt as chunked file
-  console.log('[downloadAndDecryptStream] Trying to decrypt as chunked file...')
-
-  try {
-    const decrypted = await decryptFileChunked(
-      { encryptedChunks: [encryptedData.buffer], iv, salt, password },
-      p => onProgress?.(50 + Math.round(p * 50)) // Decryption is 50-100% of progress
-    )
-    console.log('[downloadAndDecryptStream] Successfully decrypted chunked file')
-
-    if (fileId && mimeType && filename) {
-      const { putFileInCache, generateCacheKey } = await import('./fileCache')
-      const cacheKey = generateCacheKey(fileId, password)
-      await putFileInCache(cacheKey, decrypted, { mimeType, filename, size: fileSize })
-      console.log('[downloadAndDecryptStream] Cached decrypted file:', fileId)
-    }
-
-    return decrypted
-  } catch (err) {
-    console.error('[downloadAndDecryptStream] Failed to decrypt chunked file:', err)
-    throw err
-  }
+  onProgress?.(100)
+  return decrypted
 }
 
 /**

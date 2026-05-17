@@ -12,6 +12,7 @@ import {
   restoreFileFromTrash,
   listTrashFiles,
   fetchBulkPrivacySettings,
+  downloadWorkspaceFolderZip,
   bulkMoveToTrash,
   bulkRestoreFromTrash,
   createImageThumbnailBlob,
@@ -1286,58 +1287,25 @@ export default function useUpload() {
     }
   }
 
-  // Folder download function with polling for prebuilt ZIP
   async function handleDownloadFolder(folderPath: string) {
     try {
-      const token = localStorage.getItem(TOKEN_STORAGE_KEY)
-      const baseUrl = API_ENV.apiBaseUrl?.trim() || ''
-
-      if (!token) {
-        throw new Error('Missing auth token')
+      const encryptionPassword = sessionStorage.getItem('file_encryption_password')
+      const result = await downloadWorkspaceFolderZip({
+        folderPath,
+        workspaceId: user?.workspaceId,
+        encryptionPassword,
+      })
+      if (result.failedFiles?.length) {
+        showToastNotification(
+          `تم تنزيل ${result.fileCount} ملف. فشل ${result.failedFiles.length}: ${result.failedFiles[0]}`,
+          'info'
+        )
+      } else {
+        showToastNotification(
+          `تم تنزيل المجلد بنجاح${result.fileCount != null ? ` (${result.fileCount} ملف)` : ''}`,
+          'success'
+        )
       }
-
-      if (!baseUrl) {
-        throw new Error('Missing API base URL')
-      }
-
-      const normalizedFolderPath = String(folderPath || '').replace(/^\/+|\/+$/g, '')
-      const downloadUrl = `${baseUrl}/api/download/folder?path=${encodeURIComponent(normalizedFolderPath)}&token=${encodeURIComponent(token)}`
-
-      showToastNotification('جاري تحضير ملف ZIP للمجلد...', 'info')
-
-      // Poll for ZIP readiness
-      let attempts = 0
-      const maxAttempts = 30 // 30 seconds max
-
-      while (attempts < maxAttempts) {
-        const response = await fetch(downloadUrl)
-
-        if (response.status === 200) {
-          // ZIP is ready, trigger download
-          const a = document.createElement('a')
-          a.href = downloadUrl
-          a.download = `${folderPath.split('/').pop() || 'folder'}.zip`
-          a.rel = 'noreferrer'
-          document.body.appendChild(a)
-          a.click()
-          document.body.removeChild(a)
-          showToastNotification('بدأ تنزيل المجلد', 'success')
-          return
-        }
-
-        if (response.status === 202) {
-          // ZIP is being prepared, wait and retry
-          await new Promise(resolve => setTimeout(resolve, 1000))
-          attempts++
-          continue
-        }
-
-        // Other error
-        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }))
-        throw new Error(errorData.message || 'فشل في تحضير المجلد')
-      }
-
-      throw new Error('انتهت مهلة تحضير المجلد. يرجى المحاولة مرة أخرى.')
     } catch (error) {
       console.error('Folder download error:', error)
       showToastNotification(
