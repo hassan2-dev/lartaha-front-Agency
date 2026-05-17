@@ -16,14 +16,23 @@ api.interceptors.request.use(config => {
   return config
 })
 
-// Response interceptor to handle 401 errors
+/** 401 here means wrong password / forbidden action — not an expired session. */
+function shouldSkipSessionLogoutOn401(error: unknown): boolean {
+  const config = (error as { config?: { url?: string; method?: string } })?.config
+  const url = String(config?.url || '')
+  const method = String(config?.method || '').toLowerCase()
+  if (url.includes('/api/auth/verify-password')) return true
+  if (method === 'delete' && url.includes('/api/folders')) return true
+  if (method === 'delete' && url.includes('/api/workspace/members/')) return true
+  return false
+}
+
+// Response interceptor to handle 401 errors (expired/invalid session token)
 api.interceptors.response.use(
   response => response,
   error => {
-    if (error.response?.status === 401) {
-      // Clear invalid token
+    if (error.response?.status === 401 && !shouldSkipSessionLogoutOn401(error)) {
       localStorage.removeItem(TOKEN_STORAGE_KEY)
-      // Trigger a custom event for auth context to handle redirect
       window.dispatchEvent(new CustomEvent('auth:logout'))
     }
     return Promise.reject(error)

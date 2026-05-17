@@ -1,5 +1,5 @@
 import { api } from './http'
-import { API_ENV } from '../config/api'
+import { API_ENV, TOKEN_STORAGE_KEY } from '../config/api'
 import { resolveWorkspaceLogoUrl } from './workspaceApi'
 
 const PROFILE_MEDIA_CACHE_KEY = 'larthaa_profile_media_v1'
@@ -210,7 +210,7 @@ export type AccountIdentity = {
 
 /**
  * Confirms the logged-in admin's account password (not file encryption password).
- * Backend: POST /api/auth/verify-password with Bearer token.
+ * Uses fetch so a wrong password (401) does not trigger session logout via axios interceptor.
  */
 export async function verifyCurrentUserPassword(
   password: string,
@@ -219,22 +219,36 @@ export async function verifyCurrentUserPassword(
   const trimmed = password.trim()
   if (!trimmed) throw new Error('أدخل كلمة مرور المدير')
 
-  try {
-    await api.post('/api/auth/verify-password', { password: trimmed })
-    return
-  } catch (err: unknown) {
-    const axiosErr = err as { response?: { status?: number; data?: { message?: string } } }
-    const status = axiosErr.response?.status
-    const message = axiosErr.response?.data?.message
+  const baseUrl = API_ENV.apiBaseUrl?.trim()
+  if (!baseUrl) throw new Error('عنوان الخادم غير مضبوط')
 
-    if (status === 404) {
-      throw new Error('التحقق من كلمة المرور غير متوفر على الخادم — حدّث الباك إند')
-    }
-    if (status === 401 || status === 403) {
-      throw new Error(message || 'كلمة مرور المدير غير صحيحة')
-    }
-    throw new Error(message || 'تعذر التحقق من كلمة المرور')
+  const token = localStorage.getItem(TOKEN_STORAGE_KEY)
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers.Authorization = `Bearer ${token}`
+
+  const response = await fetch(`${baseUrl}/api/auth/verify-password`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ password: trimmed }),
+  })
+
+  if (response.ok) return
+
+  let message = 'كلمة مرور المدير غير صحيحة'
+  try {
+    const json = (await response.json()) as { message?: string }
+    if (json?.message) message = json.message
+  } catch {
+    // ignore parse errors
   }
+
+  if (response.status === 404) {
+    throw new Error('التحقق من كلمة المرور غير متوفر على الخادم — حدّث الباك إند')
+  }
+  if (response.status === 401 || response.status === 403) {
+    throw new Error(message)
+  }
+  throw new Error(message || 'تعذر التحقق من كلمة المرور')
 }
 
 export async function fetchMe(): Promise<{
