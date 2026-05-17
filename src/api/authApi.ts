@@ -203,6 +203,35 @@ export async function confirmPasswordReset(
   return res.data as { message: string }
 }
 
+/** Confirms the logged-in user's account password (admin-only destructive actions). */
+export async function verifyCurrentUserPassword(password: string): Promise<void> {
+  const trimmed = password.trim()
+  if (!trimmed) throw new Error('أدخل كلمة مرور المدير')
+
+  const paths = ['/api/auth/verify-password', '/api/auth/password/verify']
+  let saw404 = false
+
+  for (const path of paths) {
+    try {
+      await api.post(path, { password: trimmed })
+      return
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { status?: number; data?: { message?: string } } }
+      const status = axiosErr.response?.status
+      if (status === 404) {
+        saw404 = true
+        continue
+      }
+      const message = axiosErr.response?.data?.message
+      throw new Error(message || 'كلمة مرور المدير غير صحيحة')
+    }
+  }
+
+  if (!saw404) {
+    throw new Error('تعذر التحقق من كلمة المرور')
+  }
+}
+
 export async function fetchMe(): Promise<{
   id: string
   email: string

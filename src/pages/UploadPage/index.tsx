@@ -27,6 +27,7 @@ import {
   ListItemIcon,
   Checkbox,
   LinearProgress,
+  Alert,
 } from '@mui/material'
 import FolderIcon from '@mui/icons-material/Folder'
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile'
@@ -52,6 +53,7 @@ import ReplayIcon from '@mui/icons-material/Replay'
 import EncryptedUploadDropzone, {
   type SelectedUploadFile,
 } from '../../components/EncryptedUploadDropzone'
+import { PasswordInput } from '../../components/login/PasswordInput'
 import EncryptedFileViewer from '../../components/EncryptedFileViewer'
 import { useAuth } from '../../contexts/AuthContext'
 import { API_ENV, TOKEN_STORAGE_KEY } from '../../config/api'
@@ -1598,6 +1600,7 @@ function FolderItem({
   onDownload,
   isDeleting,
   isDownloading,
+  canDelete,
 }: {
   folderPath: string
   onClick: () => void
@@ -1605,6 +1608,7 @@ function FolderItem({
   onDownload: (folderPath: string) => void
   isDeleting?: boolean
   isDownloading?: boolean
+  canDelete?: boolean
 }) {
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
@@ -1686,22 +1690,24 @@ function FolderItem({
             </Button>
           </span>
         </Tooltip>
-        <Tooltip title="حذف المجلد">
-          <span style={{ display: 'inline-flex' }}>
-            <Button
-              size="small"
-              variant="text"
-              onClick={e => {
-                e.stopPropagation()
-                onDelete(folderPath)
-              }}
-              disabled={isDeleting || isDownloading}
-              sx={{ borderRadius: 999, minWidth: 'auto', p: 1, color: '#666' }}
-            >
-              {isDeleting ? <CircularProgress size={20} /> : <DeleteIcon />}
-            </Button>
-          </span>
-        </Tooltip>
+        {canDelete && (
+          <Tooltip title="حذف المجلد (مدير)">
+            <span style={{ display: 'inline-flex' }}>
+              <Button
+                size="small"
+                variant="text"
+                onClick={e => {
+                  e.stopPropagation()
+                  onDelete(folderPath)
+                }}
+                disabled={isDeleting || isDownloading}
+                sx={{ borderRadius: 999, minWidth: 'auto', p: 1, color: '#666' }}
+              >
+                {isDeleting ? <CircularProgress size={20} /> : <DeleteIcon />}
+              </Button>
+            </span>
+          </Tooltip>
+        )}
       </Box>
     </ListItem>
   )
@@ -1715,6 +1721,7 @@ function FolderItemGrid({
   onDownload,
   isDeleting,
   isDownloading,
+  canDelete,
 }: {
   folderPath: string
   onClick: () => void
@@ -1722,6 +1729,7 @@ function FolderItemGrid({
   onDownload: (folderPath: string) => void
   isDeleting?: boolean
   isDownloading?: boolean
+  canDelete?: boolean
 }) {
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
@@ -1818,22 +1826,24 @@ function FolderItemGrid({
             </Button>
           </span>
         </Tooltip>
-        <Tooltip title="حذف المجلد">
-          <span style={{ display: 'inline-flex' }}>
-            <Button
-              size="small"
-              variant="text"
-              onClick={e => {
-                e.stopPropagation()
-                onDelete(folderPath)
-              }}
-              disabled={isDeleting || isDownloading}
-              sx={{ borderRadius: 999, minWidth: 'auto', p: 1, color: '#666' }}
-            >
-              {isDeleting ? <CircularProgress size={20} /> : <DeleteIcon />}
-            </Button>
-          </span>
-        </Tooltip>
+        {canDelete && (
+          <Tooltip title="حذف المجلد (مدير)">
+            <span style={{ display: 'inline-flex' }}>
+              <Button
+                size="small"
+                variant="text"
+                onClick={e => {
+                  e.stopPropagation()
+                  onDelete(folderPath)
+                }}
+                disabled={isDeleting || isDownloading}
+                sx={{ borderRadius: 999, minWidth: 'auto', p: 1, color: '#666' }}
+              >
+                {isDeleting ? <CircularProgress size={20} /> : <DeleteIcon />}
+              </Button>
+            </span>
+          </Tooltip>
+        )}
       </Box>
     </Card>
   )
@@ -2787,6 +2797,15 @@ export default function UploadPage() {
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
   const [creatingFolder, setCreatingFolder] = useState(false)
+
+  // Admin folder delete confirmation
+  const [folderPendingDelete, setFolderPendingDelete] = useState<string | null>(null)
+  const [folderDeletePassword, setFolderDeletePassword] = useState('')
+  const [folderDeletePasswordVisible, setFolderDeletePasswordVisible] = useState(false)
+  const [folderDeleteError, setFolderDeleteError] = useState<string | null>(null)
+  const [folderDeleteSubmitting, setFolderDeleteSubmitting] = useState(false)
+
+  const isWorkspaceAdmin = Boolean(user?.isAdmin)
 
   // Privacy controls state
   const [showPrivacyModal, setShowPrivacyModal] = useState(false)
@@ -3771,12 +3790,37 @@ export default function UploadPage() {
     }
   }
 
-  async function handleDeleteFolder(folderPath: string) {
-    if (
-      !confirm(
-        'هل أنت متأكد من حذف هذا المجلد؟ سيتم نقل جميع الملفات بداخله (بما فيها المجلدات الفرعية) إلى سلة المهملات.'
-      )
-    ) {
+  function closeFolderDeleteDialog() {
+    if (folderDeleteSubmitting) return
+    setFolderPendingDelete(null)
+    setFolderDeletePassword('')
+    setFolderDeleteError(null)
+    setFolderDeletePasswordVisible(false)
+  }
+
+  function requestDeleteFolder(folderPath: string) {
+    if (!isWorkspaceAdmin) {
+      showToastNotification('حذف المجلدات متاح للمدير فقط', 'error')
+      return
+    }
+    setFolderDeleteError(null)
+    setFolderDeletePassword('')
+    setFolderPendingDelete(folderPath)
+  }
+
+  async function confirmDeleteFolder() {
+    const folderPath = folderPendingDelete
+    if (!folderPath) return
+
+    if (!isWorkspaceAdmin) {
+      showToastNotification('حذف المجلدات متاح للمدير فقط', 'error')
+      closeFolderDeleteDialog()
+      return
+    }
+
+    const password = folderDeletePassword.trim()
+    if (!password) {
+      setFolderDeleteError('أدخل كلمة مرور حساب المدير')
       return
     }
 
@@ -3786,6 +3830,8 @@ export default function UploadPage() {
       return
     }
 
+    setFolderDeleteError(null)
+    setFolderDeleteSubmitting(true)
     setFolderNameError(null)
     setDeletingFolders(prev => new Set(prev).add(folderPath))
     showToastNotification('جاري حذف المجلد ومحتوياته...', 'info')
@@ -3794,7 +3840,10 @@ export default function UploadPage() {
       const { trashedFiles } = await deleteWorkspaceFolder({
         folderPath,
         workspaceId,
+        adminPassword: password,
       })
+
+      closeFolderDeleteDialog()
 
       setFoldersHere(prev =>
         prev.filter(p => {
@@ -3835,6 +3884,7 @@ export default function UploadPage() {
       const err = e as { message?: string; response?: { data?: { message?: string } } }
       const msg =
         err.response?.data?.message || err.message || 'فشل حذف المجلد'
+      setFolderDeleteError(msg)
       showToastNotification(`فشل حذف المجلد: ${msg}`, 'error')
     } finally {
       setDeletingFolders(prev => {
@@ -3842,6 +3892,7 @@ export default function UploadPage() {
         next.delete(folderPath)
         return next
       })
+      setFolderDeleteSubmitting(false)
     }
   }
 
@@ -4927,8 +4978,9 @@ export default function UploadPage() {
                                       // Update URL query parameter to match the new path
                                       setSearchParams({ folder: fullPath })
                                     }}
-                                    onDelete={handleDeleteFolder}
+                                    onDelete={requestDeleteFolder}
                                     onDownload={handleDownloadFolder}
+                                    canDelete={isWorkspaceAdmin}
                                     isDeleting={deletingFolders.has(fullPath)}
                                     isDownloading={downloadingFolders.has(fullPath)}
                                   />
@@ -4961,8 +5013,9 @@ export default function UploadPage() {
                                       // Update URL query parameter to match the new path
                                       setSearchParams({ folder: fullPath })
                                     }}
-                                    onDelete={handleDeleteFolder}
+                                    onDelete={requestDeleteFolder}
                                     onDownload={handleDownloadFolder}
+                                    canDelete={isWorkspaceAdmin}
                                     isDeleting={deletingFolders.has(fullPath)}
                                     isDownloading={downloadingFolders.has(fullPath)}
                                   />
@@ -5142,6 +5195,58 @@ export default function UploadPage() {
           encryptionSalt={encryptedViewerFile.encryptionSalt}
         />
       )}
+
+      {/* Admin folder delete confirmation */}
+      <Dialog
+        open={!!folderPendingDelete}
+        onClose={closeFolderDeleteDialog}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            backgroundColor: 'background.default',
+            backgroundImage: 'none',
+          },
+        }}
+      >
+        <DialogTitle>تأكيد حذف المجلد</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            أنت على وشك حذف المجلد{' '}
+            <strong>
+              {folderPendingDelete?.split('/').filter(Boolean).pop() || folderPendingDelete}
+            </strong>
+            . سيتم نقل جميع الملفات بداخله (بما فيها المجلدات الفرعية) إلى سلة المهملات. أدخل كلمة
+            مرور حساب المدير للمتابعة.
+          </Typography>
+          {folderDeleteError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {folderDeleteError}
+            </Alert>
+          )}
+          <PasswordInput
+            value={folderDeletePassword}
+            onChange={setFolderDeletePassword}
+            showPassword={folderDeletePasswordVisible}
+            onToggleVisibility={() => setFolderDeletePasswordVisible(v => !v)}
+            label="كلمة مرور المدير"
+            autoComplete="current-password"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeFolderDeleteDialog} disabled={folderDeleteSubmitting}>
+            إلغاء
+          </Button>
+          <Button
+            onClick={() => void confirmDeleteFolder()}
+            variant="contained"
+            color="error"
+            disabled={folderDeleteSubmitting || !folderDeletePassword.trim()}
+          >
+            {folderDeleteSubmitting ? 'جاري الحذف...' : 'تأكيد الحذف'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Create Folder Modal */}
       <Dialog

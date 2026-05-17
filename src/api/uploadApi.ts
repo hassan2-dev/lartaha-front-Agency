@@ -4,6 +4,7 @@ import { API_ENV, TOKEN_STORAGE_KEY } from '../config/api'
 import { decryptEncryptedBlobForDownload } from '../lib/encryption'
 import { subscribeRealtime } from './realtimeApi'
 import { isHiddenChatUploadPath, isHiddenChatRootFolder } from '../utils/upload'
+import { verifyCurrentUserPassword } from './authApi'
 
 export type UploadResult = {
   ok?: boolean
@@ -602,8 +603,14 @@ export async function restoreFileFromTrash(key: string): Promise<TrashResult> {
   return res.data as TrashResult
 }
 
-export async function bulkMoveToTrash(keys: string[]): Promise<TrashResult> {
-  const res = await api.post('/api/files/trash/bulk', { keys })
+export async function bulkMoveToTrash(
+  keys: string[],
+  options?: { adminPassword?: string }
+): Promise<TrashResult> {
+  const body: { keys: string[]; password?: string } = { keys }
+  const password = options?.adminPassword?.trim()
+  if (password) body.password = password
+  const res = await api.post('/api/files/trash/bulk', body)
   return res.data as TrashResult
 }
 
@@ -996,7 +1003,19 @@ async function listAllKeysForFolderDelete(
   return [...keySet]
 }
 
-async function deleteFolderViaApi(relativePath: string): Promise<boolean> {
+function withAdminPassword(
+  payload: Record<string, unknown>,
+  adminPassword?: string
+): Record<string, unknown> {
+  const password = adminPassword?.trim()
+  if (!password) return payload
+  return { ...payload, password }
+}
+
+async function deleteFolderViaApi(
+  relativePath: string,
+  adminPassword?: string
+): Promise<boolean> {
   const norm = normalizeFolderDownloadPath(relativePath)
   if (!norm) return false
 
@@ -1005,14 +1024,14 @@ async function deleteFolderViaApi(relativePath: string): Promise<boolean> {
   const parentPath = segments.slice(0, -1).join('/')
 
   const payloads: Record<string, unknown>[] = [
-    { path: norm, recursive: true },
-    { path: `${norm}/`, recursive: true },
+    withAdminPassword({ path: norm, recursive: true }, adminPassword),
+    withAdminPassword({ path: `${norm}/`, recursive: true }, adminPassword),
   ]
   if (parentPath) {
-    payloads.push({ path: parentPath, name, recursive: true })
-    payloads.push({ parentPath, name, recursive: true })
+    payloads.push(withAdminPassword({ path: parentPath, name, recursive: true }, adminPassword))
+    payloads.push(withAdminPassword({ parentPath, name, recursive: true }, adminPassword))
   } else {
-    payloads.push({ name, recursive: true })
+    payloads.push(withAdminPassword({ name, recursive: true }, adminPassword))
   }
 
   for (const data of payloads) {
@@ -1020,18 +1039,30 @@ async function deleteFolderViaApi(relativePath: string): Promise<boolean> {
       await api.delete('/api/folders', { data })
       return true
     } catch (err: unknown) {
-      const status = (err as { response?: { status?: number } }).response?.status
+      const axiosErr = err as { response?: { status?: number; data?: { message?: string } } }
+      const status = axiosErr.response?.status
+      if (status === 401 || status === 403) {
+        throw new Error(axiosErr.response?.data?.message || 'كلمة مرور المدير غير صحيحة')
+      }
       if (status === 404 || status === 400) continue
     }
   }
 
   try {
     await api.delete('/api/folders', {
-      params: { path: norm, recursive: 'true' },
+      params: {
+        path: norm,
+        recursive: 'true',
+        ...(adminPassword?.trim() ? { password: adminPassword.trim() } : {}),
+      },
     })
     return true
   } catch (err: unknown) {
-    const status = (err as { response?: { status?: number } }).response?.status
+    const axiosErr = err as { response?: { status?: number; data?: { message?: string } } }
+    const status = axiosErr.response?.status
+    if (status === 401 || status === 403) {
+      throw new Error(axiosErr.response?.data?.message || 'كلمة مرور المدير غير صحيحة')
+    }
     return status === 404
   }
 }
@@ -1342,10 +1373,16 @@ export type FolderZipProgress = {
 export async function deleteWorkspaceFolder(options: {
   folderPath: string
   workspaceId: string
+  adminPassword: string
   onProgress?: (message: string) => void
 }): Promise<{ trashedFiles: number }> {
   const workspaceId = options.workspaceId.trim()
   if (!workspaceId) throw new Error('معرّف مساحة العمل غير متوفر')
+
+  const adminPassword = options.adminPassword.trim()
+  if (!adminPassword) throw new Error('كلمة مرور المدير مطلوبة')
+
+  await verifyCurrentUserPassword(adminPassword)
 
   const relativePath = normalizeFolderDownloadPath(options.folderPath)
   if (!relativePath) throw new Error('مسار المجلد غير صالح')
@@ -1363,7 +1400,7 @@ export async function deleteWorkspaceFolder(options: {
     options.onProgress?.(
       `جاري نقل الملفات إلى سلة المهملات... ${Math.min(i + batch.length, fileKeys.length)} / ${fileKeys.length}`
     )
-    await bulkMoveToTrash(batch)
+    await bulkMoveToTrash(batch, { adminPassword })
   }
 
   if (markerKeys.length > 0) {
@@ -1371,7 +1408,7 @@ export async function deleteWorkspaceFolder(options: {
     for (let i = 0; i < markerKeys.length; i += BATCH) {
       const batch = markerKeys.slice(i, i + BATCH)
       try {
-        await bulkMoveToTrash(batch)
+        await bulkMoveToTrash(batch, { adminPassword })
       } catch {
         for (const marker of batch) {
           try {
@@ -1385,7 +1422,7 @@ export async function deleteWorkspaceFolder(options: {
   }
 
   options.onProgress?.('جاري إزالة المجلد...')
-  const folderRemoved = await deleteFolderViaApi(relativePath)
+  const folderRemoved = await deleteFolderViaApi(relativePath, adminPassword)
 
   rememberDeletedExplorerFolder(relativePath)
 
