@@ -203,32 +203,37 @@ export async function confirmPasswordReset(
   return res.data as { message: string }
 }
 
-/** Confirms the logged-in user's account password (admin-only destructive actions). */
-export async function verifyCurrentUserPassword(password: string): Promise<void> {
+export type AccountIdentity = {
+  email?: string
+  username?: string
+}
+
+/**
+ * Confirms the logged-in admin's account password (not file encryption password).
+ * Backend: POST /api/auth/verify-password with Bearer token.
+ */
+export async function verifyCurrentUserPassword(
+  password: string,
+  _identity?: AccountIdentity
+): Promise<void> {
   const trimmed = password.trim()
   if (!trimmed) throw new Error('أدخل كلمة مرور المدير')
 
-  const paths = ['/api/auth/verify-password', '/api/auth/password/verify']
-  let saw404 = false
+  try {
+    await api.post('/api/auth/verify-password', { password: trimmed })
+    return
+  } catch (err: unknown) {
+    const axiosErr = err as { response?: { status?: number; data?: { message?: string } } }
+    const status = axiosErr.response?.status
+    const message = axiosErr.response?.data?.message
 
-  for (const path of paths) {
-    try {
-      await api.post(path, { password: trimmed })
-      return
-    } catch (err: unknown) {
-      const axiosErr = err as { response?: { status?: number; data?: { message?: string } } }
-      const status = axiosErr.response?.status
-      if (status === 404) {
-        saw404 = true
-        continue
-      }
-      const message = axiosErr.response?.data?.message
+    if (status === 404) {
+      throw new Error('التحقق من كلمة المرور غير متوفر على الخادم — حدّث الباك إند')
+    }
+    if (status === 401 || status === 403) {
       throw new Error(message || 'كلمة مرور المدير غير صحيحة')
     }
-  }
-
-  if (!saw404) {
-    throw new Error('تعذر التحقق من كلمة المرور')
+    throw new Error(message || 'تعذر التحقق من كلمة المرور')
   }
 }
 

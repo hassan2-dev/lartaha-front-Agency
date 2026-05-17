@@ -75,6 +75,11 @@ import {
   relativeFolderPathUnderDeleted,
   storageKeyUnderDeletedFolder,
   filterFoldersForExplorer,
+  filterExplorerObjects,
+  fetchTrashedOriginalKeys,
+  loadPersistedTrashedKeys,
+  persistTrashedKeys,
+  addPersistedTrashedKeys,
 } from '../../api/uploadApi'
 import { subscribeRealtime } from '../../api/realtimeApi'
 import { api } from '../../api/http'
@@ -102,17 +107,6 @@ function fmtBytes(bytes: number | undefined) {
   const idx = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)))
   const value = bytes / Math.pow(1024, idx)
   return `${value.toFixed(value >= 10 || idx === 0 ? 0 : 1)} ${units[idx]}`
-}
-
-function isHiddenChatUploadPath(pathOrKey: string) {
-  const normalizedPath = String(pathOrKey || '').replace(/^\/+|\/+$/g, '')
-  if (!normalizedPath) return false
-  if (normalizedPath.includes('/.chat-files/')) return true
-
-  const pathParts = normalizedPath.split('/').filter(Boolean)
-  if (pathParts[0] === 'upload') return true
-  if (pathParts[0] === 'chat') return true
-  return pathParts.length >= 2 && pathParts[1] === 'chat'
 }
 
 function buildVideoThumbnailKeyFromFileKey(fileKey: string) {
@@ -3206,6 +3200,31 @@ export default function UploadPage() {
   const deepLinkGlobalSearchRef = useRef<Record<string, boolean>>({})
   /** يمنع تأثير الرابط العميق من استدعاء loadMore أثناء أول جلب (قبل أن يصبح loadingExplorer في الـ render true). */
   const explorerResetInFlightRef = useRef(false)
+  const trashedOriginalKeysRef = useRef<Set<string>>(new Set())
+
+  const refreshTrashedKeysCache = useCallback(async () => {
+    const workspaceId = user?.workspaceId?.trim()
+    try {
+      const keys = await fetchTrashedOriginalKeys()
+      trashedOriginalKeysRef.current = keys
+      if (workspaceId) persistTrashedKeys(workspaceId, keys)
+    } catch {
+      if (workspaceId && trashedOriginalKeysRef.current.size === 0) {
+        trashedOriginalKeysRef.current = loadPersistedTrashedKeys(workspaceId)
+      }
+    }
+  }, [user?.workspaceId])
+
+  useEffect(() => {
+    const workspaceId = user?.workspaceId?.trim()
+    if (!workspaceId) return
+    trashedOriginalKeysRef.current = loadPersistedTrashedKeys(workspaceId)
+    void refreshTrashedKeysCache().then(() => {
+      if (fetchExplorerRef.current) {
+        fetchExplorerRef.current(true)
+      }
+    })
+  }, [user?.workspaceId, refreshTrashedKeysCache])
 
   // Listen for retry-download events dispatched from DownloadProgressDialog
   useEffect(() => {
@@ -3467,7 +3486,12 @@ export default function UploadPage() {
     setDeletingFiles(prev => new Set(prev).add(key))
     try {
       await moveFileToTrash(key)
+      const ws = user?.workspaceId?.trim()
+      if (ws) addPersistedTrashedKeys(ws, [key])
+      trashedOriginalKeysRef.current.add(key.replace(/^\/+/, ''))
+      setFilesHere(prev => prev.filter(file => file.key !== key))
       showToastNotification('تم نقل الملف إلى سلة المهملات بنجاح', 'success')
+      await refreshTrashedKeysCache()
       await fetchExplorer()
     } catch (e: unknown) {
       const err = e as { message?: string; response?: { data?: { message?: string } } }
@@ -3491,7 +3515,9 @@ export default function UploadPage() {
 
     try {
       await restoreFileFromTrash(key)
+      trashedOriginalKeysRef.current.delete(key.replace(/^\/+/, ''))
       showToastNotification('تم استعادة الملف بنجاح', 'success')
+      await refreshTrashedKeysCache()
       await fetchTrashFiles()
       await fetchExplorer()
     } catch (e: unknown) {
@@ -3537,8 +3563,15 @@ export default function UploadPage() {
     try {
       const keys = Array.from(selectedForBulk)
       await bulkMoveToTrash(keys)
+      const ws = user?.workspaceId?.trim()
+      if (ws) addPersistedTrashedKeys(ws, keys)
+      for (const key of keys) {
+        trashedOriginalKeysRef.current.add(key.replace(/^\/+/, ''))
+      }
+      setFilesHere(prev => prev.filter(file => !keys.includes(file.key)))
       showToastNotification(`تم نقل ${keys.length} ملفات إلى سلة المهملات`, 'success')
       setSelectedForBulk(new Set())
+      await refreshTrashedKeysCache()
       await fetchExplorer()
     } catch (e: unknown) {
       const err = e as { message?: string; response?: { data?: { message?: string } } }
@@ -3584,8 +3617,12 @@ export default function UploadPage() {
     try {
       const keys = Array.from(selectedForBulk)
       await bulkRestoreFromTrash(keys)
+      for (const key of keys) {
+        trashedOriginalKeysRef.current.delete(key.replace(/^\/+/, ''))
+      }
       showToastNotification(`تم استعادة ${keys.length} ملفات بنجاح`, 'success')
       setSelectedForBulk(new Set())
+      await refreshTrashedKeysCache()
       await fetchTrashFiles()
       await fetchExplorer()
     } catch (e: unknown) {
@@ -3859,11 +3896,13 @@ export default function UploadPage() {
         }
       }
 
-      const detail =
+      showToastNotification(
         trashedFiles > 0
-          ? ` (تم نقل ${trashedFiles} ملفاً إلى سلة المهملات)`
-          : ''
-      showToastNotification(`تم حذف المجلد بنجاح${detail}`, 'success')
+          ? `تم حذف المجلد (نُقل ${trashedFiles} ملفاً إلى سلة المهملات)`
+          : 'تم حذف المجلد ومحتوياته بنجاح',
+        'success'
+      )
+      await refreshTrashedKeysCache()
       if (escapePath !== null) {
         const prefixOverride = escapePath.trim()
           ? `uploads/${workspaceId}/${escapePath.trim()}`
@@ -4230,10 +4269,17 @@ export default function UploadPage() {
       }
 
       try {
+        if (reset) {
+          await refreshTrashedKeysCache()
+        }
+
         const limit = 50
         const continuationToken = reset ? undefined : continuationTokenOverride || undefined
         const res = await listUploadedObjects(effectivePrefix, limit, true, continuationToken)
-        const visibleObjects = (res.objects ?? []).filter(obj => !isHiddenChatUploadPath(obj.key))
+        const visibleObjects = filterExplorerObjects(
+          res.objects ?? [],
+          trashedOriginalKeysRef.current
+        )
 
         if (reset) {
           // Filter out system folders like workspace-assets and workspace-logo
@@ -4286,7 +4332,7 @@ export default function UploadPage() {
         }
       }
     },
-    [currentPath, explorerPrefix]
+    [currentPath, explorerPrefix, refreshTrashedKeysCache]
   )
 
   // Keep fetchExplorerRef updated
@@ -5208,8 +5254,10 @@ export default function UploadPage() {
             <strong>
               {folderPendingDelete?.split('/').filter(Boolean).pop() || folderPendingDelete}
             </strong>
-            . سيتم نقل جميع الملفات بداخله (بما فيها المجلدات الفرعية) إلى سلة المهملات. أدخل كلمة
-            مرور حساب المدير للمتابعة.
+            . سيتم نقل جميع الملفات بداخله (بما فيها المجلدات الفرعية) إلى سلة المهملات.
+            <br />
+            أدخل <strong>كلمة مرور حساب المدير</strong> (نفس كلمة مرور تسجيل الدخول — وليست كلمة مرور
+            تشفير الملفات).
           </Typography>
           {folderDeleteError && (
             <Alert severity="error" sx={{ mb: 2 }}>
@@ -5221,7 +5269,7 @@ export default function UploadPage() {
             onChange={setFolderDeletePassword}
             showPassword={folderDeletePasswordVisible}
             onToggleVisibility={() => setFolderDeletePasswordVisible(v => !v)}
-            label="كلمة مرور المدير"
+            label="كلمة مرور تسجيل الدخول"
             autoComplete="current-password"
           />
         </DialogContent>

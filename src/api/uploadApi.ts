@@ -4,7 +4,7 @@ import { API_ENV, TOKEN_STORAGE_KEY } from '../config/api'
 import { decryptEncryptedBlobForDownload } from '../lib/encryption'
 import { subscribeRealtime } from './realtimeApi'
 import { isHiddenChatUploadPath, isHiddenChatRootFolder } from '../utils/upload'
-import { verifyCurrentUserPassword } from './authApi'
+import { verifyCurrentUserPassword, type AccountIdentity } from './authApi'
 
 export type UploadResult = {
   ok?: boolean
@@ -29,6 +29,9 @@ export type ListObjectsResult = {
     encryptionEnabled?: boolean
     encryptionIv?: string
     encryptionSalt?: string
+    isTrashed?: boolean
+    deletedAt?: string | null
+    trashKey?: string | null
   }>
   pagination?: {
     hasMore: boolean
@@ -574,6 +577,8 @@ export type ListObjectsParams = {
   limit?: number
   delimiter?: boolean
   continuationToken?: string
+  /** When supported by backend, omits soft-deleted files from list results. */
+  excludeTrashed?: boolean
 }
 
 export async function listUploadedObjects(
@@ -582,7 +587,7 @@ export async function listUploadedObjects(
   delimiter: boolean = true,
   continuationToken?: string
 ): Promise<ListObjectsResult> {
-  const params: ListObjectsParams = { prefix, limit, delimiter }
+  const params: ListObjectsParams = { prefix, limit, delimiter, excludeTrashed: true }
   if (continuationToken) {
     params.continuationToken = continuationToken
   }
@@ -622,6 +627,85 @@ export async function bulkRestoreFromTrash(keys: string[]): Promise<TrashResult>
 export async function listTrashFiles(): Promise<ListTrashResult> {
   const res = await api.get('/api/files/trash')
   return res.data as ListTrashResult
+}
+
+export function normalizeObjectStorageKey(key: string): string {
+  return String(key || '').replace(/^\/+/, '')
+}
+
+/** Objects that should not appear in the main file explorer (soft-deleted, etc.). */
+export function shouldHideFromExplorerList(obj: {
+  key: string
+  isTrashed?: boolean
+  deletedAt?: string | null
+}): boolean {
+  const key = normalizeObjectStorageKey(obj.key)
+  if (!key) return true
+  if (obj.isTrashed === true) return true
+  if (obj.deletedAt) return true
+  if (key.includes('/.trash/') || key.startsWith('trash/')) return true
+  return false
+}
+
+export async function fetchTrashedOriginalKeys(): Promise<Set<string>> {
+  const res = await listTrashFiles()
+  const keys = new Set<string>()
+  for (const file of res.files ?? []) {
+    const original = normalizeObjectStorageKey(file.originalKey)
+    if (original) keys.add(original)
+    const trash = file.trashKey ? normalizeObjectStorageKey(file.trashKey) : ''
+    if (trash) keys.add(trash)
+  }
+  return keys
+}
+
+const TRASHED_KEYS_CACHE_PREFIX = 'larthaa_trashed_keys_'
+
+export function loadPersistedTrashedKeys(workspaceId: string): Set<string> {
+  if (typeof window === 'undefined' || !workspaceId.trim()) return new Set()
+  try {
+    const raw = sessionStorage.getItem(`${TRASHED_KEYS_CACHE_PREFIX}${workspaceId.trim()}`)
+    if (!raw) return new Set()
+    const parsed = JSON.parse(raw) as string[]
+    return new Set(parsed.filter(Boolean))
+  } catch {
+    return new Set()
+  }
+}
+
+export function persistTrashedKeys(workspaceId: string, keys: Set<string>): void {
+  if (typeof window === 'undefined' || !workspaceId.trim()) return
+  try {
+    sessionStorage.setItem(
+      `${TRASHED_KEYS_CACHE_PREFIX}${workspaceId.trim()}`,
+      JSON.stringify([...keys])
+    )
+  } catch {
+    // ignore quota errors
+  }
+}
+
+export function addPersistedTrashedKeys(workspaceId: string, keys: string[]): void {
+  const set = loadPersistedTrashedKeys(workspaceId)
+  for (const key of keys) {
+    const normalized = normalizeObjectStorageKey(key)
+    if (normalized) set.add(normalized)
+  }
+  persistTrashedKeys(workspaceId, set)
+}
+
+export function filterExplorerObjects<
+  T extends { key: string; isTrashed?: boolean; deletedAt?: string | null },
+>(objects: T[], trashedOriginalKeys?: Set<string>): T[] {
+  return objects.filter(obj => {
+    if (isHiddenChatUploadPath(obj.key)) return false
+    if (shouldHideFromExplorerList(obj)) return false
+    const normalized = normalizeObjectStorageKey(obj.key)
+    if (trashedOriginalKeys?.has(normalized) || trashedOriginalKeys?.has(obj.key)) {
+      return false
+    }
+    return true
+  })
 }
 
 export type BulkPrivacyResult = {
@@ -899,18 +983,6 @@ export function filterFoldersForExplorer(folders: string[], listCurrentPath: str
   })
 }
 
-function folderMarkerStorageKeys(workspaceId: string, relativePath: string): string[] {
-  const ws = workspaceId.trim()
-  const rel = normalizeFolderDownloadPath(relativePath)
-  if (!ws || !rel) return []
-  const base = `uploads/${ws}/${rel}`.replace(/\/+$/, '')
-  return [`${base}/`, base]
-}
-
-function isFolderMarkerKey(key: string): boolean {
-  return String(key || '').replace(/^\/+/, '').endsWith('/')
-}
-
 function buildFolderDownloadUrl(baseUrl: string, folderPath: string, token: string): string {
   const params = new URLSearchParams({
     path: folderPath,
@@ -959,111 +1031,74 @@ export async function listAllObjectsUnderPrefix(
   return all
 }
 
-/** All storage keys under a prefix (thumbnails, markers, subfolders) — used when deleting a folder. */
-async function listAllKeysForFolderDelete(
-  storagePrefix: string,
-  workspaceId: string,
-  relativePath: string
-): Promise<string[]> {
-  const prefix = storagePrefix.endsWith('/') ? storagePrefix : `${storagePrefix}/`
-  const keySet = new Set<string>()
-
-  for (const marker of folderMarkerStorageKeys(workspaceId, relativePath)) {
-    keySet.add(marker)
+function throwIfAdminPasswordRejected(err: unknown): void {
+  const axiosErr = err as { response?: { status?: number; data?: { message?: string } } }
+  const status = axiosErr.response?.status
+  if (status === 401 || status === 403) {
+    throw new Error(axiosErr.response?.data?.message || 'كلمة مرور المدير غير صحيحة')
   }
-
-  let continuation: string | undefined
-  do {
-    const page = await listUploadedObjects(prefix, 200, false, continuation)
-    for (const obj of page.objects ?? []) {
-      const key = obj.key?.trim()
-      if (key && !isHiddenChatUploadPath(key)) keySet.add(key)
-    }
-    continuation =
-      page.pagination?.hasMore && page.pagination.nextContinuationToken
-        ? page.pagination.nextContinuationToken
-        : undefined
-  } while (continuation)
-
-  let folderContinuation: string | undefined
-  do {
-    const page = await listUploadedObjects(prefix, 200, true, folderContinuation)
-    for (const folder of page.folders ?? []) {
-      const entry = folder.startsWith('/') ? folder.slice(1) : folder
-      const markerKey = entry.endsWith('/') ? `${prefix}${entry}` : `${prefix}${entry}/`
-      const normalized = markerKey.replace(/\/{2,}/g, '/')
-      if (!isHiddenChatUploadPath(normalized)) keySet.add(normalized)
-    }
-    folderContinuation =
-      page.pagination?.hasMore && page.pagination.nextContinuationToken
-        ? page.pagination.nextContinuationToken
-        : undefined
-  } while (folderContinuation)
-
-  return [...keySet]
 }
 
-function withAdminPassword(
-  payload: Record<string, unknown>,
-  adminPassword?: string
-): Record<string, unknown> {
-  const password = adminPassword?.trim()
-  if (!password) return payload
-  return { ...payload, password }
-}
-
-async function deleteFolderViaApi(
-  relativePath: string,
-  adminPassword?: string
-): Promise<boolean> {
+function buildFolderDeletePayload(relativePath: string, adminPassword: string) {
   const norm = normalizeFolderDownloadPath(relativePath)
-  if (!norm) return false
-
   const segments = norm.split('/').filter(Boolean)
   const name = segments[segments.length - 1] || norm
-  const parentPath = segments.slice(0, -1).join('/')
-
-  const payloads: Record<string, unknown>[] = [
-    withAdminPassword({ path: norm, recursive: true }, adminPassword),
-    withAdminPassword({ path: `${norm}/`, recursive: true }, adminPassword),
-  ]
-  if (parentPath) {
-    payloads.push(withAdminPassword({ path: parentPath, name, recursive: true }, adminPassword))
-    payloads.push(withAdminPassword({ parentPath, name, recursive: true }, adminPassword))
-  } else {
-    payloads.push(withAdminPassword({ name, recursive: true }, adminPassword))
+  return {
+    path: norm,
+    name,
+    recursive: true,
+    password: adminPassword.trim(),
   }
+}
 
-  for (const data of payloads) {
+async function deleteFolderViaFetch(relativePath: string, adminPassword: string): Promise<boolean> {
+  const baseUrl = API_ENV.apiBaseUrl?.trim()
+  const token = localStorage.getItem(TOKEN_STORAGE_KEY)
+  if (!baseUrl || !token) return false
+
+  const body = buildFolderDeletePayload(relativePath, adminPassword)
+  const response = await fetch(`${baseUrl}/api/folders`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (response.ok) return true
+
+  if (response.status === 401 || response.status === 403) {
+    let message = 'كلمة مرور المدير غير صحيحة'
     try {
-      await api.delete('/api/folders', { data })
-      return true
-    } catch (err: unknown) {
-      const axiosErr = err as { response?: { status?: number; data?: { message?: string } } }
-      const status = axiosErr.response?.status
-      if (status === 401 || status === 403) {
-        throw new Error(axiosErr.response?.data?.message || 'كلمة مرور المدير غير صحيحة')
-      }
-      if (status === 404 || status === 400) continue
+      const json = (await response.json()) as { message?: string }
+      if (json?.message) message = json.message
+    } catch {
+      // ignore parse errors
     }
+    throw new Error(message)
   }
+
+  return false
+}
+
+/** Server-side recursive folder delete (admin + password required). */
+async function deleteFolderViaApi(relativePath: string, adminPassword: string): Promise<void> {
+  const norm = normalizeFolderDownloadPath(relativePath)
+  if (!norm) throw new Error('مسار المجلد غير صالح')
+
+  const payload = buildFolderDeletePayload(relativePath, adminPassword)
 
   try {
-    await api.delete('/api/folders', {
-      params: {
-        path: norm,
-        recursive: 'true',
-        ...(adminPassword?.trim() ? { password: adminPassword.trim() } : {}),
-      },
-    })
-    return true
+    await api.delete('/api/folders', { data: payload })
+    return
   } catch (err: unknown) {
+    throwIfAdminPasswordRejected(err)
     const axiosErr = err as { response?: { status?: number; data?: { message?: string } } }
-    const status = axiosErr.response?.status
-    if (status === 401 || status === 403) {
-      throw new Error(axiosErr.response?.data?.message || 'كلمة مرور المدير غير صحيحة')
-    }
-    return status === 404
+    const ok = await deleteFolderViaFetch(relativePath, adminPassword)
+    if (ok) return
+    const message = axiosErr.response?.data?.message
+    throw new Error(message || 'فشل حذف المجلد من الخادم')
   }
 }
 
@@ -1374,6 +1409,7 @@ export async function deleteWorkspaceFolder(options: {
   folderPath: string
   workspaceId: string
   adminPassword: string
+  accountIdentity?: AccountIdentity
   onProgress?: (message: string) => void
 }): Promise<{ trashedFiles: number }> {
   const workspaceId = options.workspaceId.trim()
@@ -1382,53 +1418,17 @@ export async function deleteWorkspaceFolder(options: {
   const adminPassword = options.adminPassword.trim()
   if (!adminPassword) throw new Error('كلمة مرور المدير مطلوبة')
 
-  await verifyCurrentUserPassword(adminPassword)
+  await verifyCurrentUserPassword(adminPassword, options.accountIdentity)
 
   const relativePath = normalizeFolderDownloadPath(options.folderPath)
   if (!relativePath) throw new Error('مسار المجلد غير صالح')
 
-  const storagePrefix = `uploads/${workspaceId}/${relativePath}`
-  options.onProgress?.('جاري البحث عن الملفات داخل المجلد...')
-
-  const keys = await listAllKeysForFolderDelete(storagePrefix, workspaceId, relativePath)
-  const fileKeys = keys.filter(k => !isFolderMarkerKey(k))
-  const markerKeys = keys.filter(k => isFolderMarkerKey(k))
-
-  const BATCH = 100
-  for (let i = 0; i < fileKeys.length; i += BATCH) {
-    const batch = fileKeys.slice(i, i + BATCH)
-    options.onProgress?.(
-      `جاري نقل الملفات إلى سلة المهملات... ${Math.min(i + batch.length, fileKeys.length)} / ${fileKeys.length}`
-    )
-    await bulkMoveToTrash(batch, { adminPassword })
-  }
-
-  if (markerKeys.length > 0) {
-    options.onProgress?.('جاري إزالة علامات المجلدات...')
-    for (let i = 0; i < markerKeys.length; i += BATCH) {
-      const batch = markerKeys.slice(i, i + BATCH)
-      try {
-        await bulkMoveToTrash(batch, { adminPassword })
-      } catch {
-        for (const marker of batch) {
-          try {
-            await moveFileToTrash(marker)
-          } catch {
-            // Folder marker may only be removable via DELETE /api/folders
-          }
-        }
-      }
-    }
-  }
-
-  options.onProgress?.('جاري إزالة المجلد...')
-  const folderRemoved = await deleteFolderViaApi(relativePath, adminPassword)
+  options.onProgress?.('جاري حذف المجلد ومحتوياته على الخادم...')
+  await deleteFolderViaApi(relativePath, adminPassword)
 
   rememberDeletedExplorerFolder(relativePath)
 
-  void folderRemoved
-
-  return { trashedFiles: fileKeys.length }
+  return { trashedFiles: 0 }
 }
 
 /** Download folder as ZIP (client-side, includes subfolders). */
