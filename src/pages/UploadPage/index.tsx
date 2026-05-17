@@ -115,14 +115,6 @@ function isHiddenChatUploadPath(pathOrKey: string) {
   return pathParts.length >= 2 && pathParts[1] === 'chat'
 }
 
-function isHiddenChatRootFolder(folderPath: string, currentPath: string) {
-  const normalizedFolderPath = String(folderPath || '').replace(/^\/+|\/+$/g, '')
-  if (!normalizedFolderPath) return false
-  if (currentPath) return false
-  if (normalizedFolderPath === 'upload') return true
-  return /^[A-Za-z0-9_-]{10}$/.test(normalizedFolderPath)
-}
-
 function buildVideoThumbnailKeyFromFileKey(fileKey: string) {
   const safeKey = String(fileKey || '').replace(/^\/+/, '')
   if (!safeKey) return ''

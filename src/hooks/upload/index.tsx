@@ -13,10 +13,6 @@ import {
   listTrashFiles,
   fetchBulkPrivacySettings,
   downloadWorkspaceFolderZip,
-  deleteWorkspaceFolder,
-  escapePathAfterFolderDelete,
-  relativeFolderPathUnderDeleted,
-  storageKeyUnderDeletedFolder,
   filterFoldersForExplorer,
   bulkMoveToTrash,
   bulkRestoreFromTrash,
@@ -31,7 +27,6 @@ import type { SelectedUploadFile } from '../../components/EncryptedUploadDropzon
 import {
   filenameFromKey,
   getClientEncryptionKey,
-  isHiddenChatRootFolder,
   isHiddenChatUploadPath,
   setClientEncryptionKey,
   validateFileQuality,
@@ -42,7 +37,7 @@ const MAX_DOWNLOAD_RETRIES = 3
 // Download progress tracking functions - must be used within component context
 export default function useUpload() {
   const { user } = useAuth()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
 
   // Download progress — backed by global DownloadContext
   const { addDownload, updateDownload, downloads, abortControllers, pausedChunks } = useDownload()
@@ -335,7 +330,7 @@ export default function useUpload() {
 
   // Deletion loading states
   const [deletingFiles, setDeletingFiles] = useState<Set<string>>(new Set())
-  const [deletingFolders, setDeletingFolders] = useState<Set<string>>(new Set())
+  const [deletingFolders] = useState<Set<string>>(new Set())
 
   // Filter and sort state
   const [fileFilter, setFileFilter] = useState<'all' | 'images' | 'videos' | 'documents'>('all')
@@ -1252,78 +1247,15 @@ export default function useUpload() {
     }
   }
 
-  async function handleDeleteFolder(folderPath: string) {
-    if (
-      !confirm(
-        'هل أنت متأكد من حذف هذا المجلد؟ سيتم نقل جميع الملفات بداخله (بما فيها المجلدات الفرعية) إلى سلة المهملات.'
-      )
-    ) {
+  async function handleDeleteFolder(_folderPath: string) {
+    if (!user?.isAdmin) {
+      showToastNotification('حذف المجلدات متاح للمدير فقط', 'error')
       return
     }
-
-    const workspaceId = user?.workspaceId?.trim()
-    if (!workspaceId) {
-      showToastNotification('تعذر تحديد مساحة العمل', 'error')
-      return
-    }
-
-    setFolderNameError(null)
-    setDeletingFolders(prev => new Set(prev).add(folderPath))
-    showToastNotification('جاري حذف المجلد ومحتوياته...', 'info')
-
-    try {
-      const { trashedFiles } = await deleteWorkspaceFolder({
-        folderPath,
-        workspaceId,
-      })
-
-      setFoldersHere(prev =>
-        prev.filter(p => {
-          const cleaned = p.endsWith('/') ? p.slice(0, -1) : p
-          const fullPath = currentPath ? `${currentPath}/${cleaned}` : cleaned
-          return !relativeFolderPathUnderDeleted(fullPath, folderPath)
-        })
-      )
-      setFilesHere(prev =>
-        prev.filter(obj => !storageKeyUnderDeletedFolder(obj.key, workspaceId, folderPath))
-      )
-
-      const escapePath = escapePathAfterFolderDelete(currentPath, folderPath)
-      if (escapePath !== null) {
-        userInitiatedPathChangeRef.current = true
-        setCurrentPath(escapePath)
-        if (escapePath) {
-          setSearchParams({ folder: escapePath })
-        } else {
-          setSearchParams({})
-        }
-      }
-
-      const detail =
-        trashedFiles > 0
-          ? ` (تم نقل ${trashedFiles} ملفاً إلى سلة المهملات)`
-          : ''
-      showToastNotification(`تم حذف المجلد بنجاح${detail}`, 'success')
-      if (escapePath !== null) {
-        const prefixOverride = escapePath.trim()
-          ? `uploads/${workspaceId}/${escapePath.trim()}`
-          : `uploads/${workspaceId}`
-        await fetchExplorer(true, prefixOverride)
-      } else {
-        await fetchExplorer(true)
-      }
-    } catch (e: unknown) {
-      const err = e as { message?: string; response?: { data?: { message?: string } } }
-      const msg =
-        err.response?.data?.message || err.message || 'فشل حذف المجلد'
-      showToastNotification(`فشل حذف المجلد: ${msg}`, 'error')
-    } finally {
-      setDeletingFolders(prev => {
-        const next = new Set(prev)
-        next.delete(folderPath)
-        return next
-      })
-    }
+    showToastNotification(
+      'حذف المجلد يتطلب كلمة مرور المدير — استخدم صفحة الرفع الرئيسية',
+      'info'
+    )
   }
 
   async function handleDownloadFolder(folderPath: string) {
