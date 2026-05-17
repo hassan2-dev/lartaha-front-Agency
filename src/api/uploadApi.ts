@@ -3,6 +3,7 @@ import { api } from './http'
 import { API_ENV, TOKEN_STORAGE_KEY } from '../config/api'
 import { decryptEncryptedBlobForDownload } from '../lib/encryption'
 import { subscribeRealtime } from './realtimeApi'
+import { isHiddenChatUploadPath, isHiddenChatRootFolder } from '../utils/upload'
 
 export type UploadResult = {
   ok?: boolean
@@ -809,6 +810,100 @@ export function normalizeFolderDownloadPath(folderPath: string): string {
   return String(folderPath || '').replace(/^\/+|\/+$/g, '')
 }
 
+/** True when `candidatePath` is the deleted folder or nested under it. */
+export function relativeFolderPathUnderDeleted(
+  candidatePath: string,
+  deletedFolderPath: string
+): boolean {
+  const deleted = normalizeFolderDownloadPath(deletedFolderPath)
+  const candidate = normalizeFolderDownloadPath(candidatePath)
+  if (!deleted) return false
+  return candidate === deleted || candidate.startsWith(`${deleted}/`)
+}
+
+export function storageKeyUnderDeletedFolder(
+  storageKey: string,
+  workspaceId: string,
+  deletedFolderPath: string
+): boolean {
+  const ws = workspaceId.trim()
+  if (!ws) return false
+  const deleted = normalizeFolderDownloadPath(deletedFolderPath)
+  const base = `uploads/${ws}`
+  const prefix = deleted ? `${base}/${deleted}` : base
+  const key = String(storageKey || '').replace(/^\/+/, '')
+  return key === prefix || key.startsWith(`${prefix}/`)
+}
+
+export function parentRelativeFolderPath(relativePath: string): string {
+  const norm = normalizeFolderDownloadPath(relativePath)
+  if (!norm.includes('/')) return ''
+  return norm.split('/').slice(0, -1).join('/')
+}
+
+/** Parent path to open when the user is inside a folder that was deleted. */
+export function escapePathAfterFolderDelete(
+  currentPath: string,
+  deletedFolderPath: string
+): string | null {
+  if (!relativeFolderPathUnderDeleted(currentPath, deletedFolderPath)) return null
+  return parentRelativeFolderPath(deletedFolderPath)
+}
+
+/** Explorer-relative path for a folder row returned by the list API. */
+export function explorerFullPathFromFolderEntry(
+  folderEntry: string,
+  listCurrentPath: string
+): string {
+  const cleaned = String(folderEntry || '').replace(/\/+$/, '')
+  const current = normalizeFolderDownloadPath(listCurrentPath)
+  return current ? `${current}/${cleaned}` : cleaned
+}
+
+const hiddenExplorerFolders = new Set<string>()
+
+/** Hide folder from explorer after delete (until refresh confirms removal). */
+export function rememberDeletedExplorerFolder(relativePath: string): void {
+  const normalized = normalizeFolderDownloadPath(relativePath)
+  if (normalized) hiddenExplorerFolders.add(normalized)
+}
+
+export function isExplorerFolderHiddenAfterDelete(
+  folderEntry: string,
+  listCurrentPath: string
+): boolean {
+  const fullPath = explorerFullPathFromFolderEntry(folderEntry, listCurrentPath)
+  for (const deleted of hiddenExplorerFolders) {
+    if (relativeFolderPathUnderDeleted(fullPath, deleted)) return true
+  }
+  return false
+}
+
+export function filterFoldersForExplorer(folders: string[], listCurrentPath: string): string[] {
+  return folders.filter(folder => {
+    const folderName = folder.split('/').filter(Boolean).pop()
+    return (
+      folderName !== 'workspace-assets' &&
+      folderName !== 'workspace-logo' &&
+      !isHiddenChatUploadPath(folder) &&
+      !isHiddenChatRootFolder(folder, listCurrentPath) &&
+      !isExplorerFolderHiddenAfterDelete(folder, listCurrentPath)
+    )
+  })
+}
+
+function folderMarkerStorageKeys(workspaceId: string, relativePath: string): string[] {
+  const ws = workspaceId.trim()
+  const rel = normalizeFolderDownloadPath(relativePath)
+  if (!ws || !rel) return []
+  const base = `uploads/${ws}/${rel}`.replace(/\/+$/, '')
+  return [`${base}/`, base]
+}
+
+function isFolderMarkerKey(key: string): boolean {
+  return String(key || '').replace(/^\/+/, '').endsWith('/')
+}
+
 function buildFolderDownloadUrl(baseUrl: string, folderPath: string, token: string): string {
   const params = new URLSearchParams({
     path: folderPath,
@@ -855,6 +950,90 @@ export async function listAllObjectsUnderPrefix(
   } while (continuation)
 
   return all
+}
+
+/** All storage keys under a prefix (thumbnails, markers, subfolders) — used when deleting a folder. */
+async function listAllKeysForFolderDelete(
+  storagePrefix: string,
+  workspaceId: string,
+  relativePath: string
+): Promise<string[]> {
+  const prefix = storagePrefix.endsWith('/') ? storagePrefix : `${storagePrefix}/`
+  const keySet = new Set<string>()
+
+  for (const marker of folderMarkerStorageKeys(workspaceId, relativePath)) {
+    keySet.add(marker)
+  }
+
+  let continuation: string | undefined
+  do {
+    const page = await listUploadedObjects(prefix, 200, false, continuation)
+    for (const obj of page.objects ?? []) {
+      const key = obj.key?.trim()
+      if (key && !isHiddenChatUploadPath(key)) keySet.add(key)
+    }
+    continuation =
+      page.pagination?.hasMore && page.pagination.nextContinuationToken
+        ? page.pagination.nextContinuationToken
+        : undefined
+  } while (continuation)
+
+  let folderContinuation: string | undefined
+  do {
+    const page = await listUploadedObjects(prefix, 200, true, folderContinuation)
+    for (const folder of page.folders ?? []) {
+      const entry = folder.startsWith('/') ? folder.slice(1) : folder
+      const markerKey = entry.endsWith('/') ? `${prefix}${entry}` : `${prefix}${entry}/`
+      const normalized = markerKey.replace(/\/{2,}/g, '/')
+      if (!isHiddenChatUploadPath(normalized)) keySet.add(normalized)
+    }
+    folderContinuation =
+      page.pagination?.hasMore && page.pagination.nextContinuationToken
+        ? page.pagination.nextContinuationToken
+        : undefined
+  } while (folderContinuation)
+
+  return [...keySet]
+}
+
+async function deleteFolderViaApi(relativePath: string): Promise<boolean> {
+  const norm = normalizeFolderDownloadPath(relativePath)
+  if (!norm) return false
+
+  const segments = norm.split('/').filter(Boolean)
+  const name = segments[segments.length - 1] || norm
+  const parentPath = segments.slice(0, -1).join('/')
+
+  const payloads: Record<string, unknown>[] = [
+    { path: norm, recursive: true },
+    { path: `${norm}/`, recursive: true },
+  ]
+  if (parentPath) {
+    payloads.push({ path: parentPath, name, recursive: true })
+    payloads.push({ parentPath, name, recursive: true })
+  } else {
+    payloads.push({ name, recursive: true })
+  }
+
+  for (const data of payloads) {
+    try {
+      await api.delete('/api/folders', { data })
+      return true
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } }).response?.status
+      if (status === 404 || status === 400) continue
+    }
+  }
+
+  try {
+    await api.delete('/api/folders', {
+      params: { path: norm, recursive: 'true' },
+    })
+    return true
+  } catch (err: unknown) {
+    const status = (err as { response?: { status?: number } }).response?.status
+    return status === 404
+  }
 }
 
 function normalizeStoragePath(path: string): string {
@@ -1157,6 +1336,64 @@ export type FolderZipProgress = {
  * Folder ZIP download. Default (`complete`): browser builds ZIP with all nested files.
  * `server`: legacy server-side ZIP (may omit subfolders until backend supports `recursive=1`).
  */
+/**
+ * Deletes a folder and all nested files (moves files to trash, then removes folder prefix).
+ */
+export async function deleteWorkspaceFolder(options: {
+  folderPath: string
+  workspaceId: string
+  onProgress?: (message: string) => void
+}): Promise<{ trashedFiles: number }> {
+  const workspaceId = options.workspaceId.trim()
+  if (!workspaceId) throw new Error('معرّف مساحة العمل غير متوفر')
+
+  const relativePath = normalizeFolderDownloadPath(options.folderPath)
+  if (!relativePath) throw new Error('مسار المجلد غير صالح')
+
+  const storagePrefix = `uploads/${workspaceId}/${relativePath}`
+  options.onProgress?.('جاري البحث عن الملفات داخل المجلد...')
+
+  const keys = await listAllKeysForFolderDelete(storagePrefix, workspaceId, relativePath)
+  const fileKeys = keys.filter(k => !isFolderMarkerKey(k))
+  const markerKeys = keys.filter(k => isFolderMarkerKey(k))
+
+  const BATCH = 100
+  for (let i = 0; i < fileKeys.length; i += BATCH) {
+    const batch = fileKeys.slice(i, i + BATCH)
+    options.onProgress?.(
+      `جاري نقل الملفات إلى سلة المهملات... ${Math.min(i + batch.length, fileKeys.length)} / ${fileKeys.length}`
+    )
+    await bulkMoveToTrash(batch)
+  }
+
+  if (markerKeys.length > 0) {
+    options.onProgress?.('جاري إزالة علامات المجلدات...')
+    for (let i = 0; i < markerKeys.length; i += BATCH) {
+      const batch = markerKeys.slice(i, i + BATCH)
+      try {
+        await bulkMoveToTrash(batch)
+      } catch {
+        for (const marker of batch) {
+          try {
+            await moveFileToTrash(marker)
+          } catch {
+            // Folder marker may only be removable via DELETE /api/folders
+          }
+        }
+      }
+    }
+  }
+
+  options.onProgress?.('جاري إزالة المجلد...')
+  const folderRemoved = await deleteFolderViaApi(relativePath)
+
+  rememberDeletedExplorerFolder(relativePath)
+
+  void folderRemoved
+
+  return { trashedFiles: fileKeys.length }
+}
+
 /** Download folder as ZIP (client-side, includes subfolders). */
 export async function downloadWorkspaceFolderZip(options: {
   folderPath: string

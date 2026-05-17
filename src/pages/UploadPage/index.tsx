@@ -68,6 +68,11 @@ import {
   createImageThumbnailBlob,
   createVideoThumbnailBlob,
   downloadWorkspaceFolderZip,
+  deleteWorkspaceFolder,
+  escapePathAfterFolderDelete,
+  relativeFolderPathUnderDeleted,
+  storageKeyUnderDeletedFolder,
+  filterFoldersForExplorer,
 } from '../../api/uploadApi'
 import { subscribeRealtime } from '../../api/realtimeApi'
 import { api } from '../../api/http'
@@ -81,6 +86,13 @@ import Toast from '../../components/Toast'
 import { ServerMinimalistic, Widget } from '@solar-icons/react'
 import { useDownload } from '../../contexts/DownloadContext'
 import type { DownloadItem } from '../../contexts/DownloadContext'
+
+const uploadDevLog = (...args: unknown[]) => {
+  if (import.meta.env.DEV) console.log(...args)
+}
+const uploadDevWarn = (...args: unknown[]) => {
+  if (import.meta.env.DEV) console.warn(...args)
+}
 
 function fmtBytes(bytes: number | undefined) {
   if (!bytes || !Number.isFinite(bytes) || bytes <= 0) return ''
@@ -789,12 +801,7 @@ function FileItem({
   const fileType = getFileType(filename)
   const isImage = fileType === 'image'
   const isVideo = fileType === 'video'
-  const resolvedThumbnailKey =
-    obj.thumbnailKey ||
-    (isVideo
-      ? buildVideoThumbnailKeyFromFileKey(obj.key)
-      : buildImageThumbnailKeyFromFileKey(obj.key)) ||
-    null
+  const resolvedThumbnailKey = obj.thumbnailKey?.trim() ? obj.thumbnailKey : null
   const hasAccess = canAccessFile(obj.key)
   const privacySettings = filePrivacySettings[obj.key]
   const isRestricted = privacySettings?.restricted
@@ -1049,12 +1056,7 @@ function FileItemGrid({
   const fileType = getFileType(filename)
   const isImage = fileType === 'image'
   const isVideo = fileType === 'video'
-  const resolvedThumbnailKey =
-    obj.thumbnailKey ||
-    (isVideo
-      ? buildVideoThumbnailKeyFromFileKey(obj.key)
-      : buildImageThumbnailKeyFromFileKey(obj.key)) ||
-    null
+  const resolvedThumbnailKey = obj.thumbnailKey?.trim() ? obj.thumbnailKey : null
   const hasAccess = canAccessFile(obj.key)
   const privacySettings = filePrivacySettings[obj.key]
   const isRestricted = privacySettings?.restricted
@@ -1669,32 +1671,36 @@ function FolderItem({
 
       <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
         <Tooltip title="تنزيل المجلد">
-          <Button
-            size="small"
-            variant="text"
-            onClick={e => {
-              e.stopPropagation()
-              onDownload(folderPath)
-            }}
-            disabled={isDownloading || isDeleting}
-            sx={{ borderRadius: 999, minWidth: 'auto', p: 1 }}
-          >
-            {isDownloading ? <CircularProgress size={20} /> : <DownloadIcon />}
-          </Button>
+          <span style={{ display: 'inline-flex' }}>
+            <Button
+              size="small"
+              variant="text"
+              onClick={e => {
+                e.stopPropagation()
+                onDownload(folderPath)
+              }}
+              disabled={isDownloading || isDeleting}
+              sx={{ borderRadius: 999, minWidth: 'auto', p: 1 }}
+            >
+              {isDownloading ? <CircularProgress size={20} /> : <DownloadIcon />}
+            </Button>
+          </span>
         </Tooltip>
         <Tooltip title="حذف المجلد">
-          <Button
-            size="small"
-            variant="text"
-            onClick={e => {
-              e.stopPropagation()
-              onDelete(folderPath)
-            }}
-            disabled={isDeleting || isDownloading}
-            sx={{ borderRadius: 999, minWidth: 'auto', p: 1, color: '#666' }}
-          >
-            {isDeleting ? <CircularProgress size={20} /> : <DeleteIcon />}
-          </Button>
+          <span style={{ display: 'inline-flex' }}>
+            <Button
+              size="small"
+              variant="text"
+              onClick={e => {
+                e.stopPropagation()
+                onDelete(folderPath)
+              }}
+              disabled={isDeleting || isDownloading}
+              sx={{ borderRadius: 999, minWidth: 'auto', p: 1, color: '#666' }}
+            >
+              {isDeleting ? <CircularProgress size={20} /> : <DeleteIcon />}
+            </Button>
+          </span>
         </Tooltip>
       </Box>
     </ListItem>
@@ -1797,32 +1803,36 @@ function FolderItemGrid({
 
       <Box sx={{ p: 2, pt: 0, display: 'flex', gap: 0.5, justifyContent: 'center' }}>
         <Tooltip title="تنزيل المجلد">
-          <Button
-            size="small"
-            variant="text"
-            onClick={e => {
-              e.stopPropagation()
-              onDownload(folderPath)
-            }}
-            disabled={isDownloading || isDeleting}
-            sx={{ borderRadius: 999, minWidth: 'auto', p: 1 }}
-          >
-            {isDownloading ? <CircularProgress size={20} /> : <DownloadIcon />}
-          </Button>
+          <span style={{ display: 'inline-flex' }}>
+            <Button
+              size="small"
+              variant="text"
+              onClick={e => {
+                e.stopPropagation()
+                onDownload(folderPath)
+              }}
+              disabled={isDownloading || isDeleting}
+              sx={{ borderRadius: 999, minWidth: 'auto', p: 1 }}
+            >
+              {isDownloading ? <CircularProgress size={20} /> : <DownloadIcon />}
+            </Button>
+          </span>
         </Tooltip>
         <Tooltip title="حذف المجلد">
-          <Button
-            size="small"
-            variant="text"
-            onClick={e => {
-              e.stopPropagation()
-              onDelete(folderPath)
-            }}
-            disabled={isDeleting || isDownloading}
-            sx={{ borderRadius: 999, minWidth: 'auto', p: 1, color: '#666' }}
-          >
-            {isDeleting ? <CircularProgress size={20} /> : <DeleteIcon />}
-          </Button>
+          <span style={{ display: 'inline-flex' }}>
+            <Button
+              size="small"
+              variant="text"
+              onClick={e => {
+                e.stopPropagation()
+                onDelete(folderPath)
+              }}
+              disabled={isDeleting || isDownloading}
+              sx={{ borderRadius: 999, minWidth: 'auto', p: 1, color: '#666' }}
+            >
+              {isDeleting ? <CircularProgress size={20} /> : <DeleteIcon />}
+            </Button>
+          </span>
         </Tooltip>
       </Box>
     </Card>
@@ -3761,37 +3771,71 @@ export default function UploadPage() {
     }
   }
 
-  // Folder deletion function
   async function handleDeleteFolder(folderPath: string) {
-    if (!confirm('هل أنت متأكد من أنك تريد حذف هذا المجلد وجميع محتوياته؟')) {
+    if (
+      !confirm(
+        'هل أنت متأكد من حذف هذا المجلد؟ سيتم نقل جميع الملفات بداخله (بما فيها المجلدات الفرعية) إلى سلة المهملات.'
+      )
+    ) {
+      return
+    }
+
+    const workspaceId = user?.workspaceId?.trim()
+    if (!workspaceId) {
+      showToastNotification('تعذر تحديد مساحة العمل', 'error')
       return
     }
 
     setFolderNameError(null)
     setDeletingFolders(prev => new Set(prev).add(folderPath))
-    try {
-      const token = localStorage.getItem('larthaa_auth_token')
+    showToastNotification('جاري حذف المجلد ومحتوياته...', 'info')
 
-      const response = await fetch(`${API_ENV.apiBaseUrl?.trim()}/api/folders`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: token ? `Bearer ${token}` : '',
-        },
-        body: JSON.stringify({
-          path: folderPath,
-        }),
+    try {
+      const { trashedFiles } = await deleteWorkspaceFolder({
+        folderPath,
+        workspaceId,
       })
 
-      if (!response.ok) {
-        throw new Error('Failed to delete folder')
+      setFoldersHere(prev =>
+        prev.filter(p => {
+          const cleaned = p.endsWith('/') ? p.slice(0, -1) : p
+          const fullPath = currentPath ? `${currentPath}/${cleaned}` : cleaned
+          return !relativeFolderPathUnderDeleted(fullPath, folderPath)
+        })
+      )
+      setFilesHere(prev =>
+        prev.filter(obj => !storageKeyUnderDeletedFolder(obj.key, workspaceId, folderPath))
+      )
+
+      const escapePath = escapePathAfterFolderDelete(currentPath, folderPath)
+      if (escapePath !== null) {
+        userInitiatedPathChangeRef.current = true
+        setCurrentPath(escapePath)
+        if (escapePath) {
+          setSearchParams({ folder: escapePath })
+        } else {
+          setSearchParams({})
+        }
       }
 
-      showToastNotification('تم حذف المجلد بنجاح', 'success')
-      await fetchExplorer()
+      const detail =
+        trashedFiles > 0
+          ? ` (تم نقل ${trashedFiles} ملفاً إلى سلة المهملات)`
+          : ''
+      showToastNotification(`تم حذف المجلد بنجاح${detail}`, 'success')
+      if (escapePath !== null) {
+        const prefixOverride = escapePath.trim()
+          ? `uploads/${workspaceId}/${escapePath.trim()}`
+          : `uploads/${workspaceId}`
+        await fetchExplorer(true, prefixOverride)
+      } else {
+        await fetchExplorer(true)
+      }
     } catch (e: unknown) {
-      const err = e as { message?: string }
-      showToastNotification(`فشل حذف المجلد: ${err.message || 'خطأ غير معروف'}`, 'error')
+      const err = e as { message?: string; response?: { data?: { message?: string } } }
+      const msg =
+        err.response?.data?.message || err.message || 'فشل حذف المجلد'
+      showToastNotification(`فشل حذف المجلد: ${msg}`, 'error')
     } finally {
       setDeletingFolders(prev => {
         const next = new Set(prev)
@@ -4150,15 +4194,7 @@ export default function UploadPage() {
 
         if (reset) {
           // Filter out system folders like workspace-assets and workspace-logo
-          const filteredFolders = (res.folders ?? []).filter(folder => {
-            const folderName = folder.split('/').filter(Boolean).pop()
-            return (
-              folderName !== 'workspace-assets' &&
-              folderName !== 'workspace-logo' &&
-              !isHiddenChatUploadPath(folder) &&
-              !isHiddenChatRootFolder(folder, currentPath)
-            )
-          })
+          const filteredFolders = filterFoldersForExplorer(res.folders ?? [], currentPath)
           setFoldersHere(filteredFolders)
           setFilesHere(visibleObjects)
         } else {
@@ -4248,11 +4284,11 @@ export default function UploadPage() {
       deepLinkLoadAttemptsRef.current = 0
     }
     if (!requestedFileKey) {
-      console.log('[Upload] deep-link skipped: no file param')
+      uploadDevLog('[Upload] deep-link skipped: no file param')
       return
     }
     if (loadingExplorer || explorerResetInFlightRef.current) {
-      console.log('[Upload] deep-link waiting explorer reset', {
+      uploadDevLog('[Upload] deep-link waiting explorer reset', {
         requestedFileKey,
         loadingExplorer,
         explorerResetInFlight: explorerResetInFlightRef.current,
@@ -4263,7 +4299,7 @@ export default function UploadPage() {
     const matched = filesHere.find(file => objectKeyMatchesDeepLink(file.key, requestedFileKey))
     if (matched) {
       deepLinkLoadAttemptsRef.current = 0
-      console.log('[Upload] deep-link matched file', {
+      uploadDevLog('[Upload] deep-link matched file', {
         requestedFileKey,
         matchedKey: matched.key,
         filesLoaded: filesHere.length,
@@ -4293,7 +4329,7 @@ export default function UploadPage() {
         return name === requestedName
       })
       if (byNameOnly) {
-        console.warn('[Upload] deep-link matched by filename fallback', {
+        uploadDevWarn('[Upload] deep-link matched by filename fallback', {
           requestedFileKey,
           matchedKey: byNameOnly.key,
           filesLoaded: filesHere.length,
@@ -4318,7 +4354,7 @@ export default function UploadPage() {
 
     if (!hasMoreFiles || isLoadingMoreFiles) {
       const sampleLoadedKeys = filesHere.slice(0, 5).map(f => f.key)
-      console.log('[Upload] deep-link stopped', {
+      uploadDevLog('[Upload] deep-link stopped', {
         requestedFileKey,
         reason: !hasMoreFiles ? 'no-more-files' : 'loading-more-in-progress',
         filesLoaded: filesHere.length,
@@ -4332,7 +4368,7 @@ export default function UploadPage() {
         requestedFolder === currentPath &&
         !filesHere.some(file => objectKeyMatchesDeepLink(file.key, requestedFileKey))
       ) {
-        console.warn('[Upload] deep-link direct-inject fallback for current folder', {
+        uploadDevWarn('[Upload] deep-link direct-inject fallback for current folder', {
           requestedFileKey,
           requestedFolder,
           currentPath,
@@ -4356,7 +4392,7 @@ export default function UploadPage() {
         deepLinkGlobalSearchRef.current[requestedFileKey] = true
         void (async () => {
           try {
-            console.warn('[Upload] deep-link fallback: global workspace search started', {
+            uploadDevWarn('[Upload] deep-link fallback: global workspace search started', {
               requestedFileKey,
             })
             let continuationToken: string | undefined
@@ -4381,7 +4417,7 @@ export default function UploadPage() {
             }
 
             if (!matchedKey) {
-              console.warn('[Upload] deep-link fallback: global search did not find file', {
+              uploadDevWarn('[Upload] deep-link fallback: global search did not find file', {
                 requestedFileKey,
               })
               return
@@ -4389,7 +4425,7 @@ export default function UploadPage() {
 
             const workspaceId = user?.workspaceId?.trim() || ''
             const matchedFolder = deriveRelativeFolderFromFileKey(matchedKey, workspaceId)
-            console.warn('[Upload] deep-link fallback: found file globally, redirecting to folder', {
+            uploadDevWarn('[Upload] deep-link fallback: found file globally, redirecting to folder', {
               requestedFileKey,
               matchedKey,
               matchedFolder,
@@ -4426,7 +4462,7 @@ export default function UploadPage() {
       return
     }
     if (deepLinkLoadAttemptsRef.current >= 40) {
-      console.log('[Upload] deep-link stopped', {
+      uploadDevLog('[Upload] deep-link stopped', {
         requestedFileKey,
         reason: 'max-attempts',
         filesLoaded: filesHere.length,
@@ -4435,7 +4471,7 @@ export default function UploadPage() {
       return
     }
     deepLinkLoadAttemptsRef.current += 1
-    console.log('[Upload] deep-link not found yet, loading more', {
+    uploadDevLog('[Upload] deep-link not found yet, loading more', {
       requestedFileKey,
       attempts: deepLinkLoadAttemptsRef.current,
       filesLoaded: filesHere.length,
