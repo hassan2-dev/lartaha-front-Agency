@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import {
   Box,
   BottomNavigation,
@@ -10,18 +11,21 @@ import {
   CloudUpload,
   ClipboardText,
   ChatRound,
+  User,
   ClockCircle,
   Settings,
 } from '@solar-icons/react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
 
-const mobileNavItems = [
-  { text: 'الرئيسية', icon: <Home size={26} />, path: '/dashboard' },
-  { text: 'الملفات', icon: <CloudUpload size={26} />, path: '/dashboard/upload' },
-  { text: 'المهام', icon: <ClipboardText size={26} />, path: '/dashboard/tasks' },
-  { text: 'الدردشة', icon: <ChatRound size={26} />, path: '/dashboard/chat' },
-  { text: 'الأنشطة', icon: <ClockCircle size={26} />, path: '/dashboard/activity' },
-  { text: 'الإعدادات', icon: <Settings size={26} />, path: '/dashboard/settings' },
+const allMobileNavItems = [
+  { text: 'الرئيسية', icon: <Home size={24} />, path: '/dashboard' },
+  { text: 'الملفات', icon: <CloudUpload size={24} />, path: '/dashboard/upload' },
+  { text: 'المهام', icon: <ClipboardText size={24} />, path: '/dashboard/tasks' },
+  { text: 'الدردشة', icon: <ChatRound size={24} />, path: '/dashboard/chat' },
+  { text: 'الفرق', icon: <User size={24} />, path: '/dashboard/teams', adminOnly: true },
+  { text: 'الأنشطة', icon: <ClockCircle size={24} />, path: '/dashboard/activity' },
+  { text: 'الإعدادات', icon: <Settings size={24} />, path: '/dashboard/settings' },
 ]
 
 export default function BottomNav() {
@@ -29,6 +33,12 @@ export default function BottomNav() {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const navigate = useNavigate()
   const location = useLocation()
+  const { user } = useAuth()
+
+  const mobileNavItems = useMemo(
+    () => allMobileNavItems.filter(item => !item.adminOnly || user?.isAdmin),
+    [user?.isAdmin]
+  )
 
   if (!isMobile) return null
 
@@ -57,15 +67,11 @@ export default function BottomNav() {
             minWidth: 'auto',
             maxWidth: 'none',
             flex: 1,
-            padding: '8px 0',
+            padding: '6px 0',
             minHeight: 64,
             transition: 'all 0.3s',
-            fontSize: '0.8rem',
             '&.Mui-selected': {
               color: 'primary.main',
-              '& .MuiSvgIcon-root': {
-                transform: 'scale(1.1)',
-              },
             },
           },
         }}
@@ -75,13 +81,13 @@ export default function BottomNav() {
             key={item.path}
             icon={item.icon}
             label={item.text}
-            showLabel={true}
+            showLabel
             sx={{
-              gap: 0.5,
-              fontSize: '0.7rem',
+              gap: 0.25,
               '& .MuiBottomNavigationAction-label': {
-                fontSize: '0.7rem',
+                fontSize: mobileNavItems.length > 6 ? '0.62rem' : '0.7rem',
                 fontWeight: 500,
+                lineHeight: 1.1,
               },
             }}
           />

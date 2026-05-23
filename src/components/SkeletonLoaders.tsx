@@ -232,15 +232,23 @@ export function TeamMemberSkeleton() {
   return (
     <Card sx={{ mb: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
       <CardContent>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: 'row' },
+            justifyContent: 'space-between',
+            alignItems: { xs: 'flex-start', sm: 'center' },
+            gap: { xs: 1.5, sm: 2 },
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, width: { xs: '100%', sm: 'auto' } }}>
             <Skeleton variant="circular" width={40} height={40} />
-            <Box>
-              <Skeleton variant="text" width={120} height={24} />
-              <Skeleton variant="text" width={150} height={16} />
+            <Box sx={{ flex: 1 }}>
+              <Skeleton variant="text" width="60%" height={24} />
+              <Skeleton variant="text" width="80%" height={16} />
             </Box>
           </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
             <Skeleton variant="rounded" width={60} height={24} />
             <Skeleton variant="text" width={80} height={14} />
           </Box>

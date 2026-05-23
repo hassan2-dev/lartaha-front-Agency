@@ -16,6 +16,7 @@ import {
   Alert,
   IconButton,
   Tooltip,
+  Container,
 } from '@mui/material'
 import { useAuth } from '../contexts/AuthContext'
 import { PasswordInput } from '../components/login/PasswordInput'
@@ -125,10 +126,26 @@ export default function TeamsPage() {
     member.user?.name || member.user?.email || member.email || 'عضو'
 
   return (
-    <Box p={3}>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4">أعضاء مساحة العمل</Typography>
-        <Button variant="contained" startIcon={<Mail />} onClick={() => setShowInviteModal(true)}>
+    <Container maxWidth="lg" sx={{ py: { xs: 2, md: 3 }, px: { xs: 2, sm: 3 } }}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', sm: 'row' },
+          justifyContent: 'space-between',
+          alignItems: { xs: 'stretch', sm: 'center' },
+          gap: 2,
+          mb: 3,
+        }}
+      >
+        <Typography variant="h4" sx={{ fontSize: { xs: '1.35rem', sm: '2.125rem' } }}>
+          أعضاء مساحة العمل
+        </Typography>
+        <Button
+          variant="contained"
+          startIcon={<Mail />}
+          onClick={() => setShowInviteModal(true)}
+          sx={{ alignSelf: { xs: 'stretch', sm: 'auto' }, whiteSpace: 'nowrap' }}
+        >
           دعوة عضو
         </Button>
       </Box>
@@ -174,31 +191,62 @@ export default function TeamsPage() {
                 },
               }}
             >
-              <CardContent>
-                <Box display="flex" justifyContent="space-between" alignItems="center">
-                  <Box display="flex" alignItems="center" gap={2}>
-                    <Avatar src={member.user?.avatar} alt={memberDisplayName(member)}>
+              <CardContent sx={{ '&:last-child': { pb: 2 } }}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    flexDirection: { xs: 'column', sm: 'row' },
+                    justifyContent: 'space-between',
+                    alignItems: { xs: 'flex-start', sm: 'center' },
+                    gap: { xs: 1.5, sm: 2 },
+                  }}
+                >
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 2,
+                      minWidth: 0,
+                      width: { xs: '100%', sm: 'auto' },
+                    }}
+                  >
+                    <Avatar
+                      src={member.user?.avatar}
+                      alt={memberDisplayName(member)}
+                      sx={{ flexShrink: 0 }}
+                    >
                       {member.user?.avatar ? null : <Person />}
                     </Avatar>
-                    <Box>
-                      <Typography variant="h6">{memberDisplayName(member)}</Typography>
-                      <Typography color="text.secondary" variant="body2">
+                    <Box sx={{ minWidth: 0, flex: 1 }}>
+                      <Typography variant="h6" noWrap>
+                        {memberDisplayName(member)}
+                      </Typography>
+                      <Typography color="text.secondary" variant="body2" noWrap>
                         {member.user?.email || member.email || 'مدعو'}
                       </Typography>
                       {member.user?.position && (
-                        <Typography color="text.secondary" variant="body2">
+                        <Typography color="text.secondary" variant="body2" noWrap>
                           {member.user.position}
                         </Typography>
                       )}
                     </Box>
                   </Box>
-                  <Box display="flex" alignItems="center" gap={1}>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      alignItems: 'center',
+                      gap: 1,
+                      width: { xs: '100%', sm: 'auto' },
+                      justifyContent: { xs: 'flex-start', sm: 'flex-end' },
+                    }}
+                  >
                     <Chip
                       label={member.role || 'member'}
                       size="small"
                       color={member.role === 'admin' ? 'primary' : 'default'}
                     />
-                    <Typography color="text.secondary" variant="body2">
+                    <Typography color="text.secondary" variant="body2" sx={{ whiteSpace: 'nowrap' }}>
                       انضم {new Date(member.joinedAt).toLocaleDateString()}
                     </Typography>
                     {canRemoveMember(member) && (
@@ -289,6 +337,6 @@ export default function TeamsPage() {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </Container>
   )
 }
