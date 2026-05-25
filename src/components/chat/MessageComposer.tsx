@@ -18,13 +18,12 @@ import {
   EmojiEmotions as EmojiIcon,
   Tag as TagIcon,
   InsertDriveFile as FileTagIcon,
-  Send as SendIcon,
 } from '@mui/icons-material'
 import EmojiPicker from './EmojiPicker'
 import MentionDialog from './MentionDialog'
 import { useChatContext } from '../../contexts/ChatContext'
 import { useCallback, useRef } from 'react'
-import { Plain, SendSquare } from '@solar-icons/react'
+import { Plain } from '@solar-icons/react'
 
 const MAX_CHARS = 2000
 
