@@ -5,6 +5,7 @@ import MessageList from '../components/chat/MessageList'
 import MessageComposer from '../components/chat/MessageComposer'
 import MemberStories from '../components/chat/MemberStories'
 import { ChatProvider, useChatContext } from '../contexts/ChatContext'
+import meet from '../../public/meet.svg'
 
 function ChatPageContent() {
   const {
@@ -93,13 +94,39 @@ function ChatPageContent() {
             position: 'relative',
           }}
         >
-          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', px: { xs: 0, md: 2 }, pt: { xs: 0, md: 1 } }}>
-            <MessageList />
-          </Box>
+          {selectedConversationId ? (
+            <>
+              <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', px: { xs: 0, md: 2 }, pt: { xs: 0, md: 1 } }}>
+                <MessageList />
+              </Box>
 
-          <Box sx={{ px: { xs: 0.5, md: 2 }, pb: { xs: 0.5, md: 1.5 }, pt: 0.5 }}>
-            <MessageComposer />
-          </Box>
+              <Box sx={{ px: { xs: 0.5, md: 2 }, pb: { xs: 0.5, md: 1.5 }, pt: 0.5 }}>
+                <MessageComposer />
+              </Box>
+            </>
+          ) : (
+            <Box
+              sx={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexDirection: 'column',
+                gap: 2,
+              }}
+            >
+              <Box
+                component="img"
+                src={meet}
+                alt="No chat selected"
+                sx={{
+                  maxWidth: '300px',
+                  maxHeight: '300px',
+                  opacity: 0.6,
+                }}
+              />
+            </Box>
+          )}
         </Box>
       </Paper>
 

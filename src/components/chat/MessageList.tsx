@@ -240,7 +240,7 @@ export default function MessageList() {
         ) : filteredMessages.length === 0 ? (
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, opacity: 0.5, gap: 1 }}>
             <Typography variant="body2">
-              {searchQuery ? 'لا توجد رسائل تطابق البحث' : 'ابدأ أول رسالة في هذه المحادثة.'}
+              {searchQuery ? 'لا توجد رسائل تطابق البحث' : selectedConversation.type === 'group' ? 'ابدأ أول رسالة في هذه المحادثة الجماعية.' : 'ابدأ أول رسالة في هذه المحادثة.'}
             </Typography>
           </Box>
         ) : (

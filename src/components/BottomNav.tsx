@@ -85,7 +85,7 @@ export default function BottomNav() {
             sx={{
               gap: 0.25,
               '& .MuiBottomNavigationAction-label': {
-                fontSize: mobileNavItems.length > 6 ? '0.62rem' : '0.7rem',
+                fontSize: '0.6rem',
                 fontWeight: 500,
                 lineHeight: 1.1,
               },

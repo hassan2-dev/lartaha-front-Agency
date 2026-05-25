@@ -86,7 +86,7 @@ export function useChat() {
     [bootstrap.users, user?.id]
   )
 
-  // Sort members by recent message and track unread messages
+  // Sort members by recent message time
   const sortedMemberList = useMemo(() => {
     return memberList
       .map(member => {
@@ -117,13 +117,7 @@ export function useChat() {
           lastMessageTime,
         }
       })
-      .sort((a, b) => {
-        // Sort by unread status first, then by last message time
-        if (a.hasUnread !== b.hasUnread) {
-          return b.hasUnread ? 1 : -1
-        }
-        return b.lastMessageTime - a.lastMessageTime
-      })
+      .sort((a, b) => b.lastMessageTime - a.lastMessageTime)
   }, [memberList, conversations, selectedConversationId, user?.id])
 
   const atMentionQuery = useMemo(() => {
