@@ -93,6 +93,13 @@ import Toast from '../../components/Toast'
 import { ServerMinimalistic, Widget } from '@solar-icons/react'
 import { useDownload } from '../../contexts/DownloadContext'
 import type { DownloadItem } from '../../contexts/DownloadContext'
+import { keyframes } from '@mui/system'
+
+const highlightPulse = keyframes`
+  0%   { border-color: var(--highlight-color); box-shadow: 0 0 0 3px rgba(var(--highlight-rgb), 0.4); }
+  50%  { border-color: var(--highlight-color); box-shadow: 0 0 0 5px rgba(var(--highlight-rgb), 0.15); }
+  100% { border-color: transparent; box-shadow: none; }
+`
 
 const uploadDevLog = (...args: unknown[]) => {
   if (import.meta.env.DEV) console.log(...args)
@@ -223,9 +230,9 @@ function objectKeyMatchesDeepLink(fileKey: string, requested: string): boolean {
   const canonicalize = (value: string) =>
     stripInvisible(
       safeDecode(stripMeta(String(value || '').trim()))
-      .replace(/\+/g, ' ')
-      .replace(/^\/+/, '')
-      .normalize('NFKC')
+        .replace(/\+/g, ' ')
+        .replace(/^\/+/, '')
+        .normalize('NFKC')
     )
 
   const a = canonicalize(fileKey)
@@ -760,6 +767,7 @@ function FileItem({
   canAccessFile,
   isDeleting,
   selected,
+  highlighted,
   onToggleSelect,
 }: {
   obj: {
@@ -783,6 +791,7 @@ function FileItem({
   canAccessFile: (key: string) => boolean
   isDeleting?: boolean
   selected?: boolean
+  highlighted?: boolean
   onToggleSelect?: (key: string) => void
 }) {
   const filename = filenameFromKey(obj.key)
@@ -810,11 +819,16 @@ function FileItem({
         borderRadius: 2,
         mb: 1,
         border: '1px solid',
-        borderColor: selected
+        '--highlight-color': theme.palette.primary.main,
+        '--highlight-rgb': '25, 118, 210',
+        animation: highlighted ? `${highlightPulse} 2.5s ease-out forwards` : 'none',
+        borderColor: highlighted
           ? 'primary.main'
-          : isDark
-            ? 'rgba(255,255,255,0.08)'
-            : theme.palette.divider,
+          : selected
+            ? 'primary.main'
+            : isDark
+              ? 'rgba(255,255,255,0.08)'
+              : theme.palette.divider,
         backgroundColor: isRestricted
           ? isDark
             ? 'rgba(255,0,0,0.02)'
@@ -822,7 +836,6 @@ function FileItem({
           : isDark
             ? 'rgba(255,255,255,0.02)'
             : theme.palette.background.paper,
-        boxShadow: !isDark ? '0 2px 4px rgba(0,0,0,0.02)' : 'none',
         cursor: hasAccess ? 'pointer' : 'default',
         opacity: isRestricted && !hasAccess ? 0.6 : 1,
         '&:hover': {
@@ -1016,6 +1029,7 @@ function FileItemGrid({
   canAccessFile,
   isDeleting,
   selected,
+  highlighted,
   onToggleSelect,
 }: {
   obj: {
@@ -1038,6 +1052,7 @@ function FileItemGrid({
   canAccessFile: (key: string) => boolean
   isDeleting?: boolean
   selected?: boolean
+  highlighted?: boolean
   onToggleSelect?: (key: string) => void
 }) {
   const filename = filenameFromKey(obj.key)
@@ -1060,11 +1075,16 @@ function FileItemGrid({
         flexDirection: 'column',
         height: '100%',
         border: '1px solid',
-        borderColor: selected
+        '--highlight-color': theme.palette.primary.main,
+        '--highlight-rgb': '25, 118, 210',
+        animation: highlighted ? `${highlightPulse} 2.5s ease-out forwards` : 'none',
+        borderColor: highlighted
           ? 'primary.main'
-          : isDark
-            ? 'rgba(255,255,255,0.08)'
-            : theme.palette.divider,
+          : selected
+            ? 'primary.main'
+            : isDark
+              ? 'rgba(255,255,255,0.08)'
+              : theme.palette.divider,
         backgroundColor: isRestricted
           ? isDark
             ? 'rgba(211, 47, 47, 0.12)'
@@ -1072,7 +1092,6 @@ function FileItemGrid({
           : isDark
             ? 'rgba(255,255,255,0.02)'
             : theme.palette.background.paper,
-        boxShadow: !isDark ? '0 2px 8px rgba(0,0,0,0.04)' : 'none',
         cursor: hasAccess ? 'pointer' : 'default',
         opacity: isRestricted && !hasAccess ? 0.6 : 1,
         '&:hover': {
@@ -2715,8 +2734,6 @@ export default function UploadPage() {
 
   const [selectedFiles, setSelectedFiles] = useState<SelectedUploadFile[]>([])
   const [encryptionPassword, setEncryptionPassword] = useState<string>('')
-  // Explorer path under "uploads/". Examples: "" (root), "team1", "team1/sub1"
-  const [currentPath, setCurrentPath] = useState('')
   const [folderError, setFolderError] = useState<string | null>(null)
   const [foldersHere, setFoldersHere] = useState<string[]>([])
   const [filesHere, setFilesHere] = useState<
@@ -2831,6 +2848,14 @@ export default function UploadPage() {
 
   // Bulk selection state
   const [selectedForBulk, setSelectedForBulk] = useState<Set<string>>(new Set())
+  // Deep-link highlight: key of the file navigated to from activity page
+  const [highlightedFileKey, setHighlightedFileKey] = useState<string>('')
+  const highlightClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const setHighlightedFileKeyWithAutoClear = useCallback((key: string) => {
+    if (highlightClearTimerRef.current) clearTimeout(highlightClearTimerRef.current)
+    setHighlightedFileKey(key)
+    highlightClearTimerRef.current = setTimeout(() => setHighlightedFileKey(''), 2500)
+  }, [])
   const [bulkLoading, setBulkLoading] = useState(false)
 
   const useStreamUpload = false
@@ -3097,94 +3122,43 @@ export default function UploadPage() {
   // Auto-upload when files are selected (but not during initial render)
   const [hasTriggeredUpload, setHasTriggeredUpload] = useState(false)
 
-  // Handle folder parameter from query string (e.g., from activity page)
+  // Handle folder/file navigation from URL search params — single source of truth
   const fetchExplorerRef = useRef<typeof fetchExplorer | null>(null)
-  const queryParamHandledRef = useRef(false)
-  const userInitiatedPathChangeRef = useRef(false)
-  const initialFetchDoneRef = useRef(false)
 
-  // Effect to handle query param and initiate fetch
-  // Combined into single effect to avoid race condition between query param and currentPath effects
+  // currentPath is derived from searchParams so it is always in sync with the URL
+  const currentPath = useMemo(() => {
+    const workspaceId = user?.workspaceId?.trim() || ''
+    const folder = searchParams.get('folder')
+    const fileFromQuery = (searchParams.get('file') || '').trim()
+    const derivedPathFromFile = workspaceId
+      ? deriveRelativeFolderFromFileKey(fileFromQuery, workspaceId)
+      : ''
+    const folderFromQuery = (folder || '').replace(/^\/+/, '')
+    return (derivedPathFromFile || folderFromQuery || '').replace(/^\/+/, '')
+  }, [searchParams, user?.workspaceId])
+
+  // Single effect — fires whenever the URL changes, fetches the correct folder
   useEffect(() => {
     const workspaceId = user?.workspaceId?.trim()
-    if (!workspaceId) return // Wait for workspaceId to be available
+    if (!workspaceId) return
+
+    const ROOT_PREFIX = `uploads/${workspaceId}`
+    const computedExplorerPrefix = currentPath ? `${ROOT_PREFIX}/${currentPath}` : ROOT_PREFIX
 
     const folder = searchParams.get('folder')
     const fileFromQuery = (searchParams.get('file') || '').trim()
-    const hasNavigationParams = Boolean(folder || fileFromQuery)
-    if (!hasNavigationParams && initialFetchDoneRef.current) {
-      // Prevent accidental reset to root when URL params are temporarily cleared.
-      return
-    }
-    const derivedPathFromFile = deriveRelativeFolderFromFileKey(fileFromQuery, workspaceId)
-    const folderFromQuery = (folder || '').replace(/^\/+/, '')
-    const cleanPath = (derivedPathFromFile || folderFromQuery || '').replace(/^\/+/, '')
-    const ROOT_PREFIX = `uploads/${workspaceId}`
-    const computedExplorerPrefix = cleanPath ? `${ROOT_PREFIX}/${cleanPath}` : ROOT_PREFIX
-    if (folderFromQuery && derivedPathFromFile && folderFromQuery !== derivedPathFromFile) {
-      console.warn('[Upload] folder mismatch: query folder differs from file-derived folder', {
-        folderFromQuery,
-        derivedPathFromFile,
-        fileParam: fileFromQuery || null,
-      })
-    }
-    console.log('[Upload] query params parsed', {
-      host: typeof window !== 'undefined' ? window.location.host : 'n/a',
-      href: typeof window !== 'undefined' ? window.location.href : 'n/a',
-      workspaceId,
-      folderParam: folder,
-      fileParam: fileFromQuery || null,
-      derivedPathFromFile,
-      cleanPath,
-      computedExplorerPrefix,
-    })
     if (folder || fileFromQuery) {
       setShowTrash(false)
     }
-    queryParamHandledRef.current = true
-    initialFetchDoneRef.current = true
+
     setFolderError(null)
-    setCurrentPath(cleanPath)
-    // Fetch directly with computed prefix to avoid stale closure race
-    // Pass the cleanPath as currentPathOverride to ensure correct path is used
-    void fetchExplorer(true, computedExplorerPrefix, null)
-  }, [searchParams, user?.workspaceId])
-
-  // This effect fetches when currentPath changes (user navigation, not query param)
-  useEffect(() => {
-    const folderParam = searchParams.get('folder')
-    const normalizedFolderParam = folderParam ? folderParam.replace(/^\/+/, '') : ''
-
-    // Skip fetch if query param was just handled (to avoid double fetch)
-    if (queryParamHandledRef.current) {
-      queryParamHandledRef.current = false
-      return
-    }
-
-    // Skip fetch when currentPath is not yet in sync with the URL.
-    if (normalizedFolderParam !== currentPath) {
-      return
-    }
-
-    // Skip if this is a user-initiated path change (flag set in breadcrumb handler)
-    // The query param effect will handle the fetch
-    if (userInitiatedPathChangeRef.current) {
-      userInitiatedPathChangeRef.current = false
-      return
-    }
-
-    // Clear error when navigating to a new path
-    setFolderError(null)
-
-    initialFetchDoneRef.current = true
-    // Use direct call instead of ref since ref isn't set up on first render
+    uploadDevLog('[Nav] effect: fetching', { currentPath, computedExplorerPrefix })
     if (fetchExplorerRef.current) {
-      fetchExplorerRef.current(true)
+      void fetchExplorerRef.current(true, computedExplorerPrefix, null)
     } else {
-      // Fallback: call fetchExplorer directly (works because fetchExplorer reads current state)
-      void fetchExplorer(true)
+      void fetchExplorer(true, computedExplorerPrefix, null)
     }
-  }, [currentPath, searchParams])
+  }, [currentPath, user?.workspaceId])
 
   useEffect(() => {
     if (useStreamUpload && canUpload && selectedFiles.length > 0 && !hasTriggeredUpload) {
@@ -3887,8 +3861,6 @@ export default function UploadPage() {
 
       const escapePath = escapePathAfterFolderDelete(currentPath, folderPath)
       if (escapePath !== null) {
-        userInitiatedPathChangeRef.current = true
-        setCurrentPath(escapePath)
         if (escapePath) {
           setSearchParams({ folder: escapePath })
         } else {
@@ -4256,6 +4228,15 @@ export default function UploadPage() {
       continuationTokenOverride?: string | null
     ) => {
       const effectivePrefix = explorerPrefixOverride ?? explorerPrefix
+      // Derive the currentPath that matches effectivePrefix so filterFoldersForExplorer
+      // uses the correct path even when called with an override before state has updated.
+      const effectiveCurrentPath = (() => {
+        if (!explorerPrefixOverride) return currentPath
+        const root = ROOT_PREFIX
+        if (effectivePrefix === root) return ''
+        if (effectivePrefix.startsWith(`${root}/`)) return effectivePrefix.slice(root.length + 1)
+        return currentPath
+      })()
       if (reset) {
         explorerResetInFlightRef.current = true
         setLoadingExplorer(true)
@@ -4283,7 +4264,7 @@ export default function UploadPage() {
 
         if (reset) {
           // Filter out system folders like workspace-assets and workspace-logo
-          const filteredFolders = filterFoldersForExplorer(res.folders ?? [], currentPath)
+          const filteredFolders = filterFoldersForExplorer(res.folders ?? [], effectiveCurrentPath)
           setFoldersHere(filteredFolders)
           setFilesHere(visibleObjects)
         } else {
@@ -4335,10 +4316,8 @@ export default function UploadPage() {
     [currentPath, explorerPrefix, refreshTrashedKeysCache]
   )
 
-  // Keep fetchExplorerRef updated
-  useEffect(() => {
-    fetchExplorerRef.current = fetchExplorer
-  }, [fetchExplorer])
+  // Keep fetchExplorerRef updated synchronously during render so effects always see the latest version
+  fetchExplorerRef.current = fetchExplorer
 
   const explorerRefreshAfterUploadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const scheduleExplorerRefreshAfterUpload = useCallback(() => {
@@ -4394,7 +4373,7 @@ export default function UploadPage() {
         filesLoaded: filesHere.length,
         currentPath,
       })
-      setSelectedForBulk(new Set([matched.key]))
+      setHighlightedFileKeyWithAutoClear(matched.key)
       const escaped =
         typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
           ? CSS.escape(matched.key)
@@ -4424,7 +4403,7 @@ export default function UploadPage() {
           filesLoaded: filesHere.length,
           currentPath,
         })
-        setSelectedForBulk(new Set([byNameOnly.key]))
+        setHighlightedFileKeyWithAutoClear(byNameOnly.key)
         const escaped =
           typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
             ? CSS.escape(byNameOnly.key)
@@ -4463,7 +4442,7 @@ export default function UploadPage() {
           currentPath,
         })
         setFilesHere(prev => [{ key: requestedFileKey }, ...prev])
-        setSelectedForBulk(new Set([requestedFileKey]))
+        setHighlightedFileKeyWithAutoClear(requestedFileKey)
         const escaped =
           typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
             ? CSS.escape(requestedFileKey)
@@ -4525,7 +4504,7 @@ export default function UploadPage() {
                 if (prev.some(file => objectKeyMatchesDeepLink(file.key, matchedKey))) return prev
                 return [{ key: matchedKey }, ...prev]
               })
-              setSelectedForBulk(new Set([matchedKey]))
+              setHighlightedFileKeyWithAutoClear(matchedKey)
               const escaped =
                 typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
                   ? CSS.escape(matchedKey)
@@ -4833,11 +4812,6 @@ export default function UploadPage() {
                 <Button
                   size="small"
                   onClick={() => {
-                    // Mark this as user-initiated so currentPath effect will skip
-                    // and let the query param effect handle the fetch
-                    userInitiatedPathChangeRef.current = true
-                    setCurrentPath(c.path)
-                    // Update URL query parameter to match the new path
                     if (c.path) {
                       setSearchParams({ folder: c.path })
                     } else {
@@ -5010,10 +4984,6 @@ export default function UploadPage() {
                                     key={p}
                                     folderPath={fullPath}
                                     onClick={() => {
-                                      // Mark this as user-initiated so currentPath effect will skip
-                                      userInitiatedPathChangeRef.current = true
-                                      setCurrentPath(fullPath)
-                                      // Update URL query parameter to match the new path
                                       setSearchParams({ folder: fullPath })
                                     }}
                                     onDelete={requestDeleteFolder}
@@ -5047,8 +5017,6 @@ export default function UploadPage() {
                                     key={p}
                                     folderPath={fullPath}
                                     onClick={() => {
-                                      setCurrentPath(fullPath)
-                                      // Update URL query parameter to match the new path
                                       setSearchParams({ folder: fullPath })
                                     }}
                                     onDelete={requestDeleteFolder}
@@ -5101,6 +5069,7 @@ export default function UploadPage() {
                                     canAccessFile={canAccessFile}
                                     isDeleting={deletingFiles.has(obj.key)}
                                     selected={selectedForBulk.has(obj.key)}
+                                    highlighted={highlightedFileKey === obj.key}
                                     onToggleSelect={toggleFileSelection}
                                   />
                                 )
@@ -5160,6 +5129,7 @@ export default function UploadPage() {
                                       canAccessFile={canAccessFile}
                                       isDeleting={deletingFiles.has(obj.key)}
                                       selected={selectedForBulk.has(obj.key)}
+                                      highlighted={highlightedFileKey === obj.key}
                                       onToggleSelect={toggleFileSelection}
                                     />
                                   )
@@ -5435,8 +5405,8 @@ export default function UploadPage() {
             value={
               folderZipProgress?.filesTotal
                 ? Math.round(
-                    ((folderZipProgress.filesDone ?? 0) / folderZipProgress.filesTotal) * 100
-                  )
+                  ((folderZipProgress.filesDone ?? 0) / folderZipProgress.filesTotal) * 100
+                )
                 : undefined
             }
             sx={{ mb: 1 }}
