@@ -27,7 +27,7 @@ const ChatBubble = styled(Paper, {
   shouldForwardProp: prop => prop !== 'isMine',
 })<{ isMine: boolean }>(({ theme, isMine }) => ({
   padding: theme.spacing(1.5, 2),
-  borderRadius: isMine ? '18px 4px 18px 18px' : '4px 18px 18px 18px',
+  borderRadius: isMine ? '4px 18px 18px 18px' : '18px 4px 18px 18px',
   maxWidth: '72%',
   minWidth: 120,
   background: isMine

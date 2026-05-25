@@ -222,22 +222,52 @@ export default function MessageList() {
           </Box>
         ) : (
           <>
-            {filteredMessages.map(message => {
+            {filteredMessages.map((message, idx) => {
               const isMine = message.senderId === user?.id
               const sender = usersById.get(message.senderId)
+              const msgDate = new Date(message.createdAt)
+              const prevMsg = filteredMessages[idx - 1]
+              const prevDate = prevMsg ? new Date(prevMsg.createdAt) : null
+              const showDateSep = !prevDate || msgDate.toDateString() !== prevDate.toDateString()
+
+              const dateLabel = (() => {
+                const today = new Date()
+                const yesterday = new Date(today)
+                yesterday.setDate(today.getDate() - 1)
+                if (msgDate.toDateString() === today.toDateString()) return 'اليوم'
+                if (msgDate.toDateString() === yesterday.toDateString()) return 'أمس'
+                return msgDate.toLocaleDateString('ar-SA', { day: 'numeric', month: 'long', year: msgDate.getFullYear() !== today.getFullYear() ? 'numeric' : undefined })
+              })()
+
               return (
-                <MessageItem
-                  key={message.id}
-                  message={message}
-                  isMine={isMine}
-                  sender={sender}
-                  isGeneralDiscussionSelected={isGeneralDiscussionSelected}
-                  usersById={usersById}
-                  onOpenDirectConversation={openDirectConversation}
-                  getMentionHref={getMentionHref}
-                  currentUserId={user?.id}
-                  conversationParticipantIds={selectedConversation.participantIds}
-                />
+                <Box key={message.id}>
+                  {showDateSep && (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', my: 1.5 }}>
+                      <Box sx={{
+                        px: 1.5, py: 0.4,
+                        borderRadius: 10,
+                        bgcolor: theme => theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.75)',
+                        backdropFilter: 'blur(4px)',
+                        boxShadow: 'none',
+                      }}>
+                        <Typography variant="caption" sx={{ fontWeight: 600, opacity: 0.75, fontSize: 11 }}>
+                          {dateLabel}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  )}
+                  <MessageItem
+                    message={message}
+                    isMine={isMine}
+                    sender={sender}
+                    isGeneralDiscussionSelected={isGeneralDiscussionSelected}
+                    usersById={usersById}
+                    onOpenDirectConversation={openDirectConversation}
+                    getMentionHref={getMentionHref}
+                    currentUserId={user?.id}
+                    conversationParticipantIds={selectedConversation.participantIds}
+                  />
+                </Box>
               )
             })}
             <div ref={messagesEndRef} />

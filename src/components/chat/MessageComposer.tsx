@@ -179,7 +179,7 @@ export default function MessageComposer() {
           onKeyDown={handleKeyDown}
           placeholder="اكتب رسالتك... استخدم @ لذكر عضو"
           sx={{ flex: 1, fontSize: 14, lineHeight: 1.5, py: 0.25 }}
-          inputProps={{ dir: 'auto' }}
+          inputProps={{ dir: composerText ? 'auto' : "rtl" }}
         />
 
         {/* Send button */}

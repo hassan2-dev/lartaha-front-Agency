@@ -18,7 +18,7 @@ import { AdminRoute } from '../components/AdminRoute'
 import UploadPage from '../pages/UploadPage'
 
 export default function AppRoutes() {
-  console.log("version: ", "1.0.5")
+  console.log("version: ", "1.0.6")
   return (
     <Routes>
       {/* Public Routes */}
