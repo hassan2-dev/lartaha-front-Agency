@@ -3124,6 +3124,8 @@ export default function UploadPage() {
 
   // Handle folder/file navigation from URL search params — single source of truth
   const fetchExplorerRef = useRef<typeof fetchExplorer | null>(null)
+  // Debounce timer for nav fetches — collapses rapid duplicate effect fires into one
+  const navFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // currentPath is derived from searchParams so it is always in sync with the URL
   const currentPath = useMemo(() => {
@@ -3150,14 +3152,21 @@ export default function UploadPage() {
     if (folder || fileFromQuery) {
       setShowTrash(false)
     }
-
     setFolderError(null)
-    uploadDevLog('[Nav] effect: fetching', { currentPath, computedExplorerPrefix })
-    if (fetchExplorerRef.current) {
-      void fetchExplorerRef.current(true, computedExplorerPrefix, null)
-    } else {
-      void fetchExplorer(true, computedExplorerPrefix, null)
-    }
+
+    // Debounce: cancel any pending fetch and schedule a new one after 30ms.
+    // This collapses rapid duplicate effect fires (workspaceId stabilisation) into one fetch,
+    // while still allowing A→B→A navigation to re-fetch correctly.
+    if (navFetchTimerRef.current) clearTimeout(navFetchTimerRef.current)
+    navFetchTimerRef.current = setTimeout(() => {
+      navFetchTimerRef.current = null
+      uploadDevLog('[Nav] effect: fetching', { currentPath, computedExplorerPrefix })
+      if (fetchExplorerRef.current) {
+        void fetchExplorerRef.current(true, computedExplorerPrefix, null)
+      } else {
+        void fetchExplorer(true, computedExplorerPrefix, null)
+      }
+    }, 30)
   }, [currentPath, user?.workspaceId])
 
   useEffect(() => {
@@ -3193,11 +3202,8 @@ export default function UploadPage() {
     const workspaceId = user?.workspaceId?.trim()
     if (!workspaceId) return
     trashedOriginalKeysRef.current = loadPersistedTrashedKeys(workspaceId)
-    void refreshTrashedKeysCache().then(() => {
-      if (fetchExplorerRef.current) {
-        fetchExplorerRef.current(true)
-      }
-    })
+    // Only refresh the cache — the navigation effect is the sole fetch trigger
+    void refreshTrashedKeysCache()
   }, [user?.workspaceId, refreshTrashedKeysCache])
 
   // Listen for retry-download events dispatched from DownloadProgressDialog
@@ -4363,6 +4369,14 @@ export default function UploadPage() {
       })
       return
     }
+    // Also wait if filesHere is still empty with hasMoreFiles=true — the initial fetch
+    // hasn't returned yet (we're in the window between reset clearing the list and the
+    // response arriving). Proceeding here causes loadMoreFiles to fire as a non-reset
+    // append fetch, placing files at the bottom of the list.
+    if (filesHere.length === 0 && hasMoreFiles) {
+      uploadDevLog('[Upload] deep-link waiting for initial fetch to land', { requestedFileKey })
+      return
+    }
 
     const matched = filesHere.find(file => objectKeyMatchesDeepLink(file.key, requestedFileKey))
     if (matched) {
@@ -4429,33 +4443,6 @@ export default function UploadPage() {
         currentPath,
         sampleLoadedKeys,
       })
-      const workspaceId = user?.workspaceId?.trim() || ''
-      const requestedFolder = deriveRelativeFolderFromFileKey(requestedFileKey, workspaceId)
-      if (
-        !isLoadingMoreFiles &&
-        requestedFolder === currentPath &&
-        !filesHere.some(file => objectKeyMatchesDeepLink(file.key, requestedFileKey))
-      ) {
-        uploadDevWarn('[Upload] deep-link direct-inject fallback for current folder', {
-          requestedFileKey,
-          requestedFolder,
-          currentPath,
-        })
-        setFilesHere(prev => [{ key: requestedFileKey }, ...prev])
-        setHighlightedFileKeyWithAutoClear(requestedFileKey)
-        const escaped =
-          typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
-            ? CSS.escape(requestedFileKey)
-            : requestedFileKey.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-        const run = () => {
-          document.querySelector(`[data-file-key="${escaped}"]`)?.scrollIntoView({
-            behavior: 'smooth',
-            block: 'center',
-          })
-        }
-        requestAnimationFrame(run)
-        setTimeout(run, 200)
-      }
       if (!hasMoreFiles && !isLoadingMoreFiles && !deepLinkGlobalSearchRef.current[requestedFileKey]) {
         deepLinkGlobalSearchRef.current[requestedFileKey] = true
         void (async () => {
@@ -4499,29 +4486,13 @@ export default function UploadPage() {
               matchedFolder,
             })
 
-            if (matchedFolder === currentPath) {
-              setFilesHere(prev => {
-                if (prev.some(file => objectKeyMatchesDeepLink(file.key, matchedKey))) return prev
-                return [{ key: matchedKey }, ...prev]
-              })
-              setHighlightedFileKeyWithAutoClear(matchedKey)
-              const escaped =
-                typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
-                  ? CSS.escape(matchedKey)
-                  : matchedKey.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-              const run = () => {
-                document.querySelector(`[data-file-key="${escaped}"]`)?.scrollIntoView({
-                  behavior: 'smooth',
-                  block: 'center',
-                })
-              }
-              requestAnimationFrame(run)
-              setTimeout(run, 200)
+            // Navigate to the correct folder — the navigation effect will fetch and the
+            // deep-link effect will scroll/highlight once files load
+            if (matchedFolder !== currentPath) {
+              setSearchParams(
+                matchedFolder ? { folder: matchedFolder, file: matchedKey } : { file: matchedKey }
+              )
             }
-
-            setSearchParams(
-              matchedFolder ? { folder: matchedFolder, file: matchedKey } : { file: matchedKey }
-            )
           } catch (error) {
             console.error('[Upload] deep-link fallback: global search failed', error)
           }
