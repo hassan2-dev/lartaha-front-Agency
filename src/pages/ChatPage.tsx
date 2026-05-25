@@ -1,4 +1,4 @@
-import { Alert, Box, Container, Paper } from '@mui/material'
+import { Alert, Box, Paper, useTheme } from '@mui/material'
 import LiveKitMeetingDialog from '../components/chat/LiveKitMeetingDialog'
 import ConversationList from '../components/chat/ConversationList'
 import MessageList from '../components/chat/MessageList'
@@ -17,32 +17,90 @@ function ChatPageContent() {
     setMeetingOpen,
   } = useChatContext()
 
+  const theme = useTheme()
+
+  // AppBar Toolbar height (MUI default min-height)
+  // Mobile: 56px toolbar + 64px bottom nav + 88px stories bar + 8px container py
+  // Desktop: 64px toolbar + 0 bottom nav
+  const MOBILE_APPBAR = 56
+  const MOBILE_BOTTOM_NAV = 64
+  const MOBILE_STORIES = 88  // MemberStories height on mobile
+  const DESKTOP_APPBAR = 64
+
   return (
-    <Container maxWidth="xl" sx={{ py: 3 }}>
+    <Box
+      sx={{
+        // Prevent the outer main scroll area from scrolling on this page
+        // by making the chat fill exactly the remaining space
+        display: 'flex',
+        flexDirection: 'column',
+        height: {
+          xs: `calc(100dvh - ${MOBILE_APPBAR}px - ${MOBILE_BOTTOM_NAV}px)`,
+          md: `calc(100dvh - ${DESKTOP_APPBAR}px)`,
+        },
+        px: { xs: 0, md: 2 },
+        pb: { xs: 0, md: 1.5 },
+        pt: { xs: 0, md: 1 },
+        overflow: 'hidden',
+        // Cancel out SideNav's paddingBottom on mobile so the outer container doesn't scroll
+        mb: { xs: '-80px', md: 0 },
+      }}
+    >
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert severity="error" sx={{ mb: 1, mx: { xs: 0.5, md: 0 } }}>
           {error}
         </Alert>
       )}
 
+      {/* Mobile stories bar — rendered OUTSIDE the Paper so its height is tracked */}
       <MemberStories />
 
       <Paper
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', md: '320px 1fr' },
-          minHeight: 'calc(100vh - 170px)',
-          borderRadius: 2,
+          gridTemplateColumns: { xs: '1fr', md: '300px 1fr' },
+          // Remaining height = total - stories bar on mobile
+          flex: 1,
+          minHeight: 0,
+          borderRadius: { xs: 0, md: 2 },
           overflow: 'hidden',
+          boxShadow: theme.shadows[2],
+          // On mobile subtract stories height from the flex container
+          maxHeight: {
+            xs: `calc(100dvh - ${MOBILE_APPBAR}px - ${MOBILE_BOTTOM_NAV}px - ${MOBILE_STORIES}px)`,
+            md: 'none',
+          },
         }}
       >
-        <Box sx={{ display: { xs: 'none', md: 'block' } }}>
+        {/* Desktop sidebar */}
+        <Box
+          sx={{
+            display: { xs: 'none', md: 'flex' },
+            flexDirection: 'column',
+            borderRight: '1px solid',
+            borderColor: 'divider',
+            overflow: 'hidden',
+          }}
+        >
           <ConversationList />
         </Box>
 
-        <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          <MessageList />
-          <MessageComposer />
+        {/* Message area */}
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            position: 'relative',
+          }}
+        >
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', px: { xs: 0, md: 2 }, pt: { xs: 0, md: 1 } }}>
+            <MessageList />
+          </Box>
+
+          <Box sx={{ px: { xs: 0.5, md: 2 }, pb: { xs: 0.5, md: 1.5 }, pt: 0.5 }}>
+            <MessageComposer />
+          </Box>
         </Box>
       </Paper>
 
@@ -54,7 +112,7 @@ function ChatPageContent() {
         }
         onClose={() => setMeetingOpen(false)}
       />
-    </Container>
+    </Box>
   )
 }
 
