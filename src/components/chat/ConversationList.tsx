@@ -98,8 +98,7 @@ export default function ConversationList() {
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
-        borderLeft: { md: '1px solid' },
-        borderColor: 'divider',
+        borderLeft: { md: '1px solid rgba(128,128,128,0.15)' },
       }}
     >
       {/* Header */}

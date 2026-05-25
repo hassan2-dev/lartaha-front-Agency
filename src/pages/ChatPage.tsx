@@ -77,8 +77,7 @@ function ChatPageContent() {
           sx={{
             display: { xs: 'none', md: 'flex' },
             flexDirection: 'column',
-            borderRight: '1px solid',
-            borderColor: 'divider',
+            borderRight: '1px solid rgba(128,128,128,0.15)',
             overflow: 'hidden',
           }}
         >

@@ -300,7 +300,7 @@ export default function SideNav({ children, title = 'Larthaa Agency' }: SideNavP
               '& .MuiDrawer-paper': {
                 width: drawerWidth,
                 boxSizing: 'border-box',
-                borderLeft: '1px solid',
+                borderLeft: '10px solid',
                 borderColor: 'divider',
                 backgroundColor: 'background.default',
                 boxShadow: 'none',
@@ -393,8 +393,8 @@ function MinimizedDownloadToast() {
     totalCount === 0
       ? 0
       : Math.round(
-          Array.from(downloads.values()).reduce((sum, d) => sum + d.progress, 0) / totalCount
-        )
+        Array.from(downloads.values()).reduce((sum, d) => sum + d.progress, 0) / totalCount
+      )
   const allDone = activeCount === 0 && completedCount > 0
 
   // Upload toast is visible when there are items AND (minimized OR modal not open)
@@ -560,9 +560,9 @@ function MinimizedUploadToast() {
     totalUploadsCount === 0
       ? 0
       : Math.round(
-          Object.values(uploadItems).reduce((sum, item) => sum + item.progress, 0) /
-            totalUploadsCount
-        )
+        Object.values(uploadItems).reduce((sum, item) => sum + item.progress, 0) /
+        totalUploadsCount
+      )
 
   return (
     <Paper

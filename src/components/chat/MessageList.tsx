@@ -1,5 +1,5 @@
 import { Box, Typography, Divider, Avatar, IconButton, Tooltip, InputBase, Collapse } from '@mui/material'
-import { Forum as ForumIcon, Search as SearchIcon, Info as InfoIcon, Close as CloseIcon } from '@mui/icons-material'
+import { Forum as ForumIcon, Search as SearchIcon, Info as InfoIcon, Close as CloseIcon, KeyboardArrowUp, KeyboardArrowDown } from '@mui/icons-material'
 import { MessageSkeleton } from '../SkeletonLoaders'
 import MessageItem from './MessageItem'
 import { useChatContext } from '../../contexts/ChatContext'
@@ -23,15 +23,30 @@ export default function MessageList() {
 
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [activeMatchIdx, setActiveMatchIdx] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages.length])
 
-  const filteredMessages = searchQuery.trim()
-    ? messages.filter(m => m.text?.toLowerCase().includes(searchQuery.toLowerCase()))
-    : messages
+  // Always show all messages; search only highlights
+  const filteredMessages = messages
+
+  const matchedMessageIds = searchQuery.trim()
+    ? messages
+      .filter(m => m.text?.toLowerCase().includes(searchQuery.toLowerCase()))
+      .map(m => m.id)
+    : []
+
+  useEffect(() => { setActiveMatchIdx(0) }, [searchQuery])
+
+  useEffect(() => {
+    if (matchedMessageIds.length === 0) return
+    const id = matchedMessageIds[activeMatchIdx]
+    if (id) messageRefs.current.get(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [activeMatchIdx, matchedMessageIds.join(',')])
 
   if (!selectedConversation) {
     return (
@@ -174,15 +189,23 @@ export default function MessageList() {
             placeholder="بحث في الرسائل..."
             sx={{ flex: 1, fontSize: 13 }}
           />
-          {filteredMessages.length !== messages.length && (
-            <Typography variant="caption" sx={{ opacity: 0.6, flexShrink: 0 }}>
-              {filteredMessages.length} نتيجة
-            </Typography>
+          {searchQuery.trim() && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
+              <Typography variant="caption" sx={{ opacity: 0.6, minWidth: 36, textAlign: 'center' }}>
+                {matchedMessageIds.length === 0 ? '0' : `${activeMatchIdx + 1}/${matchedMessageIds.length}`}
+              </Typography>
+              <IconButton size="small" disabled={matchedMessageIds.length === 0} onClick={() => setActiveMatchIdx(i => (i - 1 + matchedMessageIds.length) % matchedMessageIds.length)} sx={{ p: 0.25 }}>
+                <KeyboardArrowUp sx={{ fontSize: 18 }} />
+              </IconButton>
+              <IconButton size="small" disabled={matchedMessageIds.length === 0} onClick={() => setActiveMatchIdx(i => (i + 1) % matchedMessageIds.length)} sx={{ p: 0.25 }}>
+                <KeyboardArrowDown sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Box>
           )}
         </Box>
       </Collapse>
 
-      <Divider sx={{ display: { xs: 'none', md: 'block' } }} />
+      <Divider sx={{ display: { xs: 'none', md: 'block' }, borderColor: 'rgba(128,128,128,0.15)' }} />
 
       <Box
         sx={{
@@ -240,7 +263,13 @@ export default function MessageList() {
               })()
 
               return (
-                <Box key={message.id}>
+                <Box
+                  key={message.id}
+                  ref={(el: HTMLDivElement | null) => {
+                    if (el) messageRefs.current.set(message.id, el)
+                    else messageRefs.current.delete(message.id)
+                  }}
+                >
                   {showDateSep && (
                     <Box sx={{ display: 'flex', justifyContent: 'center', my: 1.5 }}>
                       <Box sx={{
@@ -266,6 +295,7 @@ export default function MessageList() {
                     getMentionHref={getMentionHref}
                     currentUserId={user?.id}
                     conversationParticipantIds={selectedConversation.participantIds}
+                    searchQuery={searchQuery}
                   />
                 </Box>
               )

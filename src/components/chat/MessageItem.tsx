@@ -92,6 +92,23 @@ interface MessageItemProps {
   getMentionHref: (mention: ChatMention) => string | null
   currentUserId?: string
   conversationParticipantIds?: string[]
+  searchQuery?: string
+}
+
+function highlightText(text: string, query: string) {
+  if (!query.trim()) return <>{text}</>
+  const parts = text.split(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'))
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.toLowerCase() === query.toLowerCase() ? (
+          <Box key={i} component="mark" sx={{ bgcolor: '#facc15', color: '#1a1a1a', borderRadius: '2px', px: 0.25 }}>
+            {part}
+          </Box>
+        ) : part
+      )}
+    </>
+  )
 }
 
 function formatFileSize(bytes?: number) {
@@ -132,6 +149,7 @@ export default function MessageItem({
   getMentionHref,
   currentUserId,
   conversationParticipantIds = [],
+  searchQuery = '',
 }: MessageItemProps) {
   const [copied, setCopied] = useState(false)
   const linkPreviews = extractLinks(message.text || '')
@@ -264,7 +282,7 @@ export default function MessageItem({
                   variant="body2"
                   sx={{ wordBreak: 'break-word', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}
                 >
-                  {linkifyText(message.text!)}
+                  {searchQuery ? highlightText(message.text!, searchQuery) : linkifyText(message.text!)}
                 </Typography>
               )}
 
