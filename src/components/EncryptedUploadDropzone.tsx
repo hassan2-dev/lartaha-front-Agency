@@ -48,26 +48,12 @@ import {
   listMultipartParts,
   confirmUpload,
   requestUploadUrl,
-  uploadImageThumbnail,
 } from '../api/uploadApi'
 import { useUpload, type UploadItemState } from '../contexts/UploadContext'
 import { KeyMinimalisticSquare3 } from '@solar-icons/react'
 import Toast from './Toast'
 
-// Build thumbnail key following server naming convention
-function buildImageThumbnailKey(originalKey: string): string {
-  const safeKey = String(originalKey || '').replace(/^\/+/, '')
-  if (!safeKey) return ''
 
-  const parts = safeKey.split('/').filter(Boolean)
-  const filename = parts.pop() || 'image'
-  const basename = filename.replace(/\.[^.]+$/, '') || filename
-  const directory = parts.join('/')
-  const thumbnailFilename = `${basename}__thumb.jpg`
-  return directory
-    ? `${directory}/.thumbnails/${thumbnailFilename}`
-    : `.thumbnails/${thumbnailFilename}`
-}
 
 export type SelectedUploadFile = {
   file: File
@@ -181,7 +167,7 @@ export default function EncryptedUploadDropzone({
         uppyRef.current?.cancelAll()
         // Some Uppy builds expose close(); guard for type compatibility
         if (typeof (uppyRef.current as unknown as { close?: () => void }).close === 'function') {
-          ;(uppyRef.current as unknown as { close: () => void }).close()
+          ; (uppyRef.current as unknown as { close: () => void }).close()
         }
         uppyRef.current = null
       }
@@ -349,8 +335,8 @@ export default function EncryptedUploadDropzone({
             uploadFile,
             thumbnailUploadFile: encryptedThumbnailBlob
               ? new File([encryptedThumbnailBlob], `thumb_${sf.relativePath}.bin`, {
-                  type: 'application/octet-stream',
-                })
+                type: 'application/octet-stream',
+              })
               : null,
             thumbnailPreviewUrl, // Add preview URL for display
           })
@@ -374,9 +360,9 @@ export default function EncryptedUploadDropzone({
     // Prepend currentPath to relativePath for each file if currentPath is set
     const filesWithPath = currentPath
       ? selectedFiles.map(sf => ({
-          ...sf,
-          relativePath: `${currentPath}/${sf.relativePath}`.replace(/\/+/g, '/'),
-        }))
+        ...sf,
+        relativePath: `${currentPath}/${sf.relativePath}`.replace(/\/+/g, '/'),
+      }))
       : selectedFiles
 
     // Check for duplicate folder name in current location (same logic as handleCreateFolder)
@@ -626,9 +612,9 @@ export default function EncryptedUploadDropzone({
             totalBytes: dataFile.size,
             ...(fileToUpload.thumbnailPreviewUrl
               ? {
-                  thumbnailPreviewUrl: fileToUpload.thumbnailPreviewUrl,
-                  'has-thumbnail': true,
-                }
+                thumbnailPreviewUrl: fileToUpload.thumbnailPreviewUrl,
+                'has-thumbnail': true,
+              }
               : {}),
           },
         }))
@@ -702,26 +688,11 @@ export default function EncryptedUploadDropzone({
           })
 
           // Upload non-encrypted thumbnail for encrypted images
-          console.log('[DEBUG] thumbnail check:', {
-            hasThumbnailUploadFile: !!fileToUpload.thumbnailUploadFile,
-            isEncrypted: fileToUpload.encrypted,
-            thumbnailFileSize: fileToUpload.thumbnailUploadFile?.size,
-          })
+
           if (fileToUpload.thumbnailUploadFile && fileToUpload.encrypted) {
-            const thumbnailKey = buildImageThumbnailKey(uploadKey)
-            console.log('[DEBUG] Uploading thumbnail:', {
-              uploadKey,
-              thumbnailKey,
-              hasFile: !!fileToUpload.thumbnailUploadFile,
-              size: fileToUpload.thumbnailUploadFile.size,
-            })
+
             try {
-              const result = await uploadImageThumbnail(
-                uploadKey,
-                thumbnailKey,
-                fileToUpload.thumbnailUploadFile
-              )
-              console.log('[DEBUG] Thumbnail upload success:', result)
+
             } catch (err) {
               console.error('[DEBUG] Failed to upload thumbnail:', err)
               // Continue without thumbnail - not critical
@@ -803,8 +774,8 @@ export default function EncryptedUploadDropzone({
         // Don't clean up error items automatically - let user see and close them manually
       })
 
-      // Start upload
-      ;(uppy as unknown as { _startTime?: number })._startTime = Date.now()
+        // Start upload
+        ; (uppy as unknown as { _startTime?: number })._startTime = Date.now()
       uppy.upload()
 
       return uppy
@@ -1479,14 +1450,14 @@ export default function EncryptedUploadDropzone({
                       background:
                         item.status === 'completed'
                           ? theme =>
-                              theme.palette.mode === 'dark'
-                                ? 'rgba(76, 175, 80, 0.08)'
-                                : 'rgba(76, 175, 80, 0.04)'
+                            theme.palette.mode === 'dark'
+                              ? 'rgba(76, 175, 80, 0.08)'
+                              : 'rgba(76, 175, 80, 0.04)'
                           : item.status === 'error'
                             ? theme =>
-                                theme.palette.mode === 'dark'
-                                  ? 'rgba(244, 67, 54, 0.08)'
-                                  : 'rgba(244, 67, 54, 0.04)'
+                              theme.palette.mode === 'dark'
+                                ? 'rgba(244, 67, 54, 0.08)'
+                                : 'rgba(244, 67, 54, 0.04)'
                             : 'transparent',
                       transition: 'background-color 0.2s ease',
                     }}
@@ -1507,12 +1478,12 @@ export default function EncryptedUploadDropzone({
                             ? 'transparent'
                             : item.status === 'completed'
                               ? theme =>
-                                  `linear-gradient(135deg, ${theme.palette.success.main}20, ${theme.palette.success.dark}10)`
+                                `linear-gradient(135deg, ${theme.palette.success.main}20, ${theme.palette.success.dark}10)`
                               : item.status === 'error'
                                 ? theme =>
-                                    `linear-gradient(135deg, ${theme.palette.error.main}20, ${theme.palette.error.dark}10)`
+                                  `linear-gradient(135deg, ${theme.palette.error.main}20, ${theme.palette.error.dark}10)`
                                 : theme =>
-                                    `linear-gradient(135deg, ${theme.palette.primary.main}15, ${theme.palette.primary.light}10)`,
+                                  `linear-gradient(135deg, ${theme.palette.primary.main}15, ${theme.palette.primary.light}10)`,
                           overflow: 'hidden',
                           border: item.thumbnailPreviewUrl
                             ? theme => `1px solid ${theme.palette.divider}`
@@ -1683,7 +1654,6 @@ export default function EncryptedUploadDropzone({
                               onClick={e => {
                                 e.preventDefault()
                                 e.stopPropagation()
-                                console.log('[DEBUG] Cancel clicked for', key)
                                 const uppy = uppyInstancesRef.current.get(key)
                                 if (uppy) {
                                   try {
@@ -1736,9 +1706,9 @@ export default function EncryptedUploadDropzone({
                               background:
                                 item.status === 'paused'
                                   ? theme =>
-                                      `linear-gradient(90deg, ${theme.palette.warning.main} 0%, ${theme.palette.warning.light} 100%)`
+                                    `linear-gradient(90deg, ${theme.palette.warning.main} 0%, ${theme.palette.warning.light} 100%)`
                                   : theme =>
-                                      `linear-gradient(90deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.light} 100%)`,
+                                    `linear-gradient(90deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.light} 100%)`,
                               transition: 'transform 0.3s ease',
                             },
                           }}
@@ -1954,4 +1924,4 @@ export default function EncryptedUploadDropzone({
 }
 
 // Re-export types
-export type {}
+export type { }

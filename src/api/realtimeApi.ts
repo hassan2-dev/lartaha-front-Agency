@@ -84,14 +84,22 @@ export function subscribeRealtime(
 
           try {
             const payload = JSON.parse(dataLines.join('\n')) as RealtimeEvent
-            onEvent(payload)
+            try {
+              onEvent(payload)
+            } catch (callbackError) {
+              onError?.(callbackError)
+            }
           } catch (error) {
             onError?.(error)
           }
         }
       }
     } catch (error) {
-      if (!closed && !abortController.signal.aborted) {
+      if (
+        !closed &&
+        !abortController.signal.aborted &&
+        !(error instanceof DOMException && error.name === 'AbortError')
+      ) {
         onError?.(error)
       }
     }

@@ -364,9 +364,9 @@ export async function uploadFilesStreamed(
 
     const status =
       data.status === 'completed' ||
-      data.status === 'failed' ||
-      data.status === 'running' ||
-      data.status === 'finalizing'
+        data.status === 'failed' ||
+        data.status === 'running' ||
+        data.status === 'finalizing'
         ? data.status
         : 'running'
     const currentFileUploadedRaw = typeof data.bytesUploaded === 'number' ? data.bytesUploaded : 0
@@ -407,6 +407,8 @@ export async function uploadFilesStreamed(
 
     lastTime = now
     lastLoaded = bytesUploaded
+  }, () => {
+    // suppress realtime stream errors during upload — progress falls back to XHR events
   })
 
   try {
@@ -1341,7 +1343,7 @@ export async function downloadFolderAsZipClient(options: {
   if (done === 0) {
     throw new Error(
       failedFiles[0] ||
-        'لم يُحمَّل أي ملف — تحقق من الاتصال وكلمة مرور التشفير'
+      'لم يُحمَّل أي ملف — تحقق من الاتصال وكلمة مرور التشفير'
     )
   }
 

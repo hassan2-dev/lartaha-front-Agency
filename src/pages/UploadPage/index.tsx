@@ -94,7 +94,7 @@ import {
   FolderItemGridSkeleton,
 } from '../../components/SkeletonLoaders'
 import Toast from '../../components/Toast'
-import { ArchiveDownMinimalistic, FolderWithFiles, ServerMinimalistic, Widget } from '@solar-icons/react'
+import { ArchiveDownMinimalistic, FolderWithFiles, RestartSquare, ServerMinimalistic, Widget } from '@solar-icons/react'
 import { useDownload } from '../../contexts/DownloadContext'
 import type { DownloadItem } from '../../contexts/DownloadContext'
 import { keyframes } from '@mui/system'
@@ -131,33 +131,8 @@ function fmtDuration(totalSeconds: number): string {
   return `${mm}:${ss}`
 }
 
-function buildVideoThumbnailKeyFromFileKey(fileKey: string) {
-  const safeKey = String(fileKey || '').replace(/^\/+/, '')
-  if (!safeKey) return ''
 
-  const parts = safeKey.split('/').filter(Boolean)
-  const filename = parts.pop() || 'video'
-  const basename = filename.replace(/\.[^.]+$/, '') || filename
-  const directory = parts.join('/')
-  const thumbnailFilename = `${basename}__thumb.jpg`
-  return directory
-    ? `${directory}/.thumbnails/${thumbnailFilename}`
-    : `.thumbnails/${thumbnailFilename}`
-}
 
-function buildImageThumbnailKeyFromFileKey(fileKey: string) {
-  const safeKey = String(fileKey || '').replace(/^\/+/, '')
-  if (!safeKey) return ''
-
-  const parts = safeKey.split('/').filter(Boolean)
-  const filename = parts.pop() || 'image'
-  const basename = filename.replace(/\.[^.]+$/, '') || filename
-  const directory = parts.join('/')
-  const thumbnailFilename = `${basename}__thumb.jpg`
-  return directory
-    ? `${directory}/.thumbnails/${thumbnailFilename}`
-    : `.thumbnails/${thumbnailFilename}`
-}
 
 function getFileType(filename: string): 'image' | 'video' | 'audio' | 'document' | 'other' {
   const ext = filename.split('.').pop()?.toLowerCase() || ''
@@ -1340,43 +1315,6 @@ function TrashFileItem({
     ? new Date(file.permanentDeleteAt).toLocaleDateString('ar-SA')
     : ''
   const deletedBy = file.deletedBy
-  const isImage = fileType === 'image'
-  const isVideo = fileType === 'video'
-
-  // Build thumbnail URL for trashed files
-  const buildTrashThumbnailUrl = () => {
-    if (!file.originalKey) return null
-    // Use R2 public URL if available, otherwise fall back to API proxy
-    const r2PublicBase = API_ENV.r2PublicBaseUrl?.trim()
-    const apiBase = API_ENV.apiBaseUrl?.trim() || ''
-    if (isImage) {
-      const imageThumbnailKey = buildImageThumbnailKeyFromFileKey(file.originalKey)
-      if (!imageThumbnailKey) return null
-      if (r2PublicBase) {
-        const base = r2PublicBase.endsWith('/') ? r2PublicBase.slice(0, -1) : r2PublicBase
-        const safeKey = imageThumbnailKey.startsWith('/')
-          ? imageThumbnailKey.slice(1)
-          : imageThumbnailKey
-        return `${base}/${safeKey}`
-      }
-      return `${apiBase}/api/image?key=${encodeURIComponent(imageThumbnailKey)}`
-    }
-    if (isVideo) {
-      const videoThumbnailKey = buildVideoThumbnailKeyFromFileKey(file.originalKey)
-      if (!videoThumbnailKey) return null
-      if (r2PublicBase) {
-        const base = r2PublicBase.endsWith('/') ? r2PublicBase.slice(0, -1) : r2PublicBase
-        const safeKey = videoThumbnailKey.startsWith('/')
-          ? videoThumbnailKey.slice(1)
-          : videoThumbnailKey
-        return `${base}/${safeKey}`
-      }
-      return `${apiBase}/api/image?key=${encodeURIComponent(videoThumbnailKey)}`
-    }
-    return null
-  }
-
-  const thumbnailUrl = buildTrashThumbnailUrl()
 
   return (
     <ListItem
@@ -1394,9 +1332,9 @@ function TrashFileItem({
           : isDark
             ? 'rgba(255,255,255,0.08)'
             : theme.palette.divider,
-        backgroundColor: isDark ? 'rgba(211, 47, 47, 0.12)' : 'rgba(211, 47, 47, 0.08)',
+        backgroundColor: isDark ? 'rgba(233, 30, 99, 0.10)' : 'rgba(233, 30, 99, 0.04)',
         '&:hover': {
-          backgroundColor: isDark ? 'rgba(211, 47, 47, 0.15)' : 'rgba(211, 47, 47, 0.12)',
+          backgroundColor: isDark ? 'rgba(233, 30, 99, 0.14)' : 'rgba(233, 30, 99, 0.07)',
         },
       }}
     >
@@ -1410,33 +1348,17 @@ function TrashFileItem({
           sx={{ p: 0, mr: 1 }}
         />
       )}
-      {/* Thumbnail or icon */}
-      {isImage && thumbnailUrl ? (
-        <Box sx={{ position: 'relative' }}>
-          <ImageThumbnail url={thumbnailUrl} filename={filename} />
-          <ThumbnailTypeBadge fileType={fileType} size={14} />
-        </Box>
-      ) : isVideo && thumbnailUrl ? (
-        <Box sx={{ position: 'relative' }}>
-          <VideoThumbnail
-            url={thumbnailUrl}
-            thumbnailKey={buildVideoThumbnailKeyFromFileKey(file.originalKey)}
-            encryptionEnabled
-          />
-          <ThumbnailTypeBadge fileType={fileType} size={14} />
-        </Box>
-      ) : (
-        <Avatar
-          sx={{
-            width: 48,
-            height: 48,
-            backgroundColor: isDark ? 'rgba(211, 47, 47, 0.12)' : 'rgba(211, 47, 47, 0.08)',
-            color: 'error.main',
-          }}
-        >
-          {getFileIcon(fileType)}
-        </Avatar>
-      )}
+      {/* Icon */}
+      <Avatar
+        sx={{
+          width: 48,
+          height: 48,
+          backgroundColor: isDark ? 'rgba(233, 30, 99, 0.18)' : 'rgba(233, 30, 99, 0.12)',
+          color: isDark ? 'pink' : '#c2185b',
+        }}
+      >
+        {getFileIcon(fileType)}
+      </Avatar>
 
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography
@@ -1467,9 +1389,9 @@ function TrashFileItem({
             size="small"
             variant="text"
             onClick={() => void onRestore(file.originalKey)}
-            sx={{ borderRadius: 999, minWidth: 'auto', p: 1, color: 'success.main' }}
+            sx={{ borderRadius: 999, minWidth: 'auto', p: 1, color: '#fff' }}
           >
-            <RestoreIcon />
+            <RestartSquare size={40} weight={"BoldDuotone"} />
           </Button>
         </Tooltip>
       </Box>
@@ -3232,9 +3154,7 @@ export default function UploadPage() {
     const workspaceId = user?.workspaceId?.trim()
     if (!workspaceId) return
     trashedOriginalKeysRef.current = loadPersistedTrashedKeys(workspaceId)
-    // Only refresh the cache — the navigation effect is the sole fetch trigger
-    void refreshTrashedKeysCache()
-  }, [user?.workspaceId, refreshTrashedKeysCache])
+  }, [user?.workspaceId])
 
   // Listen for retry-download events dispatched from DownloadProgressDialog
   useEffect(() => {
@@ -3651,6 +3571,12 @@ export default function UploadPage() {
     try {
       const res = await listTrashFiles()
       setTrashFiles(res.files || [])
+      const workspaceId = user?.workspaceId?.trim()
+      const keys = new Set<string>(
+        (res.files ?? []).map((f: any) => String(f.originalKey || '').replace(/^\/+/, ''))
+      )
+      trashedOriginalKeysRef.current = keys
+      if (workspaceId) persistTrashedKeys(workspaceId, keys)
     } catch (e: unknown) {
       const err = e as { message?: string; response?: { data?: { message?: string } } }
       showToastNotification(
@@ -3662,11 +3588,15 @@ export default function UploadPage() {
     }
   }, [])
 
+  const fetchTrashFilesRef = useRef(fetchTrashFiles)
+  fetchTrashFilesRef.current = fetchTrashFiles
+  const showTrashRef = useRef(showTrash)
+  showTrashRef.current = showTrash
   useEffect(() => {
     if (showTrash) {
-      void fetchTrashFiles()
+      void fetchTrashFilesRef.current()
     }
-  }, [showTrash, fetchTrashFiles])
+  }, [showTrash])
 
   function handlePreview(key: string, url: string) {
     const filename = filenameFromKey(key)
@@ -4286,10 +4216,6 @@ export default function UploadPage() {
       }
 
       try {
-        if (reset) {
-          await refreshTrashedKeysCache()
-        }
-
         const limit = 50
         const continuationToken = reset ? undefined : continuationTokenOverride || undefined
         const res = await listUploadedObjects(effectivePrefix, limit, true, continuationToken)
@@ -4349,7 +4275,7 @@ export default function UploadPage() {
         }
       }
     },
-    [currentPath, explorerPrefix, refreshTrashedKeysCache]
+    [currentPath, explorerPrefix]
   )
 
   // Keep fetchExplorerRef updated synchronously during render so effects always see the latest version
@@ -4576,9 +4502,9 @@ export default function UploadPage() {
       event => {
         if (event.scope !== 'files') return
         if (event.action === 'upload_progress') return
-        void fetchExplorer(true)
-        if (showTrash) {
-          void fetchTrashFiles()
+        void fetchExplorerRef.current?.(true)
+        if (showTrashRef.current) {
+          void fetchTrashFilesRef.current?.()
         }
       },
       () => {
@@ -4587,7 +4513,7 @@ export default function UploadPage() {
     )
 
     return unsubscribe
-  }, [fetchExplorer, fetchTrashFiles, showTrash])
+  }, [])
 
   function keyToPublicUrl(key: string) {
     const publicBase = API_ENV.r2PublicBaseUrl?.trim() || ''

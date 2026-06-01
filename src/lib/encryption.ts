@@ -848,7 +848,7 @@ export async function createStreamingVideoUrl(
     console.log('[createStreamingVideoUrl] Non-encrypted file, returning direct URL')
     return {
       url: result.url,
-      cleanup: () => {},
+      cleanup: () => { },
     }
   }
 
@@ -990,7 +990,6 @@ export async function verifyPassword(
  * Returns a Blob of the thumbnail
  */
 export async function generateThumbnail(file: File, maxSize: number = 200): Promise<Blob | null> {
-  console.log('[DEBUG] generateThumbnail: starting for', file.name, file.type, file.size)
 
   // Handle images
   if (file.type.startsWith('image/')) {
@@ -1006,7 +1005,6 @@ export async function generateThumbnail(file: File, maxSize: number = 200): Prom
     return await generateVideoThumbnail(file, maxSize)
   }
 
-  console.log('[DEBUG] generateThumbnail: unsupported file type', file.type, 'for', file.name)
   return null
 }
 
@@ -1017,7 +1015,6 @@ async function generateImageThumbnail(file: File, maxSize: number): Promise<Blob
   try {
     // Load the image
     const bitmap = await createImageBitmap(file)
-    console.log('[DEBUG] generateImageThumbnail: bitmap created', bitmap.width, 'x', bitmap.height)
 
     // Calculate thumbnail dimensions maintaining aspect ratio
     let width = bitmap.width
@@ -1054,7 +1051,6 @@ async function generateImageThumbnail(file: File, maxSize: number): Promise<Blob
       )
     })
 
-    console.log('[DEBUG] generateImageThumbnail: blob created', blob?.size, 'bytes')
     return blob
   } catch (err) {
     console.error('[DEBUG] Failed to generate image thumbnail:', err)
@@ -1114,12 +1110,7 @@ async function generateVideoThumbnail(file: File, maxSize: number): Promise<Blob
         // Seek to 1 second or 10% into the video, whichever is smaller
         const seekTime = Math.min(1, video.duration * 0.1)
         video.currentTime = seekTime
-        console.log('[DEBUG] generateVideoThumbnail: video metadata loaded', {
-          duration: video.duration,
-          videoWidth: video.videoWidth,
-          videoHeight: video.videoHeight,
-          seekTime,
-        })
+
       } catch (err) {
         console.error('[DEBUG] Error seeking video:', err)
         cleanup()
@@ -1135,7 +1126,6 @@ async function generateVideoThumbnail(file: File, maxSize: number): Promise<Blob
         let width = video.videoWidth
         let height = video.videoHeight
 
-        console.log('[DEBUG] generateVideoThumbnail: frame ready', { width, height })
 
         // If dimensions are still 0, the video might not be properly loaded
         if (width === 0 || height === 0) {
@@ -1170,7 +1160,6 @@ async function generateVideoThumbnail(file: File, maxSize: number): Promise<Blob
             if (hasResolved) return
             cleanup()
             if (blob) {
-              console.log('[DEBUG] generateVideoThumbnail: blob created', blob.size, 'bytes')
               hasResolved = true
               resolve(blob)
             } else {
