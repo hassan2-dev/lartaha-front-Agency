@@ -589,7 +589,17 @@ export async function listUploadedObjects(
   delimiter: boolean = true,
   continuationToken?: string
 ): Promise<ListObjectsResult> {
-  const params: ListObjectsParams = { prefix, limit, delimiter, excludeTrashed: true }
+  const normalizedPrefix = String(prefix || '').trim()
+  // Guardrails: prevent expensive full-bucket recursive scans from UI mistakes/stale bundles.
+  const isRootRecursiveScan = normalizedPrefix.length === 0 && delimiter === false
+  const safeDelimiter = isRootRecursiveScan ? true : delimiter
+  const safeLimit = Math.min(Math.max(Number.isFinite(limit) ? limit : 50, 1), 100)
+  const params: ListObjectsParams = {
+    prefix: normalizedPrefix,
+    limit: isRootRecursiveScan ? Math.min(safeLimit, 50) : safeLimit,
+    delimiter: safeDelimiter,
+    excludeTrashed: true,
+  }
   if (continuationToken) {
     params.continuationToken = continuationToken
   }
