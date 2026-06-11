@@ -4,6 +4,7 @@ import { Box, Container, Fab, Typography, CircularProgress } from '@mui/material
 import { AddSquare } from '@solar-icons/react'
 import { useAuth } from '../contexts/AuthContext'
 import { createTask, updateTask, deleteTask, type Task, type TaskStatus } from '../api/tasksApi'
+import { invalidateTasksCache } from '../lib/explorerCache'
 import { useTasks } from '../hooks/useTasks'
 import { useTaskForm } from '../hooks/useTaskForm'
 import { useTaskModals } from '../hooks/useTaskModals'
@@ -122,10 +123,12 @@ export default function TasksPage() {
 
       if (isEditing && modals.selectedTask) {
         const updated = await updateTask(modals.selectedTask.id, taskData)
+        if (user?.workspaceId) void invalidateTasksCache(user.workspaceId)
         setTasks(prev => prev.map(t => (t.id === modals.selectedTask!.id ? updated : t)))
         modals.closeEditModal()
       } else {
         const newTask = await createTask(taskData)
+        if (user?.workspaceId) void invalidateTasksCache(user.workspaceId)
         setTasks(prev => [newTask, ...prev])
         modals.closeCreateModal()
       }
@@ -133,8 +136,8 @@ export default function TasksPage() {
       const err = e as { message?: string; response?: { data?: { message?: string } } }
       setError(
         err.response?.data?.message ??
-          err.message ??
-          (isEditing ? 'فشل تحديث المهمة' : 'فشل إنشاء المهمة')
+        err.message ??
+        (isEditing ? 'فشل تحديث المهمة' : 'فشل إنشاء المهمة')
       )
     }
   }, [form, modals, user?.id, user?.isAdmin, setTasks, setError])
@@ -151,6 +154,7 @@ export default function TasksPage() {
     setError(null)
     try {
       await deleteTask(modals.selectedTask.id)
+      if (user?.workspaceId) void invalidateTasksCache(user.workspaceId)
       setTasks(prev => prev.filter(t => t.id !== modals.selectedTask!.id))
       modals.closeEditModal()
     } catch (e: unknown) {

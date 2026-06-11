@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import type { Task, User } from '../api/tasksApi'
 import { getTasks, getWorkspaceUsers, updateChecklistItem } from '../api/tasksApi'
 import { subscribeRealtime } from '../api/realtimeApi'
 import { filterTasksByWorkspace, groupTasksByStatus } from '../utils/taskUtils'
+import { getTasksCache, setTasksCache, invalidateTasksCache } from '../lib/explorerCache'
 
 interface UseTasksOptions {
   workspaceId?: string
@@ -38,6 +39,7 @@ export function useTasks(options: UseTasksOptions = {}): UseTasksReturn {
   const [hasMore, setHasMore] = useState(true)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const cacheLoadedRef = useRef(false)
 
   const refresh = useCallback(
     async (refreshOptions?: { silent?: boolean; reset?: boolean }) => {
@@ -81,6 +83,16 @@ export function useTasks(options: UseTasksOptions = {}): UseTasksReturn {
 
         if (reset) {
           setTasks(tasksData.tasks)
+          // Write first-page snapshot to cache
+          if (workspaceId) {
+            void setTasksCache({
+              workspaceId,
+              tasks: tasksData.tasks,
+              workspaceUsers: usersData,
+              hasMore: tasksData.pagination?.hasMore ?? false,
+              nextCursor: tasksData.pagination?.nextCursor ?? null,
+            })
+          }
         } else {
           setTasks(prev => [...prev, ...tasksData.tasks])
         }
@@ -100,10 +112,28 @@ export function useTasks(options: UseTasksOptions = {}): UseTasksReturn {
     [nextCursor, tasks.length, workspaceId, workspaceName]
   )
 
-  // Initial load
+  // Initial load — serve cache instantly, then revalidate in background
   useEffect(() => {
-    void refresh({ reset: true })
-  }, [])
+    if (!workspaceId) {
+      void refresh({ reset: true })
+      return
+    }
+    void (async () => {
+      const cached = await getTasksCache(workspaceId)
+      if (cached && !cacheLoadedRef.current) {
+        cacheLoadedRef.current = true
+        setTasks(cached.tasks as Task[])
+        setWorkspaceUsers(cached.workspaceUsers as User[])
+        setHasMore(cached.hasMore)
+        setNextCursor(cached.nextCursor)
+        setLoading(false)
+        // Revalidate silently in background
+        void refresh({ silent: true, reset: true })
+      } else {
+        void refresh({ reset: true })
+      }
+    })()
+  }, [workspaceId])
 
   // Real-time subscription
   useEffect(() => {
@@ -136,13 +166,14 @@ export function useTasks(options: UseTasksOptions = {}): UseTasksReturn {
       setError(null)
       try {
         await updateChecklistItem(taskId, itemId, update)
+        if (workspaceId) void invalidateTasksCache(workspaceId)
         await refresh({ silent: true, reset: true })
       } catch (e: unknown) {
         const err = e as { message?: string; response?: { data?: { message?: string } } }
         setError(err.response?.data?.message ?? err.message ?? 'فشل تحديث عنصر قائمة التحقق')
       }
     },
-    [refresh]
+    [refresh, workspaceId]
   )
 
   const filteredTasks = useMemo(

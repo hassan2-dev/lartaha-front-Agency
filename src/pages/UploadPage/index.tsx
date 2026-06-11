@@ -60,6 +60,7 @@ import EncryptedUploadDropzone, {
 import { PasswordInput } from '../../components/login/PasswordInput'
 import EncryptedFileViewer from '../../components/EncryptedFileViewer'
 import { useAuth } from '../../contexts/AuthContext'
+import { useExplorerCache } from '../../contexts/ExplorerCacheContext'
 import { API_ENV, TOKEN_STORAGE_KEY } from '../../config/api'
 import { decryptThumbnailBuffer, encryptThumbnailBlob } from '../../lib/encryption'
 import {
@@ -3079,15 +3080,7 @@ export default function UploadPage() {
   // Debounce timer for nav fetches — collapses rapid duplicate effect fires into one
   const navFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  type ExplorerCacheEntry = {
-    folders: string[]
-    files: typeof filesHere
-    hasMore: boolean
-    nextToken: string | null
-  }
-  // In-memory cache keyed by explorerPrefix — avoids a full loading spinner on back-navigation.
-  // Entries are evicted on mutations (upload, folder create/delete) so data stays fresh.
-  const explorerCacheRef = useRef<Map<string, ExplorerCacheEntry>>(new Map())
+  const explorerCache = useExplorerCache()
 
   // currentPath is derived from searchParams so it is always in sync with the URL
   const currentPath = useMemo(() => {
@@ -3760,7 +3753,7 @@ export default function UploadPage() {
       showToastNotification('تم إنشاء المجلد بنجاح', 'success')
       setNewFolderName('')
       setShowCreateFolderModal(false)
-      explorerCacheRef.current.delete(explorerPrefix)
+      await explorerCache.invalidate(explorerPrefix)
       await fetchExplorer()
     } catch (e: unknown) {
       const err = e as { message?: string }
@@ -3825,12 +3818,8 @@ export default function UploadPage() {
 
       closeFolderDeleteDialog()
 
-      // Evict all cached entries that are at or under the deleted folder path
-      for (const key of explorerCacheRef.current.keys()) {
-        if (key === explorerPrefix || key.startsWith(`${explorerPrefix}/`)) {
-          explorerCacheRef.current.delete(key)
-        }
-      }
+      // Evict all cached entries at or under the deleted folder prefix
+      await explorerCache.invalidateAll(explorerPrefix)
       setFoldersHere(prev =>
         prev.filter(p => {
           const cleaned = p.endsWith('/') ? p.slice(0, -1) : p
@@ -4222,11 +4211,11 @@ export default function UploadPage() {
       })()
 
       // --- Cache read (reset only) ---
-      const cachedEntry = reset ? explorerCacheRef.current.get(effectivePrefix) : undefined
+      const cachedEntry = reset ? await explorerCache.getCache(effectivePrefix) : null
       if (cachedEntry) {
         // Populate state instantly from cache so the UI renders without a loading spinner
-        setFoldersHere(cachedEntry.folders)
-        setFilesHere(cachedEntry.files)
+        setFoldersHere(cachedEntry.folders as string[])
+        setFilesHere(cachedEntry.files as typeof filesHere)
         setHasMoreFiles(cachedEntry.hasMore)
         setNextContinuationToken(cachedEntry.nextToken)
         setFolderError(null)
@@ -4236,7 +4225,8 @@ export default function UploadPage() {
             const res = await listUploadedObjects(effectivePrefix, 50, true, undefined)
             const visibleObjects = filterExplorerObjects(res.objects ?? [], trashedOriginalKeysRef.current)
             const filteredFolders = filterFoldersForExplorer(res.folders ?? [], effectiveCurrentPath)
-            explorerCacheRef.current.set(effectivePrefix, {
+            await explorerCache.setCache({
+              prefix: effectivePrefix,
               folders: filteredFolders,
               files: visibleObjects,
               hasMore: res.pagination?.hasMore ?? false,
@@ -4280,7 +4270,8 @@ export default function UploadPage() {
           setFoldersHere(filteredFolders)
           setFilesHere(visibleObjects)
           // Write to cache
-          explorerCacheRef.current.set(effectivePrefix, {
+          void explorerCache.setCache({
+            prefix: effectivePrefix,
             folders: filteredFolders,
             files: visibleObjects,
             hasMore: res.pagination?.hasMore ?? false,
@@ -4346,7 +4337,7 @@ export default function UploadPage() {
     explorerRefreshAfterUploadTimerRef.current = setTimeout(() => {
       explorerRefreshAfterUploadTimerRef.current = null
       // Evict cache for current prefix so the forced refresh isn't served stale
-      explorerCacheRef.current.delete(explorerPrefix)
+      void explorerCache.invalidate(explorerPrefix)
       void fetchExplorer(true)
     }, 400)
   }, [fetchExplorer, explorerPrefix])

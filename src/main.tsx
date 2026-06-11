@@ -7,6 +7,7 @@ import { AuthProvider } from './contexts/AuthContext'
 import { AppThemeProvider } from './contexts/ThemeContext'
 import { UploadProvider } from './contexts/UploadContext'
 import { DownloadProvider } from './contexts/DownloadContext'
+import { ExplorerCacheProvider } from './contexts/ExplorerCacheContext'
 import { CssBaseline } from '@mui/material'
 
 createRoot(document.getElementById('root')!).render(
@@ -14,13 +15,15 @@ createRoot(document.getElementById('root')!).render(
     <AppThemeProvider>
       <CssBaseline />
       <AuthProvider>
-        <UploadProvider>
-          <DownloadProvider>
-            <BrowserRouter>
-              <App />
-            </BrowserRouter>
-          </DownloadProvider>
-        </UploadProvider>
+        <ExplorerCacheProvider>
+          <UploadProvider>
+            <DownloadProvider>
+              <BrowserRouter>
+                <App />
+              </BrowserRouter>
+            </DownloadProvider>
+          </UploadProvider>
+        </ExplorerCacheProvider>
       </AuthProvider>
     </AppThemeProvider>
   </StrictMode>
