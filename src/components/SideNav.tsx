@@ -300,7 +300,7 @@ export default function SideNav({ children, title = 'Larthaa Agency' }: SideNavP
               '& .MuiDrawer-paper': {
                 width: drawerWidth,
                 boxSizing: 'border-box',
-                borderLeft: '10px solid',
+                borderLeft: '1px solid',
                 borderColor: 'divider',
                 backgroundColor: 'background.default',
                 boxShadow: 'none',
@@ -329,7 +329,8 @@ export default function SideNav({ children, title = 'Larthaa Agency' }: SideNavP
           elevation={0}
           sx={{
             backgroundColor: theme.palette.background.paper,
-            borderBottom: '1px solid rgba(25, 118, 210, 0.12)',
+            border: 0,
+            borderBottom: t => `1px solid ${t.palette.divider}`,
             color: 'inherit',
             backdropFilter: 'blur(8px)',
           }}
