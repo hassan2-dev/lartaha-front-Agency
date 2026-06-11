@@ -3079,6 +3079,16 @@ export default function UploadPage() {
   // Debounce timer for nav fetches — collapses rapid duplicate effect fires into one
   const navFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  type ExplorerCacheEntry = {
+    folders: string[]
+    files: typeof filesHere
+    hasMore: boolean
+    nextToken: string | null
+  }
+  // In-memory cache keyed by explorerPrefix — avoids a full loading spinner on back-navigation.
+  // Entries are evicted on mutations (upload, folder create/delete) so data stays fresh.
+  const explorerCacheRef = useRef<Map<string, ExplorerCacheEntry>>(new Map())
+
   // currentPath is derived from searchParams so it is always in sync with the URL
   const currentPath = useMemo(() => {
     const workspaceId = user?.workspaceId?.trim() || ''
@@ -3750,6 +3760,7 @@ export default function UploadPage() {
       showToastNotification('تم إنشاء المجلد بنجاح', 'success')
       setNewFolderName('')
       setShowCreateFolderModal(false)
+      explorerCacheRef.current.delete(explorerPrefix)
       await fetchExplorer()
     } catch (e: unknown) {
       const err = e as { message?: string }
@@ -3814,6 +3825,12 @@ export default function UploadPage() {
 
       closeFolderDeleteDialog()
 
+      // Evict all cached entries that are at or under the deleted folder path
+      for (const key of explorerCacheRef.current.keys()) {
+        if (key === explorerPrefix || key.startsWith(`${explorerPrefix}/`)) {
+          explorerCacheRef.current.delete(key)
+        }
+      }
       setFoldersHere(prev =>
         prev.filter(p => {
           const cleaned = p.endsWith('/') ? p.slice(0, -1) : p
@@ -4203,6 +4220,39 @@ export default function UploadPage() {
         if (effectivePrefix.startsWith(`${root}/`)) return effectivePrefix.slice(root.length + 1)
         return currentPath
       })()
+
+      // --- Cache read (reset only) ---
+      const cachedEntry = reset ? explorerCacheRef.current.get(effectivePrefix) : undefined
+      if (cachedEntry) {
+        // Populate state instantly from cache so the UI renders without a loading spinner
+        setFoldersHere(cachedEntry.folders)
+        setFilesHere(cachedEntry.files)
+        setHasMoreFiles(cachedEntry.hasMore)
+        setNextContinuationToken(cachedEntry.nextToken)
+        setFolderError(null)
+        // Revalidate in background — update cache + state silently
+        void (async () => {
+          try {
+            const res = await listUploadedObjects(effectivePrefix, 50, true, undefined)
+            const visibleObjects = filterExplorerObjects(res.objects ?? [], trashedOriginalKeysRef.current)
+            const filteredFolders = filterFoldersForExplorer(res.folders ?? [], effectiveCurrentPath)
+            explorerCacheRef.current.set(effectivePrefix, {
+              folders: filteredFolders,
+              files: visibleObjects,
+              hasMore: res.pagination?.hasMore ?? false,
+              nextToken: res.pagination?.nextContinuationToken ?? null,
+            })
+            setFoldersHere(filteredFolders)
+            setFilesHere(visibleObjects)
+            setHasMoreFiles(res.pagination?.hasMore ?? false)
+            setNextContinuationToken(res.pagination?.nextContinuationToken ?? null)
+          } catch {
+            // Background revalidation failure is non-fatal; stale cache remains
+          }
+        })()
+        return
+      }
+
       if (reset) {
         explorerResetInFlightRef.current = true
         setLoadingExplorer(true)
@@ -4229,6 +4279,13 @@ export default function UploadPage() {
           const filteredFolders = filterFoldersForExplorer(res.folders ?? [], effectiveCurrentPath)
           setFoldersHere(filteredFolders)
           setFilesHere(visibleObjects)
+          // Write to cache
+          explorerCacheRef.current.set(effectivePrefix, {
+            folders: filteredFolders,
+            files: visibleObjects,
+            hasMore: res.pagination?.hasMore ?? false,
+            nextToken: res.pagination?.nextContinuationToken ?? null,
+          })
         } else {
           setFilesHere(prev => [...prev, ...visibleObjects])
         }
@@ -4288,9 +4345,11 @@ export default function UploadPage() {
     }
     explorerRefreshAfterUploadTimerRef.current = setTimeout(() => {
       explorerRefreshAfterUploadTimerRef.current = null
+      // Evict cache for current prefix so the forced refresh isn't served stale
+      explorerCacheRef.current.delete(explorerPrefix)
       void fetchExplorer(true)
     }, 400)
-  }, [fetchExplorer])
+  }, [fetchExplorer, explorerPrefix])
 
   useEffect(() => {
     return () => {
