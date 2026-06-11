@@ -83,7 +83,6 @@ import { DownloadProgressDialog } from './components/DownloadProgressDialog'
 import { FolderZipDialog } from './components/FolderZipDialog'
 import {
   filenameFromKey,
-  getFileType,
   validateFileQuality,
   getClientEncryptionKey,
   setClientEncryptionKey,
@@ -410,7 +409,6 @@ export default function UploadPage() {
     currentFile?: string
   } | null>(null)
   const folderZipAbortRef = useRef<AbortController | null>(null)
-  const [folderZipDetailsOpen, setFolderZipDetailsOpen] = useState(false)
 
   // Independent timer for folder download dialog so elapsed time ticks every second
   const [folderZipDisplayElapsed, setFolderZipDisplayElapsed] = useState(0)
