@@ -11,6 +11,9 @@ import {
   ListItem,
 } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/Delete'
+import PushPinIcon from '@mui/icons-material/PushPin'
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp'
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 import { FolderWithFiles, ArchiveDownMinimalistic } from '@solar-icons/react'
 
 type FolderItemProps = {
@@ -21,6 +24,12 @@ type FolderItemProps = {
   isDeleting?: boolean
   isDownloading?: boolean
   canDelete?: boolean
+  isPinned?: boolean
+  onTogglePin?: (folderPath: string) => void
+  onMovePinUp?: (folderPath: string) => void
+  onMovePinDown?: (folderPath: string) => void
+  canMovePinUp?: boolean
+  canMovePinDown?: boolean
 }
 
 export function FolderItem({
@@ -31,6 +40,12 @@ export function FolderItem({
   isDeleting,
   isDownloading,
   canDelete,
+  isPinned,
+  onTogglePin,
+  onMovePinUp,
+  onMovePinDown,
+  canMovePinUp,
+  canMovePinDown,
 }: FolderItemProps) {
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
@@ -44,13 +59,23 @@ export function FolderItem({
         borderRadius: 2,
         mb: 1,
         border: '1px solid',
-        borderColor: isDark ? 'rgba(255,255,255,0.08)' : theme.palette.divider,
-        backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : theme.palette.background.paper,
+        borderColor: isPinned
+          ? alpha(theme.palette.warning.main, 0.45)
+          : isDark
+            ? 'rgba(255,255,255,0.08)'
+            : theme.palette.divider,
+        backgroundColor: isPinned
+          ? alpha(theme.palette.warning.main, isDark ? 0.08 : 0.06)
+          : isDark
+            ? 'rgba(255,255,255,0.02)'
+            : theme.palette.background.paper,
         cursor: 'pointer',
         '&:hover': {
-          backgroundColor: isDark
-            ? 'rgba(255,255,255,0.05)'
-            : alpha(theme.palette.primary.main, 0.04),
+          backgroundColor: isPinned
+            ? alpha(theme.palette.warning.main, isDark ? 0.12 : 0.1)
+            : isDark
+              ? 'rgba(255,255,255,0.05)'
+              : alpha(theme.palette.primary.main, 0.04),
         },
       }}
     >
@@ -68,12 +93,73 @@ export function FolderItem({
             {name}
           </Typography>
           <Typography variant="caption" sx={{ opacity: 0.7, textAlign: 'start' }}>
-            مجلد
+            {isPinned ? 'مجلد مثبت' : 'مجلد'}
           </Typography>
         </Box>
       </Box>
 
       <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+        {onTogglePin && (
+          <>
+            {isPinned && onMovePinUp && (
+              <Tooltip title="رفع الترتيب">
+                <span style={{ display: 'inline-flex' }}>
+                  <Button
+                    size="small"
+                    variant="text"
+                    onClick={e => {
+                      e.stopPropagation()
+                      onMovePinUp(folderPath)
+                    }}
+                    disabled={!canMovePinUp || isDeleting || isDownloading}
+                    sx={{ borderRadius: 999, minWidth: 'auto', p: 0.75 }}
+                  >
+                    <KeyboardArrowUpIcon fontSize="small" />
+                  </Button>
+                </span>
+              </Tooltip>
+            )}
+            {isPinned && onMovePinDown && (
+              <Tooltip title="خفض الترتيب">
+                <span style={{ display: 'inline-flex' }}>
+                  <Button
+                    size="small"
+                    variant="text"
+                    onClick={e => {
+                      e.stopPropagation()
+                      onMovePinDown(folderPath)
+                    }}
+                    disabled={!canMovePinDown || isDeleting || isDownloading}
+                    sx={{ borderRadius: 999, minWidth: 'auto', p: 0.75 }}
+                  >
+                    <KeyboardArrowDownIcon fontSize="small" />
+                  </Button>
+                </span>
+              </Tooltip>
+            )}
+            <Tooltip title={isPinned ? 'إلغاء التثبيت' : 'تثبيت المجلد'}>
+              <span style={{ display: 'inline-flex' }}>
+                <Button
+                  size="small"
+                  variant="text"
+                  onClick={e => {
+                    e.stopPropagation()
+                    onTogglePin(folderPath)
+                  }}
+                  disabled={isDeleting || isDownloading}
+                  sx={{
+                    borderRadius: 999,
+                    minWidth: 'auto',
+                    p: 1,
+                    color: isPinned ? 'warning.main' : 'text.secondary',
+                  }}
+                >
+                  <PushPinIcon fontSize="small" sx={{ transform: isPinned ? 'rotate(0deg)' : 'rotate(45deg)' }} />
+                </Button>
+              </span>
+            </Tooltip>
+          </>
+        )}
         <Tooltip title="تنزيل المجلد">
           <span style={{ display: 'inline-flex' }}>
             <Button
@@ -121,6 +207,8 @@ export function FolderItemGrid({
   isDeleting,
   isDownloading,
   canDelete,
+  isPinned,
+  onTogglePin,
 }: FolderItemProps) {
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
@@ -133,14 +221,24 @@ export function FolderItemGrid({
         flexDirection: 'column',
         height: '100%',
         border: '1px solid',
-        borderColor: isDark ? 'rgba(255,255,255,0.08)' : theme.palette.divider,
-        backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : theme.palette.background.paper,
+        borderColor: isPinned
+          ? alpha(theme.palette.warning.main, 0.45)
+          : isDark
+            ? 'rgba(255,255,255,0.08)'
+            : theme.palette.divider,
+        backgroundColor: isPinned
+          ? alpha(theme.palette.warning.main, isDark ? 0.08 : 0.06)
+          : isDark
+            ? 'rgba(255,255,255,0.02)'
+            : theme.palette.background.paper,
         boxShadow: !isDark ? '0 2px 8px rgba(0,0,0,0.04)' : 'none',
         cursor: 'pointer',
         '&:hover': {
-          backgroundColor: isDark
-            ? 'rgba(255,255,255,0.05)'
-            : alpha(theme.palette.primary.main, 0.04),
+          backgroundColor: isPinned
+            ? alpha(theme.palette.warning.main, isDark ? 0.12 : 0.1)
+            : isDark
+              ? 'rgba(255,255,255,0.05)'
+              : alpha(theme.palette.primary.main, 0.04),
         },
       }}
     >
@@ -171,7 +269,7 @@ export function FolderItemGrid({
                 {name}
               </Typography>
               <Typography variant="caption" sx={{ opacity: 0.7, display: 'block' }}>
-                مجلد
+                {isPinned ? 'مجلد مثبت' : 'مجلد'}
               </Typography>
             </Box>
           </Box>
@@ -179,6 +277,29 @@ export function FolderItemGrid({
       </Box>
 
       <Box sx={{ p: 2, pt: 0, display: 'flex', gap: 0.5, justifyContent: 'center' }}>
+        {onTogglePin && (
+          <Tooltip title={isPinned ? 'إلغاء التثبيت' : 'تثبيت المجلد'}>
+            <span style={{ display: 'inline-flex' }}>
+              <Button
+                size="small"
+                variant="text"
+                onClick={e => {
+                  e.stopPropagation()
+                  onTogglePin(folderPath)
+                }}
+                disabled={isDeleting || isDownloading}
+                sx={{
+                  borderRadius: 999,
+                  minWidth: 'auto',
+                  p: 1,
+                  color: isPinned ? 'warning.main' : 'text.secondary',
+                }}
+              >
+                <PushPinIcon fontSize="small" sx={{ transform: isPinned ? 'rotate(0deg)' : 'rotate(45deg)' }} />
+              </Button>
+            </span>
+          </Tooltip>
+        )}
         <Tooltip title="تنزيل المجلد">
           <span style={{ display: 'inline-flex' }}>
             <Button

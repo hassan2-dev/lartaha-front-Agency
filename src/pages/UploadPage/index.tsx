@@ -23,6 +23,7 @@ import {
   ListItemIcon,
   ListItemText,
 } from '@mui/material'
+import PushPinIcon from '@mui/icons-material/PushPin'
 import FolderIcon from '@mui/icons-material/Folder'
 import DeleteIcon from '@mui/icons-material/Delete'
 import RestoreIcon from '@mui/icons-material/Restore'
@@ -75,6 +76,7 @@ import {
 import Toast from '../../components/Toast'
 import { ServerMinimalistic, Widget } from '@solar-icons/react'
 import { useDownload } from '../../contexts/DownloadContext'
+import { usePinnedFolders, folderFullPath } from '../../hooks/usePinnedFolders'
 import { FileItem, FileItemGrid } from './components/FileItem'
 import { FolderItem, FolderItemGrid } from './components/FolderItem'
 import { TrashFileItem } from './components/TrashFileItem'
@@ -96,6 +98,7 @@ const MAX_DOWNLOAD_RETRIES = 3
 
 export default function UploadPage() {
   const { user } = useAuth()
+  const { isPinned, togglePin, movePin, sortFolders, pinnedPaths } = usePinnedFolders(user?.id)
   const [searchParams, setSearchParams] = useSearchParams()
 
   // Download progress — backed by global DownloadContext
@@ -725,6 +728,11 @@ export default function UploadPage() {
     const folderFromQuery = (folder || '').replace(/^\/+/, '')
     return (derivedPathFromFile || folderFromQuery || '').replace(/^\/+/, '')
   }, [searchParams, user?.workspaceId])
+
+  const sortedFoldersHere = useMemo(
+    () => sortFolders(foldersHere, currentPath),
+    [foldersHere, currentPath, sortFolders]
+  )
 
   // Single effect — fires whenever the URL changes, fetches the correct folder
   useEffect(() => {
@@ -2505,6 +2513,33 @@ export default function UploadPage() {
             <Box sx={{ flex: '1 1 auto' }} />
           </Box>
 
+          {pinnedPaths.length > 0 && !showTrash && (
+            <Box sx={{ mb: 2, p: 1.5, borderRadius: 2, border: '1px dashed', borderColor: 'warning.light' }}>
+              <Typography variant="caption" sx={{ opacity: 0.75, display: 'block', mb: 1, fontWeight: 600 }}>
+                المجلدات المثبتة (ترتيبك الشخصي)
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                {pinnedPaths.map(path => {
+                  const label = path.split('/').filter(Boolean).pop() || path
+                  const active = path === currentPath
+                  return (
+                    <Button
+                      key={path}
+                      size="small"
+                      variant={active ? 'contained' : 'outlined'}
+                      color="warning"
+                      startIcon={<PushPinIcon fontSize="small" />}
+                      onClick={() => setSearchParams({ folder: path })}
+                      sx={{ borderRadius: 999, textTransform: 'none' }}
+                    >
+                      {label}
+                    </Button>
+                  )
+                })}
+              </Box>
+            </Box>
+          )}
+
           {showTrash ? (
             loadingTrash && trashFiles.length === 0 ? (
               <Box sx={{ maxHeight: 500, overflow: 'auto' }}>
@@ -2628,26 +2663,25 @@ export default function UploadPage() {
                 </>
               ) : (
                 <>
-                  {foldersHere.length === 0 && filteredAndSortedFiles.length === 0 ? (
+                  {sortedFoldersHere.length === 0 && filteredAndSortedFiles.length === 0 ? (
                     <Typography variant="body2" sx={{ opacity: 0.7 }}>
                       لا يوجد شيء هنا (0).
                     </Typography>
                   ) : (
                     <>
-                      {foldersHere.length > 0 && (
+                      {sortedFoldersHere.length > 0 && (
                         <Box sx={{ mb: 2 }}>
                           <Typography
                             variant="body2"
                             sx={{ opacity: 0.75, mb: 1, fontWeight: 600 }}
                           >
-                            المجلدات ({foldersHere.length})
+                            المجلدات ({sortedFoldersHere.length})
                           </Typography>
                           {viewMode === 'list' ? (
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                              {foldersHere.map(p => {
-                                const cleaned = p.endsWith('/') ? p.slice(0, -1) : p
-                                // The server returns relative folder names (e.g., "subfolder/"), so we need to construct the full path
-                                const fullPath = currentPath ? `${currentPath}/${cleaned}` : cleaned
+                              {sortedFoldersHere.map(p => {
+                                const fullPath = folderFullPath(p, currentPath)
+                                const pinnedIndex = pinnedPaths.indexOf(fullPath)
                                 return (
                                   <FolderItem
                                     key={p}
@@ -2660,6 +2694,14 @@ export default function UploadPage() {
                                     canDelete={isWorkspaceAdmin}
                                     isDeleting={deletingFolders.has(fullPath)}
                                     isDownloading={downloadingFolders.has(fullPath)}
+                                    isPinned={isPinned(fullPath)}
+                                    onTogglePin={togglePin}
+                                    onMovePinUp={path => movePin(path, 'up')}
+                                    onMovePinDown={path => movePin(path, 'down')}
+                                    canMovePinUp={pinnedIndex > 0}
+                                    canMovePinDown={
+                                      pinnedIndex >= 0 && pinnedIndex < pinnedPaths.length - 1
+                                    }
                                   />
                                 )
                               })}
@@ -2677,10 +2719,8 @@ export default function UploadPage() {
                                 gap: 2,
                               }}
                             >
-                              {foldersHere.map(p => {
-                                const cleaned = p.endsWith('/') ? p.slice(0, -1) : p
-                                // The server returns relative folder names (e.g., "subfolder/"), so we need to construct the full path
-                                const fullPath = currentPath ? `${currentPath}/${cleaned}` : cleaned
+                              {sortedFoldersHere.map(p => {
+                                const fullPath = folderFullPath(p, currentPath)
                                 return (
                                   <FolderItemGrid
                                     key={p}
@@ -2693,6 +2733,8 @@ export default function UploadPage() {
                                     canDelete={isWorkspaceAdmin}
                                     isDeleting={deletingFolders.has(fullPath)}
                                     isDownloading={downloadingFolders.has(fullPath)}
+                                    isPinned={isPinned(fullPath)}
+                                    onTogglePin={togglePin}
                                   />
                                 )
                               })}
