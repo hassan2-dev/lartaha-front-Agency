@@ -606,6 +606,7 @@ export async function listUploadedObjects(
 
   const res = await api.get(`${API_ENV.uploadPath}/list`, {
     params,
+    timeout: 30_000,
   })
   return res.data as ListObjectsResult
 }

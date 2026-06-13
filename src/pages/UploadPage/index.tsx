@@ -2006,8 +2006,15 @@ export default function UploadPage() {
           }
         }
       } catch (e: unknown) {
-        const err = e as { message?: string; response?: { data?: { message?: string } } }
-        const errorMsg = err.response?.data?.message ?? err.message ?? 'فشل جلب الملفات'
+        const err = e as {
+          code?: string
+          message?: string
+          response?: { data?: { message?: string }; status?: number }
+        }
+        const errorMsg =
+          err.code === 'ECONNABORTED'
+            ? 'السيرفر لم يستجب عند جلب الملفات. قد تكون مشكلة بالاتصال مع التخزين (R2).'
+            : (err.response?.data?.message ?? err.message ?? 'فشل جلب الملفات')
         showToastNotification(errorMsg, 'error')
 
         // Set folder error state if resetting (initial folder load)
