@@ -76,7 +76,7 @@ import {
 import Toast from '../../components/Toast'
 import { ServerMinimalistic, Widget } from '@solar-icons/react'
 import { useDownload } from '../../contexts/DownloadContext'
-import { usePinnedFolders, folderFullPath } from '../../hooks/usePinnedFolders'
+import { usePinnedFolders, folderFullPath, normalizeFolderPath } from '../../hooks/usePinnedFolders'
 import { FileItem, FileItemGrid } from './components/FileItem'
 import { FolderItem, FolderItemGrid } from './components/FolderItem'
 import { TrashFileItem } from './components/TrashFileItem'
@@ -98,7 +98,10 @@ const MAX_DOWNLOAD_RETRIES = 3
 
 export default function UploadPage() {
   const { user } = useAuth()
-  const { isPinned, togglePin, movePin, sortFolders, pinnedPaths } = usePinnedFolders(user?.id)
+  const { isPinned, togglePin, movePin, sortFolders, pinnedPaths } = usePinnedFolders(
+    user?.id,
+    user?.workspaceId
+  )
   const [searchParams, setSearchParams] = useSearchParams()
 
   // Download progress — backed by global DownloadContext
@@ -2681,7 +2684,7 @@ export default function UploadPage() {
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
                               {sortedFoldersHere.map(p => {
                                 const fullPath = folderFullPath(p, currentPath)
-                                const pinnedIndex = pinnedPaths.indexOf(fullPath)
+                                const pinnedIndex = pinnedPaths.indexOf(normalizeFolderPath(fullPath))
                                 return (
                                   <FolderItem
                                     key={p}

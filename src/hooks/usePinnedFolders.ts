@@ -1,30 +1,63 @@
 import { useCallback, useEffect, useState } from 'react'
 
-const STORAGE_KEY_PREFIX = 'larthaa_pinned_folders'
+const STORAGE_KEY_PREFIX = 'larthaa_pinned_folders_v2'
+const LEGACY_STORAGE_KEY_PREFIX = 'larthaa_pinned_folders'
 
 type PinnedFolderStore = {
   paths: string[]
+  updatedAt: string
 }
 
-function storageKey(userId: string) {
-  return `${STORAGE_KEY_PREFIX}_${userId}`
+export function normalizeFolderPath(path: string): string {
+  return path.replace(/^\/+/, '').replace(/\/+$/, '').trim()
 }
 
-function readStore(userId: string | undefined): PinnedFolderStore {
-  if (!userId) return { paths: [] }
+function storageKey(userId: string, workspaceId: string) {
+  return `${STORAGE_KEY_PREFIX}:${userId}:${workspaceId}`
+}
+
+function legacyStorageKey(userId: string) {
+  return `${LEGACY_STORAGE_KEY_PREFIX}_${userId}`
+}
+
+function parseStore(raw: string | null): PinnedFolderStore {
+  if (!raw) return { paths: [], updatedAt: '' }
   try {
-    const raw = localStorage.getItem(storageKey(userId))
-    if (!raw) return { paths: [] }
     const parsed = JSON.parse(raw) as PinnedFolderStore
-    if (!Array.isArray(parsed.paths)) return { paths: [] }
-    return { paths: parsed.paths.filter(p => typeof p === 'string' && p.trim()) }
+    if (!Array.isArray(parsed.paths)) return { paths: [], updatedAt: '' }
+    return {
+      paths: [...new Set(parsed.paths.map(normalizeFolderPath).filter(Boolean))],
+      updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : '',
+    }
   } catch {
-    return { paths: [] }
+    return { paths: [], updatedAt: '' }
   }
 }
 
-function writeStore(userId: string, store: PinnedFolderStore) {
-  localStorage.setItem(storageKey(userId), JSON.stringify(store))
+function readStore(userId: string | undefined, workspaceId: string | undefined): PinnedFolderStore {
+  if (!userId || !workspaceId) return { paths: [], updatedAt: '' }
+  try {
+    const current = parseStore(localStorage.getItem(storageKey(userId, workspaceId)))
+    if (current.paths.length > 0) return current
+
+    const legacy = parseStore(localStorage.getItem(legacyStorageKey(userId)))
+    if (legacy.paths.length > 0) {
+      writeStore(userId, workspaceId, legacy.paths)
+      return legacy
+    }
+    return { paths: [], updatedAt: '' }
+  } catch {
+    return { paths: [], updatedAt: '' }
+  }
+}
+
+function writeStore(userId: string, workspaceId: string, paths: string[]) {
+  const normalized = [...new Set(paths.map(normalizeFolderPath).filter(Boolean))]
+  const payload: PinnedFolderStore = {
+    paths: normalized,
+    updatedAt: new Date().toISOString(),
+  }
+  localStorage.setItem(storageKey(userId, workspaceId), JSON.stringify(payload))
 }
 
 export function folderRelativePath(folderKey: string): string {
@@ -33,7 +66,8 @@ export function folderRelativePath(folderKey: string): string {
 
 export function folderFullPath(relativeFolderKey: string, currentPath: string): string {
   const cleaned = folderRelativePath(relativeFolderKey)
-  return currentPath ? `${currentPath}/${cleaned}` : cleaned
+  const parent = normalizeFolderPath(currentPath)
+  return parent ? `${parent}/${cleaned}` : cleaned
 }
 
 export function sortFoldersWithPins(
@@ -43,8 +77,10 @@ export function sortFoldersWithPins(
 ): string[] {
   if (pinnedPaths.length === 0) return folders
 
-  const pinRank = new Map(pinnedPaths.map((path, index) => [path, index]))
-  const getFullPath = (folderKey: string) => folderFullPath(folderKey, currentPath)
+  const pinRank = new Map(
+    pinnedPaths.map((path, index) => [normalizeFolderPath(path), index])
+  )
+  const getFullPath = (folderKey: string) => normalizeFolderPath(folderFullPath(folderKey, currentPath))
 
   return [...folders].sort((a, b) => {
     const fullA = getFullPath(a)
@@ -64,44 +100,63 @@ export function sortFoldersWithPins(
   })
 }
 
-export function usePinnedFolders(userId: string | undefined) {
-  const [pinnedPaths, setPinnedPaths] = useState<string[]>(() => readStore(userId).paths)
+export function usePinnedFolders(
+  userId: string | undefined,
+  workspaceId: string | undefined
+) {
+  const canPersist = Boolean(userId && workspaceId)
+  const [pinnedPaths, setPinnedPaths] = useState<string[]>(() =>
+    readStore(userId, workspaceId).paths
+  )
 
   useEffect(() => {
-    setPinnedPaths(readStore(userId).paths)
-  }, [userId])
+    setPinnedPaths(readStore(userId, workspaceId).paths)
+  }, [userId, workspaceId])
+
+  useEffect(() => {
+    if (!canPersist) return
+
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== storageKey(userId!, workspaceId!)) return
+      setPinnedPaths(readStore(userId, workspaceId).paths)
+    }
+
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [canPersist, userId, workspaceId])
 
   const persist = useCallback(
     (nextPaths: string[]) => {
-      if (!userId) return
-      setPinnedPaths(nextPaths)
-      writeStore(userId, { paths: nextPaths })
+      if (!userId || !workspaceId) return
+      const normalized = [...new Set(nextPaths.map(normalizeFolderPath).filter(Boolean))]
+      setPinnedPaths(normalized)
+      writeStore(userId, workspaceId, normalized)
     },
-    [userId]
+    [userId, workspaceId]
   )
 
   const isPinned = useCallback(
-    (fullPath: string) => pinnedPaths.includes(fullPath),
+    (fullPath: string) => pinnedPaths.includes(normalizeFolderPath(fullPath)),
     [pinnedPaths]
   )
 
   const togglePin = useCallback(
     (fullPath: string) => {
-      if (!userId) return
-      const normalized = fullPath.replace(/^\/+/, '')
+      if (!canPersist) return
+      const normalized = normalizeFolderPath(fullPath)
       if (pinnedPaths.includes(normalized)) {
         persist(pinnedPaths.filter(p => p !== normalized))
         return
       }
       persist([...pinnedPaths, normalized])
     },
-    [userId, pinnedPaths, persist]
+    [canPersist, pinnedPaths, persist]
   )
 
   const movePin = useCallback(
     (fullPath: string, direction: 'up' | 'down') => {
-      if (!userId) return
-      const normalized = fullPath.replace(/^\/+/, '')
+      if (!canPersist) return
+      const normalized = normalizeFolderPath(fullPath)
       const index = pinnedPaths.indexOf(normalized)
       if (index === -1) return
 
@@ -112,7 +167,7 @@ export function usePinnedFolders(userId: string | undefined) {
       ;[next[index], next[targetIndex]] = [next[targetIndex], next[index]]
       persist(next)
     },
-    [userId, pinnedPaths, persist]
+    [canPersist, pinnedPaths, persist]
   )
 
   const sortFolders = useCallback(
@@ -127,5 +182,6 @@ export function usePinnedFolders(userId: string | undefined) {
     togglePin,
     movePin,
     sortFolders,
+    canPersist,
   }
 }
